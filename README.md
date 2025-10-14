@@ -1,8 +1,8 @@
-# Patrick Travel Services - Mobile App
+# Patrick Travel Services - Mobile App 
 
 React Native mobile app for Patrick Travel Services immigration platform.
 
-## 🚀 Quick Start
+##  Quick Start
 
 ```bash
 # Install dependencies
@@ -18,7 +18,7 @@ pnpm ios
 pnpm android
 ```
 
-## 📱 Tech Stack
+##  Tech Stack
 
 - **React Native + Expo** - Cross-platform mobile framework
 - **Firebase Auth** - User authentication
@@ -31,7 +31,7 @@ pnpm android
 - **UploadThing** - File uploads (uploadthing.com)
 - **Axios** - HTTP client
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 mobile/
@@ -55,30 +55,30 @@ mobile/
 └── stores/               # Zustand stores
 ```
 
-## 🔧 Configuration
+##  Configuration
 
 1. Copy `.env.example` to `.env`
 2. Add your Firebase credentials
 3. Add your API URL
 4. Add UploadThing API key
 
-## 🔑 Environment Variables
+##  Environment Variables
 
 See `ENV_TEMPLATE.md` for required environment variables.
 
-## 📝 Features
+##  Features
 
-- ✅ Firebase Authentication
-- ✅ Real-time chat with Firebase Realtime Database
-- ✅ File uploads with UploadThing
-- ✅ Secure token storage
-- ✅ Tab-based navigation
-- ✅ Type-safe routing
-- 🚧 Case management (TODO)
-- 🚧 Document management (TODO)
-- 🚧 Push notifications (TODO)
+-  Firebase Authentication
+-  Real-time chat with Firebase Realtime Database
+-  File uploads with UploadThing
+-  Secure token storage
+-  Tab-based navigation
+-  Type-safe routing
+-  Case management (TODO)
+-  Document management (TODO)
+-  Push notifications (TODO)
 
-## 🏗️ Development
+##  Development
 
 ```bash
 # Type checking
@@ -91,7 +91,7 @@ pnpm lint
 pnpm format
 ```
 
-## 📦 Building
+##  Building
 
 ```bash
 # Build for iOS
@@ -101,12 +101,13 @@ eas build --platform ios
 eas build --platform android
 ```
 
-## 🔗 Related Repositories
+##  Related Repositories
 
 - Web Platform: https://github.com/frckbrice/patrick-travel-service-web
 - Mobile App: https://github.com/frckbrice/patrick-travel-service-app-mobile
 
-## 📄 License
+##  License
 
-Proprietary - Patrick Travel Services
+Proprietary - Avom brice, 
+portfolio: https://maebrieporfolio.vercel.app
 
