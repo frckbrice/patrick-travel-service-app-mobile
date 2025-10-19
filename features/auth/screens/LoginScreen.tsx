@@ -1,0 +1,307 @@
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
+import { TextInput, Button, Text, Checkbox, Divider } from 'react-native-paper';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Link, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useAuth, useGuestOnly } from '../hooks/useAuth';
+import { loginSchema, LoginFormData } from '../schemas/authSchemas';
+import { COLORS, SPACING } from '../../../lib/constants';
+import { secureStorage } from '../../../lib/storage/secureStorage';
+import { useGoogleAuth, handleGoogleAuthResponse } from '../../../lib/auth/googleAuth';
+import { useAuthStore } from '../../../stores/auth/authStore';
+import { logger } from '../../../lib/utils/logger';
+
+export default function LoginScreen() {
+    useGuestOnly();
+    const { t } = useTranslation();
+    const { login, isLoading, error } = useAuth();
+    const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
+    const router = useRouter();
+    const [rememberMe, setRememberMe] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+    // Google OAuth
+    const { request, response, promptAsync } = useGoogleAuth();
+
+    const {
+        control,
+        handleSubmit,
+        formState: { errors },
+    } = useForm<LoginFormData>({
+        resolver: zodResolver(loginSchema),
+    });
+
+    // Handle Google OAuth response
+    useEffect(() => {
+        if (response) {
+            handleGoogleSignIn();
+        }
+    }, [response]);
+
+    const handleGoogleSignIn = async () => {
+        if (!response) return;
+
+        setIsGoogleLoading(true);
+        try {
+            const result = await handleGoogleAuthResponse(response);
+
+            if (result.success && result.idToken) {
+                const success = await loginWithGoogle(result.idToken, result.accessToken);
+
+                if (success) {
+                    router.replace('/(tabs)');
+                }
+            }
+        } catch (error) {
+            logger.error('Google sign-in error', error);
+        } finally {
+            setIsGoogleLoading(false);
+        }
+    };
+
+    const onGoogleSignIn = async () => {
+        try {
+            setIsGoogleLoading(true);
+            await promptAsync();
+        } catch (error) {
+            logger.error('Error initiating Google sign-in', error);
+            setIsGoogleLoading(false);
+        }
+    };
+
+    const onSubmit = async (data: LoginFormData) => {
+        const success = await login(data);
+
+        if (success) {
+            await secureStorage.setRememberMe(rememberMe);
+            router.replace('/(tabs)');
+        }
+    };
+
+    return (
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.container}
+        >
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+                <View style={styles.header}>
+                    <Text variant="headlineLarge" style={styles.title}>
+                        {t('auth.welcomeBack')}
+                    </Text>
+                    <Text variant="bodyLarge" style={styles.subtitle}>
+                        {t('auth.signInToContinue')}
+                    </Text>
+                </View>
+
+                {error && (
+                    <View style={styles.errorContainer}>
+                        <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                )}
+
+                <View style={styles.form}>
+                    <Controller
+                        control={control}
+                        name="email"
+                        render={({ field: { onChange, onBlur, value } }) => (
+                            <TextInput
+                                label={t('auth.email')}
+                                mode="outlined"
+                                value={value}
+                                onChangeText={onChange}
+                                onBlur={onBlur}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                error={!!errors.email}
+                                style={styles.input}
+                            />
+                        )}
+                    />
+                    {errors.email && (
+                        <Text style={styles.fieldError}>{errors.email.message}</Text>
+                    )}
+
+                    <Controller
+                        control={control}
+                        name="password"
+                        render={({ field: { onChange, onBlur, value } }) => (
+                            <TextInput
+                                label={t('auth.password')}
+                                mode="outlined"
+                                value={value}
+                                onChangeText={onChange}
+                                onBlur={onBlur}
+                                secureTextEntry={!showPassword}
+                                error={!!errors.password}
+                                style={styles.input}
+                                right={
+                                    <TextInput.Icon
+                                        icon={showPassword ? 'eye-off' : 'eye'}
+                                        onPress={() => setShowPassword(!showPassword)}
+                                    />
+                                }
+                            />
+                        )}
+                    />
+                    {errors.password && (
+                        <Text style={styles.fieldError}>{errors.password.message}</Text>
+                    )}
+
+                    <View style={styles.optionsRow}>
+                        <View style={styles.checkboxContainer}>
+                            <Checkbox
+                                status={rememberMe ? 'checked' : 'unchecked'}
+                                onPress={() => setRememberMe(!rememberMe)}
+                            />
+                            <Text>{t('auth.rememberMe')}</Text>
+                        </View>
+
+                        <Link href="/(auth)/forgot-password" asChild>
+                            <Text style={styles.link}>{t('auth.forgotPassword')}</Text>
+                        </Link>
+                    </View>
+
+                    <Button
+                        mode="contained"
+                        onPress={handleSubmit(onSubmit)}
+                        loading={isLoading}
+                        disabled={isLoading || isGoogleLoading}
+                        style={styles.button}
+                    >
+                        {t('auth.signIn')}
+                    </Button>
+
+                    <View style={styles.dividerContainer}>
+                        <Divider style={styles.divider} />
+                        <Text style={styles.dividerText}>OR</Text>
+                        <Divider style={styles.divider} />
+                    </View>
+
+                    <TouchableOpacity
+                        style={styles.googleButton}
+                        onPress={onGoogleSignIn}
+                        disabled={!request || isLoading || isGoogleLoading}
+                    >
+                        <MaterialCommunityIcons name="google" size={24} color="#DB4437" />
+                        <Text style={styles.googleButtonText}>
+                            {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.footer}>
+                        <Text>{t('auth.dontHaveAccount')} </Text>
+                        <Link href="/(auth)/register" asChild>
+                            <Text style={styles.link}>{t('auth.signUp')}</Text>
+                        </Link>
+                    </View>
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: COLORS.background,
+    },
+    scrollContent: {
+        flexGrow: 1,
+        padding: SPACING.lg,
+        justifyContent: 'center',
+    },
+    header: {
+        marginBottom: SPACING.xl,
+        alignItems: 'center',
+    },
+    title: {
+        fontWeight: 'bold',
+        marginBottom: SPACING.sm,
+        color: COLORS.primary,
+    },
+    subtitle: {
+        color: COLORS.textSecondary,
+        textAlign: 'center',
+    },
+    form: {
+        marginTop: SPACING.lg,
+    },
+    input: {
+        marginBottom: SPACING.sm,
+    },
+    fieldError: {
+        color: COLORS.error,
+        fontSize: 12,
+        marginBottom: SPACING.sm,
+    },
+    errorContainer: {
+        backgroundColor: '#FEE2E2',
+        padding: SPACING.md,
+        borderRadius: 8,
+        marginBottom: SPACING.md,
+    },
+    errorText: {
+        color: COLORS.error,
+        textAlign: 'center',
+    },
+    optionsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginVertical: SPACING.md,
+    },
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    link: {
+        color: COLORS.primary,
+        fontWeight: 'bold',
+    },
+    button: {
+        marginTop: SPACING.md,
+        paddingVertical: SPACING.sm,
+    },
+    dividerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: SPACING.lg,
+    },
+    divider: {
+        flex: 1,
+    },
+    dividerText: {
+        marginHorizontal: SPACING.md,
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    googleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#DADCE0',
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginBottom: SPACING.md,
+    },
+    googleButtonText: {
+        marginLeft: 12,
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#3C4043',
+    },
+    footer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginTop: SPACING.lg,
+    },
+});
+
