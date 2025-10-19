@@ -1,198 +1,365 @@
-import React, { useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, FlatList, Image } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+/**
+ * Onboarding Screen
+ * Beautiful onboarding experience with smooth animations
+ */
+
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  FlatList,
+  ViewToken,
+  Image,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useTranslation } from 'react-i18next';
-import { COLORS, SPACING } from '../lib/constants';
-import { secureStorage } from '../lib/storage/secureStorage';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  interpolate,
+  Extrapolate,
+  useAnimatedScrollHandler,
+} from 'react-native-reanimated';
+import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width, height } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface OnboardingSlide {
-    id: string;
-    icon: keyof typeof MaterialCommunityIcons.glyphMap;
-    titleKey: string;
-    descriptionKey: string;
+  id: string;
+  title: string;
+  description: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  color: string;
 }
 
-const slides: OnboardingSlide[] = [
-    {
-        id: '1',
-        icon: 'airplane',
-        titleKey: 'onboarding.slide1Title',
-        descriptionKey: 'onboarding.slide1Description',
-    },
-    {
-        id: '2',
-        icon: 'briefcase-check',
-        titleKey: 'onboarding.slide2Title',
-        descriptionKey: 'onboarding.slide2Description',
-    },
-    {
-        id: '3',
-        icon: 'chat',
-        titleKey: 'onboarding.slide3Title',
-        descriptionKey: 'onboarding.slide3Description',
-    },
-    {
-        id: '4',
-        icon: 'file-upload',
-        titleKey: 'onboarding.slide4Title',
-        descriptionKey: 'onboarding.slide4Description',
-    },
+const ONBOARDING_SLIDES: OnboardingSlide[] = [
+  {
+    id: '1',
+    title: 'Welcome to Patrick Travel',
+    description: 'Your trusted partner for immigration services. We make your journey smooth and hassle-free.',
+    icon: 'airplane-takeoff',
+    color: '#0066CC',
+  },
+  {
+    id: '2',
+    title: 'Track Your Cases',
+    description: 'Monitor your immigration cases in real-time. Get instant updates on status changes.',
+    icon: 'file-document-multiple',
+    color: '#28A745',
+  },
+  {
+    id: '3',
+    title: 'Upload Documents',
+    description: 'Easily upload and manage your documents. Take photos directly from your phone.',
+    icon: 'cloud-upload',
+    color: '#FFC107',
+  },
+  {
+    id: '4',
+    title: 'Chat with Advisors',
+    description: 'Get instant support from our expert advisors. Real-time messaging for quick responses.',
+    icon: 'message-text',
+    color: '#DC3545',
+  },
+  {
+    id: '5',
+    title: 'Stay Informed',
+    description: 'Receive push notifications for important updates. Never miss a deadline or requirement.',
+    icon: 'bell-ring',
+    color: '#17A2B8',
+  },
 ];
 
+const OnboardingItem = ({ item, index, scrollX }: { item: OnboardingSlide; index: number; scrollX: Animated.SharedValue<number> }) => {
+  const inputRange = [(index - 1) * SCREEN_WIDTH, index * SCREEN_WIDTH, (index + 1) * SCREEN_WIDTH];
+
+  const imageAnimatedStyle = useAnimatedStyle(() => {
+    const scale = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.8, 1, 0.8],
+      Extrapolate.CLAMP
+    );
+
+    const opacity = interpolate(
+      scrollX.value,
+      inputRange,
+      [0.5, 1, 0.5],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      transform: [{ scale }],
+      opacity,
+    };
+  });
+
+  const textAnimatedStyle = useAnimatedStyle(() => {
+    const translateY = interpolate(
+      scrollX.value,
+      inputRange,
+      [50, 0, -50],
+      Extrapolate.CLAMP
+    );
+
+    const opacity = interpolate(
+      scrollX.value,
+      inputRange,
+      [0, 1, 0],
+      Extrapolate.CLAMP
+    );
+
+    return {
+      transform: [{ translateY }],
+      opacity,
+    };
+  });
+
+  return (
+    <View style={[styles.slide, { width: SCREEN_WIDTH }]}>
+      <Animated.View style={[styles.iconContainer, imageAnimatedStyle, { backgroundColor: item.color }]}>
+        <MaterialCommunityIcons name={item.icon} size={80} color="#FFFFFF" />
+      </Animated.View>
+
+      <Animated.View style={[styles.textContainer, textAnimatedStyle]}>
+        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.description}>{item.description}</Text>
+      </Animated.View>
+    </View>
+  );
+};
+
+const Pagination = ({ scrollX }: { scrollX: Animated.SharedValue<number> }) => {
+  return (
+    <View style={styles.pagination}>
+      {ONBOARDING_SLIDES.map((_, index) => {
+        const inputRange = [
+          (index - 1) * SCREEN_WIDTH,
+          index * SCREEN_WIDTH,
+          (index + 1) * SCREEN_WIDTH,
+        ];
+
+        const dotAnimatedStyle = useAnimatedStyle(() => {
+          const width = interpolate(
+            scrollX.value,
+            inputRange,
+            [8, 24, 8],
+            Extrapolate.CLAMP
+          );
+
+          const opacity = interpolate(
+            scrollX.value,
+            inputRange,
+            [0.3, 1, 0.3],
+            Extrapolate.CLAMP
+          );
+
+          return {
+            width,
+            opacity,
+          };
+        });
+
+        return (
+          <Animated.View
+            key={index}
+            style={[styles.dot, dotAnimatedStyle]}
+          />
+        );
+      })}
+    </View>
+  );
+};
+
 export default function OnboardingScreen() {
-    const { t } = useTranslation();
-    const router = useRouter();
-    const flatListRef = useRef<FlatList>(null);
-    const [currentIndex, setCurrentIndex] = useState(0);
+  const router = useRouter();
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const flatListRef = useRef<FlatList>(null);
+  const scrollX = useSharedValue(0);
 
-    const handleNext = () => {
-        if (currentIndex < slides.length - 1) {
-            flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
-            setCurrentIndex(currentIndex + 1);
-        } else {
-            handleGetStarted();
-        }
-    };
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollX.value = event.contentOffset.x;
+    },
+  });
 
-    const handleSkip = () => {
-        handleGetStarted();
-    };
+  const viewabilityConfig = {
+    itemVisiblePercentThreshold: 50,
+  };
 
-    const handleGetStarted = async () => {
-        await secureStorage.set('hasSeenOnboarding', true);
-        router.replace('/(auth)/login');
-    };
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      if (viewableItems[0]?.index !== null && viewableItems[0]?.index !== undefined) {
+        setCurrentIndex(viewableItems[0].index);
+      }
+    }
+  ).current;
 
-    const renderSlide = ({ item }: { item: OnboardingSlide }) => (
-        <View style={styles.slide}>
-            <View style={styles.iconContainer}>
-                <MaterialCommunityIcons name={item.icon} size={120} color={COLORS.primary} />
-            </View>
-            <Text variant="headlineLarge" style={styles.title}>
-                {t(item.titleKey)}
-            </Text>
-            <Text variant="bodyLarge" style={styles.description}>
-                {t(item.descriptionKey)}
-            </Text>
-        </View>
-    );
+  const handleNext = () => {
+    if (currentIndex < ONBOARDING_SLIDES.length - 1) {
+      flatListRef.current?.scrollToIndex({
+        index: currentIndex + 1,
+        animated: true,
+      });
+    } else {
+      handleGetStarted();
+    }
+  };
 
-    const renderDots = () => (
-        <View style={styles.dotsContainer}>
-            {slides.map((_, index) => (
-                <View
-                    key={index}
-                    style={[
-                        styles.dot,
-                        index === currentIndex && styles.activeDot,
-                    ]}
-                />
-            ))}
-        </View>
-    );
+  const handleSkip = () => {
+    handleGetStarted();
+  };
 
-    return (
-        <View style={styles.container}>
-            <View style={styles.skipContainer}>
-                {currentIndex < slides.length - 1 && (
-                    <Button mode="text" onPress={handleSkip}>
-                        {t('onboarding.skip')}
-                    </Button>
-                )}
-            </View>
+  const handleGetStarted = async () => {
+    // Mark onboarding as completed
+    await AsyncStorage.setItem('onboarding_completed', 'true');
+    router.replace('/(auth)/login');
+  };
 
-            <FlatList
-                ref={flatListRef}
-                data={slides}
-                renderItem={renderSlide}
-                keyExtractor={(item) => item.id}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onMomentumScrollEnd={(event) => {
-                    const index = Math.round(event.nativeEvent.contentOffset.x / width);
-                    setCurrentIndex(index);
-                }}
-            />
+  const isLastSlide = currentIndex === ONBOARDING_SLIDES.length - 1;
 
-            {renderDots()}
+  return (
+    <View style={styles.container}>
+      <StatusBar style="dark" />
 
-            <View style={styles.buttonContainer}>
-                <Button
-                    mode="contained"
-                    onPress={handleNext}
-                    style={styles.button}
-                    contentStyle={styles.buttonContent}
-                >
-                    {currentIndex === slides.length - 1
-                        ? t('onboarding.getStarted')
-                        : t('onboarding.next')}
-                </Button>
-            </View>
-        </View>
-    );
+      {/* Skip Button */}
+      {!isLastSlide && (
+        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Slides */}
+      <Animated.FlatList
+        ref={flatListRef}
+        data={ONBOARDING_SLIDES}
+        renderItem={({ item, index }) => (
+          <OnboardingItem item={item} index={index} scrollX={scrollX} />
+        )}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        keyExtractor={(item) => item.id}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+      />
+
+      {/* Pagination */}
+      <Pagination scrollX={scrollX} />
+
+      {/* Next/Get Started Button */}
+      <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+        <Text style={styles.nextButtonText}>
+          {isLastSlide ? 'Get Started' : 'Next'}
+        </Text>
+        <MaterialCommunityIcons
+          name={isLastSlide ? 'check' : 'arrow-right'}
+          size={24}
+          color="#FFFFFF"
+        />
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.background,
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  slide: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  iconContainer: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 40,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
     },
-    skipContainer: {
-        alignItems: 'flex-end',
-        paddingHorizontal: SPACING.lg,
-        paddingTop: SPACING.xl,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  textContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#212529',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  description: {
+    fontSize: 16,
+    color: '#6C757D',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  dot: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0066CC',
+    marginHorizontal: 4,
+  },
+  skipButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 12,
+  },
+  skipText: {
+    fontSize: 16,
+    color: '#6C757D',
+    fontWeight: '600',
+  },
+  nextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0066CC',
+    marginHorizontal: 40,
+    marginBottom: 40,
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#0066CC',
+    shadowOffset: {
+      width: 0,
+      height: 4,
     },
-    slide: {
-        width,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: SPACING.xl,
-    },
-    iconContainer: {
-        marginBottom: SPACING.xxl,
-    },
-    title: {
-        fontWeight: 'bold',
-        textAlign: 'center',
-        marginBottom: SPACING.md,
-        color: COLORS.text,
-    },
-    description: {
-        textAlign: 'center',
-        color: COLORS.textSecondary,
-        paddingHorizontal: SPACING.lg,
-    },
-    dotsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginVertical: SPACING.xl,
-    },
-    dot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: COLORS.border,
-        marginHorizontal: 4,
-    },
-    activeDot: {
-        width: 24,
-        backgroundColor: COLORS.primary,
-    },
-    buttonContainer: {
-        paddingHorizontal: SPACING.xl,
-        paddingBottom: SPACING.xxl,
-    },
-    button: {
-        paddingVertical: SPACING.sm,
-    },
-    buttonContent: {
-        paddingVertical: SPACING.sm,
-    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  nextButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginRight: 8,
+  },
 });
-

@@ -45,6 +45,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
                 sounds: ['./assets/notification.wav'],
             },
         ],
+        [
+            "expo-secure-store"
+        ]
     ],
     experiments: {
         typedRoutes: true,

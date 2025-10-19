@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, RefreshControl, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import DashboardCard from '../../components/DashboardCard';
+import { Button } from '../../components/ui';
 import { userApi } from '../../lib/api/user.api';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { DashboardStats } from '../../lib/types';
@@ -44,12 +45,22 @@ export default function HomeScreen() {
       }
     >
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.greeting}>
-          {t('dashboard.welcomeUser', { name: user?.firstName })}
-        </Text>
-        <Text variant="bodyMedium" style={styles.subtext}>
-          {t('dashboard.overview')}
-        </Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.greeting}>
+              {t('dashboard.welcomeUser', { name: user?.firstName })}
+            </Text>
+            <Text style={styles.subtext}>
+              {t('dashboard.overview')}
+            </Text>
+          </View>
+          <MaterialCommunityIcons 
+            name="bell-outline" 
+            size={28} 
+            color={COLORS.text}
+            onPress={() => router.push('/(tabs)/profile')}
+          />
+        </View>
       </View>
 
       <View style={styles.statsGrid}>
@@ -87,33 +98,32 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.quickActions}>
-        <Text variant="titleLarge" style={styles.sectionTitle}>
+        <Text style={styles.sectionTitle}>
           {t('dashboard.quickActions')}
         </Text>
         <Button
-          mode="contained"
+          title={t('dashboard.submitNewCase')}
           icon="plus"
           onPress={() => router.push('/case/new')}
+          fullWidth
           style={styles.actionButton}
-        >
-          {t('dashboard.submitNewCase')}
-        </Button>
+        />
         <Button
-          mode="outlined"
+          title={t('dashboard.uploadDocument')}
           icon="upload"
+          variant="secondary"
           onPress={() => router.push('/document/upload')}
+          fullWidth
           style={styles.actionButton}
-        >
-          {t('dashboard.uploadDocument')}
-        </Button>
+        />
         <Button
-          mode="outlined"
+          title={t('dashboard.viewFAQs')}
           icon="help-circle"
+          variant="outline"
           onPress={() => router.push('/help/faq')}
+          fullWidth
           style={styles.actionButton}
-        >
-          {t('dashboard.viewFAQs')}
-        </Button>
+        />
       </View>
     </ScrollView>
   );
@@ -126,14 +136,22 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: SPACING.lg,
+    paddingTop: SPACING.xl,
     backgroundColor: COLORS.surface,
   },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   greeting: {
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700',
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: 4,
   },
   subtext: {
+    fontSize: 14,
     color: COLORS.textSecondary,
   },
   statsGrid: {
@@ -144,7 +162,8 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   sectionTitle: {
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     marginBottom: SPACING.md,
     color: COLORS.text,
   },
