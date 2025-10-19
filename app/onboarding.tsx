@@ -26,6 +26,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTranslation } from 'react-i18next';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -37,41 +38,34 @@ interface OnboardingSlide {
   color: string;
 }
 
-const ONBOARDING_SLIDES: OnboardingSlide[] = [
+const getOnboardingSlides = (t: any): OnboardingSlide[] => [
   {
     id: '1',
-    title: 'Welcome to Patrick Travel',
-    description: 'Your trusted partner for immigration services. We make your journey smooth and hassle-free.',
+    title: t('onboarding.slide1Title'),
+    description: t('onboarding.slide1Description'),
     icon: 'airplane-takeoff',
     color: '#0066CC',
   },
   {
     id: '2',
-    title: 'Track Your Cases',
-    description: 'Monitor your immigration cases in real-time. Get instant updates on status changes.',
+    title: t('onboarding.slide2Title'),
+    description: t('onboarding.slide2Description'),
     icon: 'file-document-multiple',
     color: '#28A745',
   },
   {
     id: '3',
-    title: 'Upload Documents',
-    description: 'Easily upload and manage your documents. Take photos directly from your phone.',
+    title: t('onboarding.slide4Title'),
+    description: t('onboarding.slide4Description'),
     icon: 'cloud-upload',
     color: '#FFC107',
   },
   {
     id: '4',
-    title: 'Chat with Advisors',
-    description: 'Get instant support from our expert advisors. Real-time messaging for quick responses.',
+    title: t('onboarding.slide3Title'),
+    description: t('onboarding.slide3Description'),
     icon: 'message-text',
     color: '#DC3545',
-  },
-  {
-    id: '5',
-    title: 'Stay Informed',
-    description: 'Receive push notifications for important updates. Never miss a deadline or requirement.',
-    icon: 'bell-ring',
-    color: '#17A2B8',
   },
 ];
 
@@ -134,10 +128,10 @@ const OnboardingItem = ({ item, index, scrollX }: { item: OnboardingSlide; index
   );
 };
 
-const Pagination = ({ scrollX }: { scrollX: Animated.SharedValue<number> }) => {
+const Pagination = ({ scrollX, slidesLength }: { scrollX: Animated.SharedValue<number>; slidesLength: number }) => {
   return (
     <View style={styles.pagination}>
-      {ONBOARDING_SLIDES.map((_, index) => {
+      {Array.from({ length: slidesLength }).map((_, index) => {
         const inputRange = [
           (index - 1) * SCREEN_WIDTH,
           index * SCREEN_WIDTH,
@@ -177,10 +171,12 @@ const Pagination = ({ scrollX }: { scrollX: Animated.SharedValue<number> }) => {
 };
 
 export default function OnboardingScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useSharedValue(0);
+  const ONBOARDING_SLIDES = getOnboardingSlides(t);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -230,7 +226,7 @@ export default function OnboardingScreen() {
       {/* Skip Button */}
       {!isLastSlide && (
         <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip</Text>
+          <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
         </TouchableOpacity>
       )}
 
@@ -253,12 +249,12 @@ export default function OnboardingScreen() {
       />
 
       {/* Pagination */}
-      <Pagination scrollX={scrollX} />
+      <Pagination scrollX={scrollX} slidesLength={ONBOARDING_SLIDES.length} />
 
       {/* Next/Get Started Button */}
       <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
         <Text style={styles.nextButtonText}>
-          {isLastSlide ? 'Get Started' : 'Next'}
+          {isLastSlide ? t('onboarding.getStarted') : t('onboarding.next')}
         </Text>
         <MaterialCommunityIcons
           name={isLastSlide ? 'check' : 'arrow-right'}

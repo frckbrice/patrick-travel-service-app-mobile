@@ -1,13 +1,17 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
-import { TextInput, IconButton, Text, Avatar } from 'react-native-paper';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TextInput as RNTextInput, TouchableOpacity } from 'react-native';
+import { Avatar } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, { FadeInRight, FadeInLeft } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { chatService, ChatMessage } from '../../lib/services/chat';
+import { useThrottle } from '../../lib/hooks';
 import { COLORS, SPACING } from '../../lib/constants';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
+import { logger } from '../../lib/utils/logger';
 
 export default function ChatScreen() {
     useRequireAuth();
@@ -17,65 +21,117 @@ export default function ChatScreen() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const flatListRef = useRef<FlatList>(null);
+    const scrollToEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         if (!caseId) return;
 
+        logger.info('Chat screen mounted', { caseId });
+
+        // Subscribe to messages with limit for performance
         const unsubscribe = chatService.onMessagesChange(caseId, (msgs) => {
             setMessages(msgs);
-            flatListRef.current?.scrollToEnd();
-        });
 
-        // Mark messages as read
+            // Throttle scroll to end to avoid performance issues
+            if (scrollToEndTimeoutRef.current) {
+                clearTimeout(scrollToEndTimeoutRef.current);
+            }
+            scrollToEndTimeoutRef.current = setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+        }, 100); // Limit to last 100 messages
+
+        // Mark messages as read when opening chat
         if (user) {
             chatService.markMessagesAsRead(caseId, user.id);
         }
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            if (scrollToEndTimeoutRef.current) {
+                clearTimeout(scrollToEndTimeoutRef.current);
+            }
+        };
     }, [caseId, user]);
 
-    const handleSendMessage = async () => {
+    const handleSendMessage = useCallback(async () => {
         if (!newMessage.trim() || !user || !caseId) return;
 
-        await chatService.sendMessage(
-            caseId,
-            user.id,
-            `${user.firstName} ${user.lastName}`,
-            user.role as 'CLIENT',
-            newMessage.trim()
-        );
+        const messageText = newMessage.trim();
+        setNewMessage(''); // Clear input immediately for better UX
 
-        setNewMessage('');
-    };
+        try {
+            await chatService.sendMessage(
+                caseId,
+                user.id,
+                `${user.firstName} ${user.lastName}`,
+                user.role as 'CLIENT',
+                messageText
+            );
+            logger.info('Message sent', { caseId, messageLength: messageText.length });
+        } catch (error) {
+            logger.error('Failed to send message', error);
+            setNewMessage(messageText); // Restore message on error
+        }
+    }, [newMessage, user, caseId]);
 
-    const renderMessage = ({ item }: { item: ChatMessage }) => {
+    // Format message timestamp with smart formatting
+    const formatMessageTime = useCallback((timestamp: number) => {
+        const date = new Date(timestamp);
+        if (isToday(date)) {
+            return format(date, 'h:mm a');
+        } else if (isYesterday(date)) {
+            return `Yesterday ${format(date, 'h:mm a')}`;
+        } else {
+            return format(date, 'MMM dd, h:mm a');
+        }
+    }, []);
+
+    // Memoize render function for performance
+    const renderMessage = useCallback(({ item, index }: { item: ChatMessage; index: number }) => {
         const isMyMessage = item.senderId === user?.id;
+        const AnimatedView = isMyMessage ?
+            Animated.createAnimatedComponent(View) :
+            Animated.createAnimatedComponent(View);
 
         return (
-            <View style={[styles.messageContainer, isMyMessage && styles.myMessageContainer]}>
+            <AnimatedView
+                entering={isMyMessage ? FadeInRight.delay(index * 20) : FadeInLeft.delay(index * 20)}
+                style={[styles.messageContainer, isMyMessage && styles.myMessageContainer]}
+            >
                 {!isMyMessage && (
                     <Avatar.Text
-                        size={32}
+                        size={36}
                         label={item.senderName.charAt(0)}
                         style={styles.avatar}
+                        color={COLORS.primary}
+                        labelStyle={styles.avatarLabel}
                     />
                 )}
                 <View style={[styles.messageBubble, isMyMessage && styles.myMessageBubble]}>
                     {!isMyMessage && (
-                        <Text variant="labelSmall" style={styles.senderName}>
+                        <Text style={styles.senderName}>
                             {item.senderName}
                         </Text>
                     )}
                     <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>
                         {item.message}
                     </Text>
-                    <Text variant="labelSmall" style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
-                        {format(new Date(item.timestamp), 'h:mm a')}
+                    <Text style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
+                        {formatMessageTime(item.timestamp)}
                     </Text>
                 </View>
-            </View>
+            </AnimatedView>
         );
-    };
+    }, [user, formatMessageTime]);
+
+    // Memoize key extractor
+    const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
+
+    // Throttled scroll to end for performance
+    const scrollToEnd = useThrottle(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+    }, 200);
 
     return (
         <KeyboardAvoidingView
@@ -87,28 +143,43 @@ export default function ChatScreen() {
                 ref={flatListRef}
                 data={messages}
                 renderItem={renderMessage}
-                keyExtractor={(item) => item.id}
+                keyExtractor={keyExtractor}
                 contentContainerStyle={styles.messagesList}
-                onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+                onContentSizeChange={scrollToEnd}
+                // Performance optimizations
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={15}
+                initialNumToRender={15}
+                windowSize={10}
+                inverted={false}
             />
 
             <View style={styles.inputContainer}>
-                <TextInput
-                    mode="outlined"
-                    placeholder={t('messages.typeMessage')}
-                    value={newMessage}
-                    onChangeText={setNewMessage}
-                    style={styles.input}
-                    multiline
-                    maxLength={500}
-                />
-                <IconButton
-                    icon="send"
-                    mode="contained"
+                <View style={styles.inputWrapper}>
+                    <RNTextInput
+                        placeholder={t('messages.typeMessage')}
+                        value={newMessage}
+                        onChangeText={setNewMessage}
+                        style={styles.input}
+                        multiline
+                        maxLength={500}
+                        placeholderTextColor={COLORS.textSecondary}
+                    />
+                </View>
+                <TouchableOpacity
                     onPress={handleSendMessage}
                     disabled={!newMessage.trim()}
-                    style={styles.sendButton}
-                />
+                    style={[
+                        styles.sendButton,
+                        !newMessage.trim() && styles.sendButtonDisabled
+                    ]}
+                >
+                    <MaterialCommunityIcons
+                        name="send"
+                        size={24}
+                        color={COLORS.surface}
+                    />
+                </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
     );
@@ -117,7 +188,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
+        backgroundColor: '#F5F5F5',
     },
     messagesList: {
         padding: SPACING.md,
@@ -132,30 +203,49 @@ const styles = StyleSheet.create({
     },
     avatar: {
         marginRight: SPACING.sm,
-        backgroundColor: COLORS.primary + '40',
+        backgroundColor: COLORS.primary + '20',
+    },
+    avatarLabel: {
+        fontSize: 16,
+        fontWeight: '600',
     },
     messageBubble: {
         maxWidth: '75%',
         backgroundColor: COLORS.surface,
-        borderRadius: 16,
-        padding: SPACING.md,
+        borderRadius: 18,
+        borderBottomLeftRadius: 4,
+        padding: 12,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
     },
     myMessageBubble: {
         backgroundColor: COLORS.primary,
+        borderBottomLeftRadius: 18,
+        borderBottomRightRadius: 4,
     },
     senderName: {
-        fontWeight: 'bold',
-        marginBottom: SPACING.xs,
-        color: COLORS.textSecondary,
+        fontSize: 12,
+        fontWeight: '600',
+        marginBottom: 4,
+        color: COLORS.primary,
     },
     messageText: {
+        fontSize: 15,
+        lineHeight: 20,
         color: COLORS.text,
     },
     myMessageText: {
         color: COLORS.surface,
     },
     timestamp: {
-        marginTop: SPACING.xs,
+        fontSize: 11,
+        marginTop: 4,
         color: COLORS.textSecondary,
     },
     myTimestamp: {
@@ -165,14 +255,35 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         padding: SPACING.md,
         backgroundColor: COLORS.surface,
-        alignItems: 'center',
+        alignItems: 'flex-end',
+        borderTopWidth: 1,
+        borderTopColor: COLORS.border,
+    },
+    inputWrapper: {
+        flex: 1,
+        backgroundColor: COLORS.background,
+        borderRadius: 24,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        marginRight: SPACING.sm,
+        maxHeight: 100,
     },
     input: {
-        flex: 1,
-        marginRight: SPACING.sm,
+        fontSize: 15,
+        color: COLORS.text,
+        maxHeight: 80,
     },
     sendButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         backgroundColor: COLORS.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    sendButtonDisabled: {
+        backgroundColor: COLORS.textSecondary,
+        opacity: 0.5,
     },
 });
 

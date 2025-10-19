@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Text, Card, Badge, Avatar } from 'react-native-paper';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, StyleSheet, FlatList, Text } from 'react-native';
+import { Avatar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { chatService, Conversation } from '../../lib/services/chat';
+import { Card, EmptyState, Badge } from '../../components/ui';
 import { COLORS, SPACING } from '../../lib/constants';
 import { format } from 'date-fns';
 
@@ -27,81 +29,90 @@ export default function MessagesScreen() {
         return () => unsubscribe();
     }, [user]);
 
-    const renderConversationItem = ({ item }: { item: Conversation }) => {
+    // Memoize render function for performance
+    const renderConversationItem = useCallback(({ item, index }: { item: Conversation; index: number }) => {
         const hasUnread = item.unreadCount > 0;
 
         return (
-            <TouchableOpacity onPress={() => router.push(`/message/${item.caseId}`)}>
-                <Card style={styles.card}>
-                    <Card.Content style={styles.cardContent}>
+            <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
+                <Card onPress={() => router.push(`/message/${item.caseId}`)} style={styles.card}>
+                    <View style={styles.cardContent}>
                         <Avatar.Icon
-                            size={48}
-                            icon="account"
-                            style={styles.avatar}
-                            color={COLORS.primary}
+                            size={56}
+                            icon="message-text"
+                            style={[styles.avatar, hasUnread && styles.avatarUnread]}
+                            color={hasUnread ? COLORS.primary : COLORS.textSecondary}
                         />
                         <View style={styles.messageInfo}>
                             <View style={styles.header}>
-                                <Text variant="titleMedium" style={hasUnread && styles.unreadText}>
-                                    Case #{item.caseReference}
+                                <Text style={[styles.caseRef, hasUnread && styles.unreadText]}>
+                                    {item.caseReference}
                                 </Text>
                                 {hasUnread && (
-                                    <Badge size={20} style={styles.badge}>
+                                    <Badge variant="primary" rounded size="sm">
                                         {item.unreadCount}
                                     </Badge>
                                 )}
                             </View>
                             {item.participants.agentName && (
-                                <Text variant="bodySmall" style={styles.advisor}>
-                                    {t('messages.with')} {item.participants.agentName}
-                                </Text>
+                                <View style={styles.advisorRow}>
+                                    <MaterialCommunityIcons
+                                        name="account"
+                                        size={14}
+                                        color={COLORS.textSecondary}
+                                    />
+                                    <Text style={styles.advisor}>
+                                        {item.participants.agentName}
+                                    </Text>
+                                </View>
                             )}
                             <Text
-                                variant="bodyMedium"
-                                numberOfLines={1}
-                                style={hasUnread ? styles.unreadText : styles.lastMessage}
+                                numberOfLines={2}
+                                style={hasUnread ? styles.unreadMessage : styles.lastMessage}
                             >
-                                {item.lastMessage || t('messages.noConversations')}
+                                {item.lastMessage || t('messages.startConversation')}
                             </Text>
                             {item.lastMessageTime && (
-                                <Text variant="bodySmall" style={styles.time}>
+                                <Text style={styles.time}>
                                     {format(new Date(item.lastMessageTime), 'MMM dd, h:mm a')}
                                 </Text>
                             )}
                         </View>
                         <MaterialCommunityIcons
                             name="chevron-right"
-                            size={24}
+                            size={20}
                             color={COLORS.textSecondary}
                         />
-                    </Card.Content>
+                    </View>
                 </Card>
-            </TouchableOpacity>
+            </Animated.View>
         );
-    };
+    }, [router, t]);
+
+    // Memoize key extractor
+    const keyExtractor = useCallback((item: Conversation) => item.id, []);
 
     return (
         <View style={styles.container}>
             <FlatList
                 data={conversations}
                 renderItem={renderConversationItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={keyExtractor}
                 contentContainerStyle={styles.list}
                 ListEmptyComponent={
-                    <View style={styles.empty}>
-                        <MaterialCommunityIcons
-                            name="message-outline"
-                            size={64}
-                            color={COLORS.textSecondary}
-                        />
-                        <Text variant="bodyLarge" style={styles.emptyText}>
-                            {t('messages.noConversations')}
-                        </Text>
-                        <Text variant="bodyMedium" style={styles.emptySubtext}>
-                            {t('messages.noConversationsDesc')}
-                        </Text>
-                    </View>
+                    <EmptyState
+                        icon="message-outline"
+                        title={t('messages.noConversations')}
+                        description={t('messages.noConversationsDesc')}
+                        actionText={t('messages.viewCases')}
+                        onAction={() => router.push('/(tabs)/cases')}
+                    />
                 }
+                // Performance optimizations
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={8}
+                initialNumToRender={8}
+                windowSize={5}
             />
         </View>
     );
@@ -121,52 +132,58 @@ const styles = StyleSheet.create({
     cardContent: {
         flexDirection: 'row',
         alignItems: 'center',
+        padding: SPACING.md,
     },
     avatar: {
-        backgroundColor: COLORS.primary + '20',
+        backgroundColor: COLORS.background,
+    },
+    avatarUnread: {
+        backgroundColor: COLORS.primary + '15',
     },
     messageInfo: {
         flex: 1,
         marginLeft: SPACING.md,
+        marginRight: SPACING.sm,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: SPACING.xs,
+        marginBottom: 4,
     },
-    advisor: {
-        color: COLORS.textSecondary,
-        marginBottom: SPACING.xs,
-    },
-    lastMessage: {
-        color: COLORS.textSecondary,
-    },
-    unreadText: {
-        fontWeight: 'bold',
+    caseRef: {
+        fontSize: 16,
+        fontWeight: '600',
         color: COLORS.text,
     },
-    time: {
-        color: COLORS.textSecondary,
-        marginTop: SPACING.xs,
-    },
-    badge: {
-        backgroundColor: COLORS.primary,
-    },
-    empty: {
+    advisorRow: {
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: SPACING.xxl,
-        marginTop: SPACING.xxl,
+        marginBottom: 4,
     },
-    emptyText: {
-        marginTop: SPACING.md,
+    advisor: {
+        fontSize: 13,
         color: COLORS.textSecondary,
+        marginLeft: 4,
     },
-    emptySubtext: {
-        marginTop: SPACING.sm,
+    lastMessage: {
+        fontSize: 14,
         color: COLORS.textSecondary,
-        textAlign: 'center',
+        lineHeight: 20,
+    },
+    unreadText: {
+        fontWeight: '700',
+    },
+    unreadMessage: {
+        fontSize: 14,
+        color: COLORS.text,
+        fontWeight: '600',
+        lineHeight: 20,
+    },
+    time: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
+        marginTop: 4,
     },
 });
 

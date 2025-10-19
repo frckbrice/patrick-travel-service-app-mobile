@@ -95,10 +95,11 @@ class ChatService {
         });
     }
 
-    // Listen to messages for a case
+    // Listen to messages for a case (optimized with limit)
     onMessagesChange(
         caseId: string,
-        callback: (messages: ChatMessage[]) => void
+        callback: (messages: ChatMessage[]) => void,
+        limit: number = 100 // Limit messages for performance
     ): () => void {
         const messagesRef = ref(database, `chats/${caseId}/messages`);
         const messagesQuery = query(messagesRef, orderByChild('timestamp'));
@@ -111,7 +112,10 @@ class ChatService {
                     ...childSnapshot.val(),
                 });
             });
-            callback(messages);
+
+            // Get last N messages for performance
+            const limitedMessages = messages.slice(-limit);
+            callback(limitedMessages);
         });
 
         // Return cleanup function
@@ -164,7 +168,7 @@ class ChatService {
         }
     }
 
-    // Listen to all conversations for a user
+    // Listen to all conversations for a user (optimized)
     onConversationsChange(
         userId: string,
         callback: (conversations: Conversation[]) => void
@@ -173,9 +177,11 @@ class ChatService {
 
         const listener = onValue(chatsRef, async (snapshot) => {
             const conversations: Conversation[] = [];
+            const conversationPromises: Promise<void>[] = [];
 
-            for (const [caseId, data] of Object.entries(snapshot.val() || {})) {
-                const caseData = data as any;
+            snapshot.forEach((childSnapshot) => {
+                const caseId = childSnapshot.key!;
+                const caseData = childSnapshot.val();
                 const metadata = caseData.metadata || {};
 
                 // Check if user is a participant
@@ -183,20 +189,25 @@ class ChatService {
                     metadata.participants?.clientId === userId ||
                     metadata.participants?.agentId === userId
                 ) {
-                    // Get unread count
-                    const unreadCount = await this.getUnreadCount(caseId, userId);
-
-                    conversations.push({
-                        id: caseId,
-                        caseId,
-                        caseReference: metadata.caseReference || caseId,
-                        lastMessage: metadata.lastMessage,
-                        lastMessageTime: metadata.lastMessageTime,
-                        unreadCount,
-                        participants: metadata.participants,
-                    });
+                    // Use Promise to get unread count asynchronously
+                    conversationPromises.push(
+                        this.getUnreadCount(caseId, userId).then((unreadCount) => {
+                            conversations.push({
+                                id: caseId,
+                                caseId,
+                                caseReference: metadata.caseReference || caseId,
+                                lastMessage: metadata.lastMessage,
+                                lastMessageTime: metadata.lastMessageTime,
+                                unreadCount,
+                                participants: metadata.participants,
+                            });
+                        })
+                    );
                 }
-            }
+            });
+
+            // Wait for all unread counts (parallel for performance)
+            await Promise.all(conversationPromises);
 
             // Sort by last message time
             conversations.sort((a, b) =>
