@@ -88,11 +88,12 @@ This document describes the push notifications system implemented using Expo Not
 
 ## Setup Instructions
 
-### Prerequisites
+### Prerequisites ✅
 
-1. Expo account and project created
-2. Firebase project configured
-3. EAS Build configured (for production builds)
+1. ✅ Expo account created (ubuntu-dev-group)
+2. ✅ EAS project configured (ID: 2c78e03f-b77b-4a17-afde-9d7cd2171610)
+3. ✅ Firebase project configured
+4. ✅ EAS Build configured (see eas.json)
 4. Firebase Service Account JSON file (e.g., `patrick-travel-agency-firebase-adminsdk-fbsvc-aa437e075c.json`)
 
 ### What You'll Set Up
@@ -234,11 +235,15 @@ eas credentials
 
 ### Step 3: App Configuration
 
-The notification plugin is already configured in `app.config.ts`:
+✅ **Already Configured** in `app.config.ts`:
 
 ```typescript
 plugins: [
   'expo-router',
+  'expo-secure-store',
+  'expo-asset',
+  'expo-font',
+  'expo-localization',
   [
     'expo-notifications',
     {
@@ -249,6 +254,12 @@ plugins: [
   ],
 ],
 ```
+
+**Additional Configuration:**
+- **Runtime Version:** `policy: "appVersion"` (OTA updates enabled)
+- **Updates URL:** Configured for Expo Updates service
+- **Bundle Identifier (iOS):** `com.patricktravel.mobile`
+- **Package (Android):** `com.patricktravel.mobile`
 
 ### Step 4: Build Your App
 
@@ -394,8 +405,48 @@ import { authApi } from '../lib/api/auth.api';
 const tokenData = await registerForPushNotifications();
 
 if (tokenData) {
-  // Send token to backend
-  await authApi.updatePushToken(tokenData.token);
+  // Send token to backend with platform and deviceId
+  await authApi.updatePushToken(
+    tokenData.token,
+    tokenData.platform,  // 'ios' | 'android' | 'web'
+    tokenData.deviceId   // Unique device identifier (optional but recommended)
+  );
+}
+```
+
+### API Endpoints
+
+#### Save Push Token
+```http
+POST /api/users/push-token
+Authorization: Bearer <firebase-token>
+Content-Type: application/json
+
+{
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "platform": "ios",
+  "deviceId": "unique-device-id"
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "message": "Push token saved successfully"
+  },
+  "message": "Push token registered"
+}
+```
+
+#### Remove Push Token (on Logout)
+```http
+DELETE /api/users/push-token?platform=ios&deviceId=device-id
+Authorization: Bearer <firebase-token>
+
+Response 200:
+{
+  "success": true,
+  "message": "Push token removed successfully"
 }
 ```
 

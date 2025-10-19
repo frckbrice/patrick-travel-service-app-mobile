@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -16,6 +17,7 @@ function AppContent() {
   const registerPushToken = useAuthStore((state) => state.registerPushToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { theme, isDark } = useTheme();
+  const appState = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
     // Check auth status on app load
@@ -43,6 +45,31 @@ function AppContent() {
       registerPushToken();
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    // Handle app state changes (background/foreground)
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      // App has come to the foreground from background
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        logger.info('App has come to foreground, refreshing auth');
+
+        // Refresh auth session when app resumes
+        if (isAuthenticated) {
+          refreshAuth();
+        }
+      }
+
+      appState.current = nextAppState;
+      logger.info('AppState changed to:', nextAppState);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isAuthenticated, refreshAuth]);
 
   return (
     <PaperProvider theme={theme}>

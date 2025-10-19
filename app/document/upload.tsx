@@ -148,8 +148,9 @@ export default function UploadDocumentScreen() {
             const uploadResult = await uploadThingService.uploadFile(
                 fileUri,
                 fileName,
+                mimeType,
                 {
-                    onProgress: (progress) => {
+                    onProgress: (progress: number) => {
                         setUploadProgress(progress);
                         logger.info('Upload progress', { progress });
                     }

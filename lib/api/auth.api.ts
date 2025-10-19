@@ -177,11 +177,13 @@ export const authApi = {
         }
     },
 
-    async updatePushToken(pushToken: string): Promise<ApiResponse<void>> {
+    async updatePushToken(pushToken: string, platform: string, deviceId?: string): Promise<ApiResponse<void>> {
         try {
-            logger.info('Updating push token');
+            logger.info('Updating push token', { platform, deviceId });
             const response = await apiClient.post<ApiResponse<void>>('/users/push-token', {
-                pushToken,
+                token: pushToken,
+                platform,
+                deviceId,
             });
             return response.data;
         } catch (error: any) {
@@ -189,6 +191,26 @@ export const authApi = {
             return {
                 success: false,
                 error: error.response?.data?.error || 'Unable to update push token.',
+            };
+        }
+    },
+
+    async removePushToken(platform?: string, deviceId?: string): Promise<ApiResponse<void>> {
+        try {
+            logger.info('Removing push token', { platform, deviceId });
+            const params = new URLSearchParams();
+            if (platform) params.append('platform', platform);
+            if (deviceId) params.append('deviceId', deviceId);
+
+            const response = await apiClient.delete<ApiResponse<void>>(
+                `/users/push-token${params.toString() ? `?${params.toString()}` : ''}`
+            );
+            return response.data;
+        } catch (error: any) {
+            // Error already sanitized by interceptor - safe to use
+            return {
+                success: false,
+                error: error.response?.data?.error || 'Unable to remove push token.',
             };
         }
     },

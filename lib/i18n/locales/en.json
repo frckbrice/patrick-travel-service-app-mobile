@@ -191,7 +191,15 @@
         "darkDesc": "Use dark theme",
         "autoMode": "Auto (System)",
         "autoDesc": "Match device theme",
-        "darkModeNote": "Dark mode reduces eye strain in low-light conditions and may help save battery on OLED screens."
+        "darkModeNote": "Dark mode reduces eye strain in low-light conditions and may help save battery on OLED screens.",
+        "security": "Security",
+        "biometric": "Biometric Authentication",
+        "biometricDesc": "Use Face ID or Touch ID to login",
+        "biometricEnabled": "Biometric authentication enabled",
+        "biometricDisabled": "Biometric authentication disabled",
+        "biometricNotAvailable": "Biometric authentication not available on this device",
+        "enableBiometric": "Enable Biometric",
+        "disableBiometric": "Disable Biometric"
     },
     "help": {
         "faq": "FAQs",

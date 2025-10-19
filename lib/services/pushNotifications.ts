@@ -16,6 +16,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     priority: Notifications.AndroidNotificationPriority.HIGH,
   }),
 });
@@ -32,6 +34,7 @@ export interface NotificationData {
 export interface PushNotificationToken {
   token: string;
   platform: 'ios' | 'android' | 'web';
+  deviceId?: string;
 }
 
 /**
@@ -118,6 +121,7 @@ export const registerForPushNotifications = async (): Promise<PushNotificationTo
     return {
       token: tokenData.data,
       platform: Platform.OS as 'ios' | 'android' | 'web',
+      deviceId: Constants.deviceId || Constants.sessionId, // Unique device identifier
     };
   } catch (error: any) {
     logger.error('Error registering for push notifications', error);

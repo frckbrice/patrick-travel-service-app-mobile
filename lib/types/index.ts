@@ -72,6 +72,12 @@ export interface User {
   lastLogin?: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  // GDPR Compliance
+  consentedAt?: string | null;
+  acceptedTerms?: boolean;
+  acceptedPrivacy?: boolean;
+  termsAcceptedAt?: string | null;
+  privacyAcceptedAt?: string | null;
 }
 
 export interface Case {

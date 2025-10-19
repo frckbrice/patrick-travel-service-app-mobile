@@ -10,7 +10,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
     splash: {
-        image: './assets/splash-icon.jpeg',
+        image: './assets/splash-icon.png',
         resizeMode: 'contain',
         backgroundColor: '#0066CC',
     },
@@ -40,12 +40,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         'expo-router',
         "expo-secure-store",
         "expo-asset",
+        "expo-font",
+        "expo-localization",
         [
             'expo-notifications',
             {
                 icon: './assets/icon.png',
                 color: '#0066CC',
-                sounds: ['./assets/notification.wav'],
             },
         ],
     ],

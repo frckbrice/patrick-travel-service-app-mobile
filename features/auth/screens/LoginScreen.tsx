@@ -19,10 +19,16 @@ export default function LoginScreen() {
     const { t } = useTranslation();
     const { login, isLoading, error } = useAuth();
     const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
+    const loginWithBiometric = useAuthStore((state) => state.loginWithBiometric);
+    const biometricEnabled = useAuthStore((state) => state.biometricEnabled);
+    const biometricAvailable = useAuthStore((state) => state.biometricAvailable);
+    const checkBiometricStatus = useAuthStore((state) => state.checkBiometricStatus);
+    const enableBiometric = useAuthStore((state) => state.enableBiometric);
     const router = useRouter();
     const [rememberMe, setRememberMe] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+    const [isBiometricLoading, setIsBiometricLoading] = useState(false);
 
     // Google OAuth
     const { request, response, promptAsync } = useGoogleAuth();
@@ -34,6 +40,11 @@ export default function LoginScreen() {
     } = useForm<LoginFormData>({
         resolver: zodResolver(loginSchema),
     });
+
+    // Check biometric status on mount
+    useEffect(() => {
+        checkBiometricStatus();
+    }, []);
 
     // Handle Google OAuth response
     useEffect(() => {
@@ -78,8 +89,56 @@ export default function LoginScreen() {
 
         if (success) {
             await secureStorage.setRememberMe(rememberMe);
+
+            // Offer to enable biometric if available and not already enabled
+            if (biometricAvailable && !biometricEnabled) {
+                setTimeout(() => {
+                    promptEnableBiometric(data.email, data.password);
+                }, 500);
+            } else {
+                router.replace('/(tabs)');
+            }
+        }
+    };
+
+    const promptEnableBiometric = (email: string, password: string) => {
+        const biometricType = Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Fingerprint';
+
+        logger.info('Prompting biometric enable', { email });
+
+        // Show native alert using React Native's Alert
+        const { Alert } = require('react-native');
+        Alert.alert(
+            t('settings.enableBiometric'),
+            `Enable ${biometricType} for faster login?`,
+            [
+                {
+                    text: t('common.no'),
+                    style: 'cancel',
+                    onPress: () => router.replace('/(tabs)'),
+                },
+                {
+                    text: t('common.yes'),
+                    onPress: async () => {
+                        const success = await enableBiometric(email, password);
+                        if (success) {
+                            Alert.alert(t('common.success'), t('settings.biometricEnabled'));
+                        }
+                        router.replace('/(tabs)');
+                    },
+                },
+            ]
+        );
+    };
+
+    const handleBiometricLogin = async () => {
+        setIsBiometricLoading(true);
+        const success = await loginWithBiometric();
+
+        if (success) {
             router.replace('/(tabs)');
         }
+        setIsBiometricLoading(false);
     };
 
     return (
@@ -169,11 +228,33 @@ export default function LoginScreen() {
                         mode="contained"
                         onPress={handleSubmit(onSubmit)}
                         loading={isLoading}
-                        disabled={isLoading || isGoogleLoading}
+                        disabled={isLoading || isGoogleLoading || isBiometricLoading}
                         style={styles.button}
                     >
                         {t('auth.signIn')}
                     </Button>
+
+                    {/* Optional Biometric Login Button - Only shows if user enabled it */}
+                    {biometricAvailable && biometricEnabled && (
+                        <TouchableOpacity
+                            style={styles.biometricButton}
+                            onPress={handleBiometricLogin}
+                            disabled={isLoading || isGoogleLoading || isBiometricLoading}
+                        >
+                            <MaterialCommunityIcons
+                                name={Platform.OS === 'ios' ? 'face-recognition' : 'fingerprint'}
+                                size={24}
+                                color={COLORS.primary}
+                            />
+                            <Text style={styles.biometricButtonText}>
+                                {isBiometricLoading
+                                    ? 'Authenticating...'
+                                    : Platform.OS === 'ios'
+                                        ? 'Login with Face ID / Touch ID'
+                                        : 'Login with Fingerprint'}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
 
                     <View style={styles.dividerContainer}>
                         <Divider style={styles.divider} />
@@ -265,6 +346,24 @@ const styles = StyleSheet.create({
     button: {
         marginTop: SPACING.md,
         paddingVertical: SPACING.sm,
+    },
+    biometricButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: COLORS.primary + '10',
+        borderWidth: 1,
+        borderColor: COLORS.primary,
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginTop: SPACING.md,
+    },
+    biometricButtonText: {
+        marginLeft: 12,
+        fontSize: 16,
+        fontWeight: '600',
+        color: COLORS.primary,
     },
     dividerContainer: {
         flexDirection: 'row',

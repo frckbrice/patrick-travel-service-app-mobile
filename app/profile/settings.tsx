@@ -1,9 +1,10 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, List, RadioButton, Divider } from 'react-native-paper';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
+import { Text, List, RadioButton, Divider, Switch } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useTheme } from '../../lib/theme/ThemeContext';
+import { useAuthStore } from '../../stores/auth/authStore';
 import { COLORS, SPACING } from '../../lib/constants';
 
 type ThemeMode = 'light' | 'dark' | 'auto';
@@ -12,9 +13,56 @@ export default function SettingsScreen() {
     useRequireAuth();
     const { t } = useTranslation();
     const { themeMode, setThemeMode } = useTheme();
+    const { 
+        biometricAvailable, 
+        biometricEnabled, 
+        checkBiometricStatus, 
+        enableBiometric, 
+        disableBiometric 
+    } = useAuthStore();
+
+    useEffect(() => {
+        checkBiometricStatus();
+    }, []);
 
     const handleThemeChange = (mode: string) => {
         setThemeMode(mode as ThemeMode);
+    };
+
+    const handleBiometricToggle = async () => {
+        if (biometricEnabled) {
+            Alert.alert(
+                t('settings.disableBiometric'),
+                'Are you sure you want to disable biometric authentication?',
+                [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    {
+                        text: t('common.yes'),
+                        style: 'destructive',
+                        onPress: async () => {
+                            await disableBiometric();
+                            Alert.alert(t('common.success'), t('settings.biometricDisabled'));
+                        },
+                    },
+                ]
+            );
+        } else {
+            // Need to get user credentials - redirect to enable it after login
+            Alert.alert(
+                t('settings.enableBiometric'),
+                'Please login again to enable biometric authentication',
+                [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    {
+                        text: t('common.ok'),
+                        onPress: () => {
+                            // User should re-login from login screen to enable biometric
+                            Alert.alert('Info', 'Biometric authentication will be available after your next login');
+                        },
+                    },
+                ]
+            );
+        }
     };
 
     return (
@@ -79,6 +127,30 @@ export default function SettingsScreen() {
                         {t('settings.darkModeNote')}
                     </Text>
                 </View>
+
+                {/* Biometric Authentication Section */}
+                {biometricAvailable && (
+                    <List.Section>
+                        <List.Subheader>{t('settings.security')}</List.Subheader>
+
+                        <List.Item
+                            title={t('settings.biometric')}
+                            description={t('settings.biometricDesc')}
+                            left={(props) => (
+                                <List.Icon 
+                                    {...props} 
+                                    icon={Platform.OS === 'ios' ? 'face-recognition' : 'fingerprint'} 
+                                />
+                            )}
+                            right={() => (
+                                <Switch
+                                    value={biometricEnabled}
+                                    onValueChange={handleBiometricToggle}
+                                />
+                            )}
+                        />
+                    </List.Section>
+                )}
             </View>
         </ScrollView>
     );

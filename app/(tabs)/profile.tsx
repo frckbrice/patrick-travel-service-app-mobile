@@ -150,13 +150,29 @@ export default function ProfileScreen() {
                 <Text style={styles.sectionTitle}>{t('profile.privacy')}</Text>
                 <Animated.View entering={FadeInDown.delay(400).duration(400)}>
                     <MenuCard
+                        icon="shield-check"
+                        title="Privacy Policy"
+                        description="View our privacy policy and data protection"
+                        onPress={() => router.push('/(auth)/privacy-policy')}
+                    />
+                </Animated.View>
+                <Animated.View entering={FadeInDown.delay(425).duration(400)}>
+                    <MenuCard
+                        icon="file-document"
+                        title="Terms & Conditions"
+                        description="View our terms of service"
+                        onPress={() => router.push('/(auth)/terms')}
+                    />
+                </Animated.View>
+                <Animated.View entering={FadeInDown.delay(450).duration(400)}>
+                    <MenuCard
                         icon="download"
                         title={t('profile.exportData')}
                         description={t('profile.exportDesc')}
                         onPress={() => Alert.alert('Feature Coming Soon', 'Data export will be available soon')}
                     />
                 </Animated.View>
-                <Animated.View entering={FadeInDown.delay(450).duration(400)}>
+                <Animated.View entering={FadeInDown.delay(475).duration(400)}>
                     <MenuCard
                         icon="delete"
                         title={t('profile.deleteAccount')}

@@ -191,7 +191,15 @@
         "darkDesc": "Utiliser le thème sombre",
         "autoMode": "Auto (Système)",
         "autoDesc": "Suivre le thème de l'appareil",
-        "darkModeNote": "Le mode sombre réduit la fatigue oculaire dans des conditions de faible luminosité et peut aider à économiser la batterie sur les écrans OLED."
+        "darkModeNote": "Le mode sombre réduit la fatigue oculaire dans des conditions de faible luminosité et peut aider à économiser la batterie sur les écrans OLED.",
+        "security": "Sécurité",
+        "biometric": "Authentification biométrique",
+        "biometricDesc": "Utiliser Face ID ou Touch ID pour se connecter",
+        "biometricEnabled": "Authentification biométrique activée",
+        "biometricDisabled": "Authentification biométrique désactivée",
+        "biometricNotAvailable": "Authentification biométrique non disponible sur cet appareil",
+        "enableBiometric": "Activer la biométrie",
+        "disableBiometric": "Désactiver la biométrie"
     },
     "help": {
         "faq": "FAQs",

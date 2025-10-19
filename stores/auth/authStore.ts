@@ -7,6 +7,7 @@ import { auth } from '../../lib/firebase/config';
 import { signInWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
 import { signInWithGoogle, signOutFromGoogle } from '../../lib/auth/googleAuth';
 import { registerForPushNotifications } from '../../lib/services/pushNotifications';
+import { biometricAuthService } from '../../lib/services/biometricAuth';
 
 interface AuthState {
   user: User | null;
@@ -15,16 +16,22 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   error: string | null;
+  biometricAvailable: boolean;
+  biometricEnabled: boolean;
 
   // Actions
   login: (data: LoginRequest) => Promise<boolean>;
   loginWithGoogle: (idToken: string, accessToken?: string) => Promise<boolean>;
+  loginWithBiometric: () => Promise<boolean>;
   register: (data: RegisterRequest) => Promise<boolean>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   clearError: () => void;
   updateUser: (user: User) => void;
   registerPushToken: () => Promise<void>;
+  enableBiometric: (email: string, password: string) => Promise<boolean>;
+  disableBiometric: () => Promise<void>;
+  checkBiometricStatus: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -34,6 +41,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isAuthenticated: false,
   error: null,
+  biometricAvailable: false,
+  biometricEnabled: false,
 
   loginWithGoogle: async (idToken: string, accessToken?: string) => {
     try {
@@ -178,6 +187,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true });
 
+      // Remove push token from backend
+      try {
+        await authApi.removePushToken();
+      } catch (error) {
+        logger.warn('Failed to remove push token', error);
+      }
+
       // Logout from API
       await authApi.logout();
 
@@ -263,13 +279,92 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (tokenData) {
         set({ pushToken: tokenData.token });
 
-        // Send push token to backend
-        await authApi.updatePushToken(tokenData.token);
+        // Send push token to backend with platform and deviceId
+        await authApi.updatePushToken(
+          tokenData.token,
+          tokenData.platform,
+          tokenData.deviceId
+        );
 
-        logger.info('Push token registered', { token: tokenData.token });
+        logger.info('Push token registered', {
+          token: tokenData.token,
+          platform: tokenData.platform,
+          deviceId: tokenData.deviceId
+        });
       }
     } catch (error) {
       logger.error('Error registering push token', error);
+    }
+  },
+
+  loginWithBiometric: async () => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const credentials = await biometricAuthService.authenticateForLogin();
+
+      if (!credentials) {
+        set({
+          error: 'Biometric authentication failed',
+          isLoading: false,
+        });
+        return false;
+      }
+
+      // Use regular login with stored credentials
+      const success = await get().login(credentials);
+      return success;
+    } catch (error: any) {
+      logger.error('Biometric login error', error);
+      set({
+        error: error.message || 'Biometric login failed',
+        isLoading: false,
+      });
+      return false;
+    }
+  },
+
+  enableBiometric: async (email: string, password: string) => {
+    try {
+      const success = await biometricAuthService.enableBiometric();
+
+      if (success) {
+        await biometricAuthService.storeBiometricCredentials(email, password);
+        set({ biometricEnabled: true });
+        logger.info('Biometric authentication enabled');
+        return true;
+      }
+
+      return false;
+    } catch (error: any) {
+      logger.error('Enable biometric error', error);
+      return false;
+    }
+  },
+
+  disableBiometric: async () => {
+    try {
+      await biometricAuthService.clearBiometricCredentials();
+      set({ biometricEnabled: false });
+      logger.info('Biometric authentication disabled');
+    } catch (error: any) {
+      logger.error('Disable biometric error', error);
+    }
+  },
+
+  checkBiometricStatus: async () => {
+    try {
+      const available = await biometricAuthService.isAvailable();
+      const enabled = await biometricAuthService.isBiometricEnabled();
+
+      set({
+        biometricAvailable: available,
+        biometricEnabled: enabled,
+      });
+
+      logger.info('Biometric status checked', { available, enabled });
+    } catch (error: any) {
+      logger.error('Check biometric status error', error);
     }
   },
 }));

@@ -17,6 +17,7 @@ export default function RegisterScreen() {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [acceptTerms, setAcceptTerms] = useState(false);
+    const [acceptPrivacy, setAcceptPrivacy] = useState(false);
 
     const {
         control,
@@ -27,12 +28,23 @@ export default function RegisterScreen() {
     });
 
     const onSubmit = async (data: RegisterFormData) => {
-        if (!acceptTerms) {
-            Alert.alert(t('auth.acceptTerms'));
+        if (!acceptTerms || !acceptPrivacy) {
+            Alert.alert(
+                'Consent Required',
+                'Please accept both the Terms & Conditions and Privacy Policy to continue'
+            );
             return;
         }
 
-        const success = await register(data);
+        // Add consent timestamp to registration data
+        const registrationData = {
+            ...data,
+            consentedAt: new Date().toISOString(),
+            acceptedTerms: true,
+            acceptedPrivacy: true,
+        };
+
+        const success = await register(registrationData as any);
 
         if (success) {
             router.push('/(auth)/verify-email');
@@ -189,14 +201,36 @@ export default function RegisterScreen() {
                         <Text style={styles.fieldError}>{errors.confirmPassword.message}</Text>
                     )}
 
+                    {/* Terms & Conditions Consent */}
                     <View style={styles.termsContainer}>
                         <Checkbox
                             status={acceptTerms ? 'checked' : 'unchecked'}
                             onPress={() => setAcceptTerms(!acceptTerms)}
                         />
-                        <Text style={styles.termsText}>
-                            {t('auth.acceptTerms')}
-                        </Text>
+                        <View style={styles.termsTextContainer}>
+                            <Text style={styles.termsText}>
+                                I accept the{' '}
+                                <Link href="/(auth)/terms" asChild>
+                                    <Text style={styles.link}>Terms & Conditions</Text>
+                                </Link>
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Privacy Policy Consent */}
+                    <View style={styles.termsContainer}>
+                        <Checkbox
+                            status={acceptPrivacy ? 'checked' : 'unchecked'}
+                            onPress={() => setAcceptPrivacy(!acceptPrivacy)}
+                        />
+                        <View style={styles.termsTextContainer}>
+                            <Text style={styles.termsText}>
+                                I accept the{' '}
+                                <Link href="/(auth)/privacy-policy" asChild>
+                                    <Text style={styles.link}>Privacy Policy</Text>
+                                </Link>
+                            </Text>
+                        </View>
                     </View>
 
                     <Button
@@ -267,12 +301,19 @@ const styles = StyleSheet.create({
     },
     termsContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: SPACING.md,
+        alignItems: 'flex-start',
+        marginVertical: SPACING.sm,
+        paddingRight: SPACING.md,
     },
-    termsText: {
+    termsTextContainer: {
         flex: 1,
         marginLeft: SPACING.sm,
+        marginTop: 2,
+    },
+    termsText: {
+        fontSize: 14,
+        color: COLORS.text,
+        lineHeight: 20,
     },
     link: {
         color: COLORS.primary,
