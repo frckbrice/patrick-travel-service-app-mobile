@@ -106,6 +106,7 @@
         "selectFile": "Sélectionner un fichier",
         "pickDocument": "Choisir un document",
         "pickImage": "Choisir une image",
+        "takePhoto": "Prendre une photo",
         "noDocuments": "Pas encore de documents",
         "uploaded": "Téléversé:",
         "size": "Taille:",
@@ -115,7 +116,14 @@
         "downloadSuccess": "Document téléchargé avec succès",
         "deleteDocument": "Supprimer le document",
         "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce document?",
-        "previewNotAvailable": "Aperçu non disponible"
+        "previewNotAvailable": "Aperçu non disponible",
+        "permissionRequired": "Permission requise",
+        "cameraPermissionNeeded": "Veuillez accorder la permission d'accès à la caméra",
+        "photoPermissionNeeded": "Veuillez accorder la permission d'accès aux photos",
+        "fileTooLarge": "La taille du fichier dépasse la limite de 16MB",
+        "uploading": "Téléversement...",
+        "selectFileFirst": "Veuillez sélectionner un cas et un fichier",
+        "selectCaseFirst": "Veuillez d'abord sélectionner un cas"
     },
     "messages": {
         "conversations": "Conversations",

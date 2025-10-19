@@ -93,40 +93,129 @@ This document describes the push notifications system implemented using Expo Not
 1. Expo account and project created
 2. Firebase project configured
 3. EAS Build configured (for production builds)
+4. Firebase Service Account JSON file (e.g., `patrick-travel-agency-firebase-adminsdk-fbsvc-aa437e075c.json`)
+
+### What You'll Set Up
+
+This guide will walk you through:
+
+1. ✅ **EAS Project Configuration** - Verify your Expo project is configured
+2. ✅ **Android Keystore** - Required to sign your Android app
+3. ✅ **FCM v1 Credentials** - Enable push notifications using Firebase Service Account
+4. ✅ **iOS APNs** (Optional) - Enable iOS push notifications
+5. ✅ **Build & Test** - Create a build and test push notifications
 
 ### Step 1: Expo Project Setup
 
-1. **Create EAS project** (if not exists):
-```bash
-eas init
-```
-
-2. **Get your EAS Project ID**:
+1. **Verify EAS project** (already configured):
 ```bash
 eas whoami
-# Then visit: https://expo.dev/accounts/[your-account]/projects/[your-project]/settings
+# Your project ID is already set in app.json: 2c78e03f-b77b-4a17-afde-9d7cd2171610
 ```
 
-3. **Add to your `.env` file**:
+2. **EAS Configuration File** (`eas.json`):
+   - ✅ Already created with three build profiles:
+     - **development**: For testing on physical devices with development client
+     - **preview**: For internal testing/staging builds
+     - **production**: For production app store releases
+
+3. **Build Profiles Overview**:
 ```bash
-EAS_PROJECT_ID=your-eas-project-id
+# Development builds (includes dev tools, debugging)
+pnpm run build:dev:android
+pnpm run build:dev:ios
+
+# Preview builds (testing internal releases)
+pnpm run build:preview:android
+pnpm run build:preview:ios
+
+# Production builds (app store ready)
+pnpm run build:prod:android
+pnpm run build:prod:ios
 ```
 
-### Step 2: Firebase Cloud Messaging Setup
+### Step 2: Configure EAS Credentials (Android Keystore & FCM)
 
-#### For Android
+This step sets up both your Android keystore and Firebase Cloud Messaging credentials through EAS.
 
-1. **Go to Firebase Console** → Your Project → Project Settings
-2. Click **Cloud Messaging** tab
-3. Under **Cloud Messaging API (Legacy)**, enable it
-4. Copy the **Server Key**
+#### Step-by-Step Credential Setup
 
-5. **Add FCM Server Key to Expo**:
+1. **Start the credentials configuration**:
 ```bash
-# Upload FCM credentials to Expo
 eas credentials
-# Select Android → Push Notifications → Add FCM Server Key
 ```
+
+2. **Select your build profile**:
+   - Choose: **`development`** (for testing)
+   - Or choose the profile you're building for
+
+3. **Set up Android Keystore** (First time only):
+   - Select: **`Keystore: Manage everything needed to build your project`**
+   - Select: **`Set up a new keystore`**
+   - Assign a name or press Enter to use the default name
+   - ✅ Keystore will be generated and stored securely by EAS
+
+4. **Configure Push Notifications (FCM v1)**:
+   - Select: **`Go back`** to return to the main credentials menu
+   - Select: **`Google Service Account`**
+   - Select: **`Manage your Google Service Account Key for Push Notifications (FCM V1)`**
+   - Select: **`Set up a Google Service Account Key for Push Notifications (FCM V1)`**
+   - When prompted, select **`yes`** to use the detected `patrick-travel-agency-firebase-adminsdk-fbsvc-aa437e075c.json` file
+   - ✅ Your Firebase service account will be uploaded and configured
+
+5. **Verify the configuration**:
+   - You should see:
+     - ✅ **Keystore**: Configured with fingerprints
+     - ✅ **Push Notifications (FCM V1)**: Configured with your Firebase project details
+
+6. **Exit credentials menu**:
+   - Select: **`Go back`** and then **`Exit`**
+
+#### What You'll See After Setup
+
+```
+Android Credentials     
+Project                 patrick-travel-services
+Application Identifier  com.patricktravel.mobile
+
+Push Notifications (FCM V1): Google Service Account Key For FCM V1  
+  Project ID      patrick-travel-agency
+  Client Email    firebase-adminsdk-fbsvc@patrick-travel-agency...
+  ✅ Configured
+
+Configuration: patrick-travel-mobile-production (Default)  
+Keystore  
+  Type                JKS
+  Key Alias           xxxxxxxxxx
+  SHA256 Fingerprint  xxxxxxxxxx
+  ✅ Configured
+```
+
+#### Firebase Cloud Messaging - Understanding FCM v1 vs Legacy
+
+**Note:** Firebase has migrated from the Legacy API to FCM API v1.
+
+##### FCM API v1 (Current Standard - What You Just Set Up)
+
+✅ **Recommended approach** - Modern, secure OAuth 2.0 based authentication
+
+**What you need:**
+- Firebase Service Account JSON file (e.g., `patrick-travel-agency-firebase-adminsdk-fbsvc-aa437e075c.json`)
+- This is the same file used for Firebase Admin SDK on your backend
+
+**How to verify in Firebase Console:**
+- Firebase Console → Project Settings → Cloud Messaging tab
+- Should show: **"Firebase Cloud Messaging API (V1) - Enabled"**
+
+##### Legacy FCM API (Deprecated - Not Recommended)
+
+❌ **Deprecated** on 6/20/2023, stops working 6/20/2024
+
+If you still need to use Legacy API:
+1. Firebase Console → Project Settings → Cloud Messaging
+2. Enable "Cloud Messaging API (Legacy)"
+3. Copy the "Server Key"
+4. Upload via: `eas credentials` → Android → Push Notifications (Legacy)
 
 #### For iOS (APNs)
 
@@ -161,19 +250,53 @@ plugins: [
 ],
 ```
 
-### Step 4: Build Configuration
+### Step 4: Build Your App
 
-For push notifications to work, you need to create a production build:
+Now that credentials are configured, you can build your app. Push notifications don't work in Expo Go - you need a development or production build.
+
+#### Start Your First Build
+
+**For testing push notifications, use development profile:**
 
 ```bash
-# Build for development
-eas build --profile development --platform android
-eas build --profile development --platform ios
-
-# Build for production
-eas build --profile production --platform android
-eas build --profile production --platform ios
+pnpm run build:dev:android
 ```
+
+This will:
+1. Use the keystore you just configured
+2. Include FCM credentials for push notifications
+3. Create a development APK with debugging tools
+4. Take 10-20 minutes to complete
+
+#### Other Build Options
+
+```bash
+# Development builds (best for testing)
+pnpm run build:dev:android
+pnpm run build:dev:ios
+
+# Preview builds (for QA/internal testing)
+pnpm run build:preview:android
+pnpm run build:preview:ios
+
+# Production builds (for app stores)
+pnpm run build:prod:android
+pnpm run build:prod:ios
+```
+
+#### After the Build Completes
+
+1. **Download the APK** from the build URL provided
+2. **Install on your Android device**:
+   - Transfer APK to device
+   - Enable "Install from Unknown Sources" in settings
+   - Install the APK
+3. **Or scan QR code** from the Expo dashboard to download directly on device
+
+**Important Notes:**
+- ✅ Push notifications work on physical Android devices and Android emulators with Google Play
+- ❌ iOS Simulator does NOT support push notifications - must use physical iOS device
+- ✅ Development builds include dev tools and can connect to Metro bundler
 
 ---
 

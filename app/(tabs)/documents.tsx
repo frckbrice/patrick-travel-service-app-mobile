@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
-import { Text, FAB, Card, Chip } from 'react-native-paper';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { View, StyleSheet, FlatList, RefreshControl, Text, TextInput } from 'react-native';
+import { FAB, Chip } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { documentsApi } from '../../lib/api/documents.api';
-import { Document } from '../../lib/types';
-import { COLORS, SPACING, DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS, DOCUMENT_STATUS_COLORS } from '../../lib/constants';
+import { Document, DocumentType } from '../../lib/types';
+import { Card, StatusBadge, EmptyState } from '../../components/ui';
+import { useDebounce } from '../../lib/hooks';
+import { COLORS, SPACING, DOCUMENT_TYPE_LABELS } from '../../lib/constants';
 import { format } from 'date-fns';
 
 export default function DocumentsScreen() {
@@ -16,6 +19,8 @@ export default function DocumentsScreen() {
     const router = useRouter();
     const [documents, setDocuments] = useState<Document[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedType, setSelectedType] = useState<DocumentType | undefined>();
 
     const fetchDocuments = async () => {
         setIsLoading(true);
@@ -30,75 +35,151 @@ export default function DocumentsScreen() {
         fetchDocuments();
     }, []);
 
-    const getFileIcon = (mimeType: string) => {
+    // Debounce search query for performance (avoid filtering on every keystroke)
+    const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+    // Memoize filtered documents to avoid unnecessary recalculations
+    const filteredDocuments = useMemo(() => {
+        return documents.filter((doc) => {
+            const matchesSearch = doc.originalName.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+            const matchesType = !selectedType || doc.documentType === selectedType;
+            return matchesSearch && matchesType;
+        });
+    }, [documents, debouncedSearchQuery, selectedType]);
+
+    // Memoize file icon getter for performance
+    const getFileIcon = useCallback((mimeType: string) => {
         if (mimeType.includes('pdf')) return 'file-pdf-box';
         if (mimeType.includes('image')) return 'file-image';
         return 'file-document';
-    };
+    }, []);
 
-    const renderDocumentItem = ({ item }: { item: Document }) => (
-        <TouchableOpacity onPress={() => router.push(`/document/${item.id}`)}>
-            <Card style={styles.card}>
-                <Card.Content>
+    // Memoize render function for better FlatList performance
+    const renderDocumentItem = useCallback(({ item, index }: { item: Document; index: number }) => (
+        <Animated.View entering={FadeInDown.delay(index * 100).springify()}>
+            <Card onPress={() => router.push(`/document/${item.id}`)} style={styles.card}>
+                <View style={styles.cardContent}>
                     <View style={styles.cardHeader}>
                         <View style={styles.fileInfo}>
-                            <MaterialCommunityIcons
-                                name={getFileIcon(item.mimeType)}
-                                size={40}
-                                color={COLORS.primary}
-                            />
+                            <View style={[styles.iconContainer, { backgroundColor: COLORS.primary + '15' }]}>
+                                <MaterialCommunityIcons
+                                    name={getFileIcon(item.mimeType)}
+                                    size={32}
+                                    color={COLORS.primary}
+                                />
+                            </View>
                             <View style={styles.fileDetails}>
-                                <Text variant="titleMedium" numberOfLines={1}>
+                                <Text style={styles.fileName} numberOfLines={1}>
                                     {item.originalName}
                                 </Text>
-                                <Text variant="bodySmall" style={styles.fileType}>
+                                <Text style={styles.fileType}>
                                     {DOCUMENT_TYPE_LABELS[item.documentType]}
                                 </Text>
                             </View>
                         </View>
-                        <Chip
-                            style={[
-                                styles.statusChip,
-                                { backgroundColor: DOCUMENT_STATUS_COLORS[item.status] + '20' },
-                            ]}
-                            textStyle={{ color: DOCUMENT_STATUS_COLORS[item.status] }}
-                        >
-                            {DOCUMENT_STATUS_LABELS[item.status]}
-                        </Chip>
+                        <StatusBadge status={item.status} />
                     </View>
-                    <Text variant="bodySmall" style={styles.date}>
-                        {t('documents.uploaded')} {format(new Date(item.uploadDate), 'MMM dd, yyyy')}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.size}>
-                        {t('documents.size')} {(item.fileSize / 1024).toFixed(2)} KB
-                    </Text>
-                </Card.Content>
+
+                    <View style={styles.divider} />
+
+                    <View style={styles.footer}>
+                        <View style={styles.infoRow}>
+                            <MaterialCommunityIcons
+                                name="calendar"
+                                size={14}
+                                color={COLORS.textSecondary}
+                            />
+                            <Text style={styles.infoText}>
+                                {format(new Date(item.uploadDate), 'MMM dd, yyyy')}
+                            </Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <MaterialCommunityIcons
+                                name="file"
+                                size={14}
+                                color={COLORS.textSecondary}
+                            />
+                            <Text style={styles.infoText}>
+                                {(item.fileSize / 1024).toFixed(2)} KB
+                            </Text>
+                        </View>
+                    </View>
+                </View>
             </Card>
-        </TouchableOpacity>
-    );
+        </Animated.View>
+    ), [router, getFileIcon, t]);
+
+    // Memoize key extractor for FlatList performance
+    const keyExtractor = useCallback((item: Document) => item.id, []);
 
     return (
         <View style={styles.container}>
+            <View style={styles.header}>
+                <View style={styles.searchContainer}>
+                    <MaterialCommunityIcons
+                        name="magnify"
+                        size={20}
+                        color={COLORS.textSecondary}
+                        style={styles.searchIcon}
+                    />
+                    <TextInput
+                        placeholder={t('documents.searchDocuments')}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        style={styles.searchInput}
+                        placeholderTextColor={COLORS.textSecondary}
+                    />
+                </View>
+            </View>
+
+            <View style={styles.filters}>
+                <Chip
+                    selected={!selectedType}
+                    onPress={() => setSelectedType(undefined)}
+                    style={styles.filterChip}
+                >
+                    {t('documents.all')}
+                </Chip>
+                {(['PASSPORT', 'ID_CARD', 'DIPLOMA', 'OTHER'] as DocumentType[]).map((type) => (
+                    <Chip
+                        key={type}
+                        selected={selectedType === type}
+                        onPress={() => setSelectedType(type)}
+                        style={styles.filterChip}
+                    >
+                        {DOCUMENT_TYPE_LABELS[type]}
+                    </Chip>
+                ))}
+            </View>
+
             <FlatList
-                data={documents}
+                data={filteredDocuments}
                 renderItem={renderDocumentItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={keyExtractor}
                 contentContainerStyle={styles.list}
                 refreshControl={
                     <RefreshControl refreshing={isLoading} onRefresh={fetchDocuments} />
                 }
                 ListEmptyComponent={
-                    <View style={styles.empty}>
-                        <MaterialCommunityIcons
-                            name="file-document-outline"
-                            size={64}
-                            color={COLORS.textSecondary}
-                        />
-                        <Text variant="bodyLarge" style={styles.emptyText}>
-                            {t('documents.noDocuments')}
-                        </Text>
-                    </View>
+                    <EmptyState
+                        icon="file-document-outline"
+                        title={t('documents.noDocuments')}
+                        description={t('documents.noDocumentsDescription')}
+                        actionText={t('documents.uploadDocument')}
+                        onAction={() => router.push('/document/upload')}
+                    />
                 }
+                // Performance optimizations
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                updateCellsBatchingPeriod={50}
+                initialNumToRender={10}
+                windowSize={10}
+                getItemLayout={(data, index) => ({
+                    length: 140, // Approximate item height
+                    offset: 140 * index,
+                    index,
+                })}
             />
 
             <FAB
@@ -115,17 +196,50 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.background,
     },
+    header: {
+        padding: SPACING.md,
+        backgroundColor: COLORS.surface,
+    },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.background,
+        borderRadius: 12,
+        paddingHorizontal: SPACING.md,
+        height: 48,
+    },
+    searchIcon: {
+        marginRight: SPACING.sm,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        color: COLORS.text,
+    },
+    filters: {
+        flexDirection: 'row',
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.sm,
+        flexWrap: 'wrap',
+    },
+    filterChip: {
+        marginRight: SPACING.sm,
+        marginBottom: SPACING.sm,
+    },
     list: {
         padding: SPACING.md,
     },
     card: {
         marginBottom: SPACING.md,
     },
+    cardContent: {
+        padding: SPACING.md,
+    },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: SPACING.sm,
+        marginBottom: SPACING.md,
     },
     fileInfo: {
         flex: 1,
@@ -133,32 +247,44 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: SPACING.sm,
     },
+    iconContainer: {
+        width: 56,
+        height: 56,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     fileDetails: {
         flex: 1,
         marginLeft: SPACING.md,
     },
+    fileName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: COLORS.text,
+        marginBottom: 4,
+    },
     fileType: {
+        fontSize: 13,
         color: COLORS.textSecondary,
     },
-    statusChip: {
-        height: 28,
+    divider: {
+        height: 1,
+        backgroundColor: COLORS.border,
+        marginBottom: SPACING.md,
     },
-    date: {
-        color: COLORS.textSecondary,
-        marginBottom: SPACING.xs,
+    footer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
     },
-    size: {
-        color: COLORS.textSecondary,
-    },
-    empty: {
+    infoRow: {
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: SPACING.xxl,
-        marginTop: SPACING.xxl,
     },
-    emptyText: {
-        marginTop: SPACING.md,
+    infoText: {
+        fontSize: 13,
         color: COLORS.textSecondary,
+        marginLeft: SPACING.xs,
     },
     fab: {
         position: 'absolute',

@@ -195,6 +195,8 @@ useEffect(() => {
 ### Profile
 - `PATCH /api/users/profile` - Update info
 - `POST /api/users/avatar` - Upload picture
+- `POST /api/users/push-token` - Save push notification token
+- `DELETE /api/users/push-token` - Remove push token
 
 ### Templates
 - `GET /api/templates` - List forms/guides
@@ -346,3 +348,264 @@ interface Document {
 **Last Updated:** October 19, 2025
 **Version:** 2.0.0 (Essential Guide)
 **Status:** Production Ready ✅
+
+---
+
+## 📲 Push Notifications Setup
+
+### Save Push Token
+
+When the user grants push notification permission, save their token:
+
+```typescript
+import * as Notifications from 'expo-notifications';
+import apiClient from '../api/client';
+
+// Request permission
+const { status } = await Notifications.requestPermissionsAsync();
+if (status !== 'granted') {
+  console.log('Push notifications not allowed');
+  return;
+}
+
+// Get Expo push token
+const tokenData = await Notifications.getExpoPushTokenAsync();
+const pushToken = tokenData.data;
+
+// Save to backend
+await apiClient.post('/users/push-token', {
+  token: pushToken,
+  platform: Platform.OS, // 'ios' or 'android'
+  deviceId: Constants.deviceId, // Optional but recommended
+});
+```
+
+### Remove Push Token (on Logout)
+
+```typescript
+// Remove push token when user logs out
+await apiClient.delete('/users/push-token');
+
+// Or remove specific device token
+await apiClient.delete(`/users/push-token?platform=ios&deviceId=${deviceId}`);
+```
+
+### Handle Incoming Notifications
+
+```typescript
+import * as Notifications from 'expo-notifications';
+
+// Configure notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+// Handle notification tap
+Notifications.addNotificationResponseReceivedListener(response => {
+  const data = response.notification.request.content.data;
+  
+  // Navigate based on notification type
+  if (data.caseId) {
+    navigation.navigate('CaseDetails', { id: data.caseId });
+  } else if (data.chatRoomId) {
+    navigation.navigate('Chat', { roomId: data.chatRoomId });
+  }
+});
+```
+
+### API Endpoint
+
+| Method | Endpoint | Purpose | Auth Required |
+|--------|----------|---------|---------------|
+| POST | `/api/users/push-token` | Save push token | Yes |
+| DELETE | `/api/users/push-token` | Remove push token | Yes |
+
+**Request Body (POST):**
+```json
+{
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "platform": "ios",
+  "deviceId": "unique-device-id"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Push token saved successfully"
+  },
+  "message": "Push token registered"
+}
+```
+
+
+---
+
+## 🔔 Where Push Notifications Are Processed
+
+### Complete Flow Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    PUSH NOTIFICATION FLOW                         │
+└──────────────────────────────────────────────────────────────────┘
+
+Step 1: Mobile App Registers
+┌─────────────┐
+│ Mobile App  │
+│             │ 1. Request permission
+│             │ 2. Get Expo push token
+│             │ 3. POST /api/users/push-token
+└──────┬──────┘        │
+       │               ▼
+       │    ┌──────────────────────┐
+       │    │  Web Backend API     │
+       │    │  Saves token to DB   │
+       │    │  (SystemSetting)     │
+       │    └──────────────────────┘
+
+Step 2: Backend Triggers Notification
+┌─────────────────────────┐
+│  Web Backend            │
+│                         │
+│  Event happens:         │
+│  - Case status changes  │
+│  - New message arrives  │
+│  - Document approved    │
+│                         │
+│  1. Retrieve user's     │
+│     push token from DB  │
+│  2. Call Expo API       │
+│     expo-push.service   │
+└──────────┬──────────────┘
+           │
+           │ HTTP POST
+           ▼
+┌──────────────────────────┐
+│  Expo Push Service       │
+│  exp.host/api/v2/push    │
+│                          │
+│  Validates & delivers    │
+│  to device via APNs/FCM  │
+└──────────┬───────────────┘
+           │
+           │ Push via APNs (iOS) or FCM (Android)
+           ▼
+┌──────────────────────────┐
+│  Mobile App              │
+│  Receives notification   │
+│  Shows alert/badge       │
+│  Handles tap action      │
+└──────────────────────────┘
+```
+
+### Answer: Where Is Processing Done?
+
+**MOBILE APP:** Registers token, receives notifications, handles user interaction
+
+**WEB BACKEND:** Triggers notifications, sends to Expo API (file: `expo-push.service.ts`)
+
+**EXPO SERVERS:** Delivers notifications to devices via APNs (iOS) or FCM (Android)
+
+---
+
+### Backend Service (Already Created)
+
+**File:** `src/lib/notifications/expo-push.service.ts`
+
+**Functions:**
+```typescript
+// Send to one user
+sendPushNotificationToUser(userId, {
+  title: 'Case Updated',
+  body: 'Your case status changed',
+  data: { caseId: '123' }
+});
+
+// Send to multiple users
+sendPushNotificationToUsers(userIds, notification);
+
+// Helper functions
+sendCaseUpdateNotification(userId, caseRef, status, caseId);
+sendNewMessageNotification(userId, senderName, preview, chatRoomId);
+sendDocumentStatusNotification(userId, documentName, status, documentId);
+```
+
+**Usage Example (in your case update logic):**
+```typescript
+// src/app/api/cases/[id]/status/route.ts
+import { sendCaseUpdateNotification } from '@/lib/notifications/expo-push.service';
+
+// After updating case status
+await sendCaseUpdateNotification(
+  case.clientId,
+  case.referenceNumber,
+  newStatus,
+  case.id
+);
+```
+
+### Mobile App Handles Notifications
+
+```typescript
+// App.tsx or useEffect in root component
+import * as Notifications from 'expo-notifications';
+
+// Configure notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+// Handle notification when app is open
+Notifications.addNotificationReceivedListener(notification => {
+  console.log('Notification received:', notification);
+  // Update badge, show in-app alert, etc.
+});
+
+// Handle notification tap
+Notifications.addNotificationResponseReceivedListener(response => {
+  const data = response.notification.request.content.data;
+  
+  // Navigate based on notification type
+  switch (data.type) {
+    case 'CASE_STATUS_UPDATE':
+      navigation.navigate('CaseDetails', { id: data.caseId });
+      break;
+    case 'NEW_MESSAGE':
+      navigation.navigate('Chat', { roomId: data.chatRoomId });
+      break;
+    case 'DOCUMENT_STATUS_UPDATE':
+      navigation.navigate('Documents');
+      break;
+  }
+});
+```
+
+---
+
+### Summary
+
+| Component | Responsibility |
+|-----------|----------------|
+| **Mobile App** | Register token, receive notifications, handle taps |
+| **Web Backend** | Trigger events, send to Expo API |
+| **Expo API** | Route to APNs/FCM, deliver to devices |
+
+**You (mobile developer) only need to:**
+1. Get push token from Expo SDK
+2. Save it via `POST /api/users/push-token`
+3. Handle incoming notifications
+4. Navigate to appropriate screens
+
+**Backend handles the rest automatically!** ✅
+

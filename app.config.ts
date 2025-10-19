@@ -3,7 +3,8 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 export default ({ config }: ConfigContext): ExpoConfig => ({
     ...config,
     name: 'Patrick Travel Services',
-    slug: 'patrick-travel-mobile',
+    slug: 'patrick-travel-services',
+    owner: 'ubuntu-dev-group',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
@@ -37,6 +38,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     scheme: 'patrick-travel',
     plugins: [
         'expo-router',
+        "expo-secure-store",
+        "expo-asset",
         [
             'expo-notifications',
             {
@@ -45,9 +48,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
                 sounds: ['./assets/notification.wav'],
             },
         ],
-        [
-            "expo-secure-store"
-        ]
     ],
     experiments: {
         typedRoutes: true,
@@ -67,8 +67,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         uploadthingApiKey: process.env.EXPO_PUBLIC_UPLOADTHING_API_KEY,
         uploadthingAppId: process.env.EXPO_PUBLIC_UPLOADTHING_APP_ID,
         eas: {
-            projectId: process.env.EAS_PROJECT_ID,
-        },
+            projectId: '2c78e03f-b77b-4a17-afde-9d7cd2171610'
+        }
     },
+    runtimeVersion: {
+        policy: "appVersion"
+    },
+    updates: {
+        url: 'https://u.expo.dev/2c78e03f-b77b-4a17-afde-9d7cd2171610'
+    }
 });
-

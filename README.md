@@ -236,14 +236,30 @@ pnpm format
 
 ## 📦 Building for Production
 
-### iOS
+**Note:** Builds are configured in `eas.json` with three profiles (development, preview, production).
+
+### Development Builds (For Testing)
 ```bash
-eas build --platform ios
+pnpm run build:dev:android
+pnpm run build:dev:ios
 ```
 
-### Android
+### Preview Builds (For QA/Staging)
 ```bash
-eas build --platform android
+pnpm run build:preview:android
+pnpm run build:preview:ios
+```
+
+### Production Builds (For App Stores)
+```bash
+pnpm run build:prod:android
+pnpm run build:prod:ios
+```
+
+### Submit to Stores
+```bash
+pnpm run submit:android
+pnpm run submit:ios
 ```
 
 ## 🔐 Security
@@ -257,9 +273,13 @@ eas build --platform android
 
 ## 📚 Documentation
 
-- **SETUP_GUIDE.md** - Complete setup instructions
-- **IMPLEMENTATION_SUMMARY.md** - Detailed feature list
-- **ENV_TEMPLATE.md** - Environment variables reference
+- **[SETUP_GUIDE.md](./docs/SETUP_GUIDE.md)** - Complete setup instructions
+- **[PUSH_NOTIFICATIONS_SETUP.md](./docs/PUSH_NOTIFICATIONS_SETUP.md)** - Push notifications setup
+- **[AUTHENTICATION_SETUP.md](./docs/AUTHENTICATION_SETUP.md)** - Firebase Auth setup
+- **[IMPLEMENTATION_PROGRESS.md](./docs/IMPLEMENTATION_PROGRESS.md)** - Feature status
+- **[MOBILE_DEVELOPER_ESSENTIAL_GUIDE.md](./docs/MOBILE_DEVELOPER_ESSENTIAL_GUIDE.md)** - Developer guide
+- **[MOBILE_CLIENT_API_GUIDE.md](./docs/MOBILE_CLIENT_API_GUIDE.md)** - API reference
+- **[I18N_IMPLEMENTATION.md](./docs/I18N_IMPLEMENTATION.md)** - Internationalization
 
 ## 🐛 Troubleshooting
 
