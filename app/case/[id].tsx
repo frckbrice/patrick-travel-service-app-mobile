@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Card, Chip, Button, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { casesApi } from '../../lib/api/cases.api';
 import { Case, StatusHistory } from '../../lib/types';
+import { Card, StatusBadge, Button, LoadingSpinner } from '../../components/ui';
 import {
     COLORS,
     SPACING,
@@ -50,134 +51,140 @@ export default function CaseDetailsScreen() {
     };
 
     if (isLoading) {
-        return (
-            <View style={styles.loading}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
-        );
+        return <LoadingSpinner fullScreen text={t('common.loading')} />;
     }
 
     if (!caseData) {
         return (
             <View style={styles.error}>
-                <Text>{t('common.noResults')}</Text>
+                <MaterialCommunityIcons name="alert-circle" size={64} color={COLORS.error} />
+                <Text style={styles.errorText}>{t('common.noResults')}</Text>
+                <Button 
+                    title={t('common.goBack')} 
+                    onPress={() => router.back()} 
+                    style={styles.errorButton}
+                />
             </View>
         );
     }
 
     return (
         <ScrollView style={styles.container}>
-            <Card style={styles.card}>
-                <Card.Content>
-                    <View style={styles.header}>
-                        <Text variant="headlineSmall" style={styles.reference}>
-                            {caseData.referenceNumber}
-                        </Text>
-                        <Chip
-                            style={[
-                                styles.statusChip,
-                                { backgroundColor: CASE_STATUS_COLORS[caseData.status] + '20' },
-                            ]}
-                            textStyle={{ color: CASE_STATUS_COLORS[caseData.status] }}
-                        >
-                            {CASE_STATUS_LABELS[caseData.status]}
-                        </Chip>
-                    </View>
-
-                    <Text variant="titleMedium" style={styles.serviceType}>
-                        {SERVICE_TYPE_LABELS[caseData.serviceType]}
-                    </Text>
-
-                    <View style={styles.infoRow}>
-                        <MaterialCommunityIcons name="calendar" size={20} color={COLORS.textSecondary} />
-                        <Text style={styles.infoText}>
-                            {t('cases.submitted')} {format(new Date(caseData.submissionDate), 'MMM dd, yyyy')}
-                        </Text>
-                    </View>
-
-                    {caseData.assignedAgent && (
-                        <View style={styles.infoRow}>
-                            <MaterialCommunityIcons name="account" size={20} color={COLORS.textSecondary} />
-                            <Text style={styles.infoText}>
-                                {t('cases.advisor')}: {caseData.assignedAgent.firstName} {caseData.assignedAgent.lastName}
-                            </Text>
+            <Animated.View entering={FadeInUp.duration(400)}>
+                <Card style={styles.card}>
+                    <View style={styles.cardContent}>
+                        <View style={styles.header}>
+                            <View style={styles.referenceContainer}>
+                                <MaterialCommunityIcons 
+                                    name="briefcase" 
+                                    size={24} 
+                                    color={COLORS.primary}
+                                    style={styles.headerIcon}
+                                />
+                                <Text style={styles.reference}>
+                                    {caseData.referenceNumber}
+                                </Text>
+                            </View>
+                            <StatusBadge status={caseData.status} />
                         </View>
-                    )}
 
-                    {caseData.estimatedCompletion && (
-                        <View style={styles.infoRow}>
-                            <MaterialCommunityIcons
-                                name="clock-outline"
-                                size={20}
-                                color={COLORS.textSecondary}
+                        <View style={styles.serviceTypeContainer}>
+                            <MaterialCommunityIcons 
+                                name="airplane" 
+                                size={20} 
+                                color={COLORS.text}
                             />
-                            <Text style={styles.infoText}>
-                                {t('cases.estimatedCompletion')} {format(new Date(caseData.estimatedCompletion), 'MMM dd, yyyy')}
+                            <Text style={styles.serviceType}>
+                                {SERVICE_TYPE_LABELS[caseData.serviceType]}
                             </Text>
                         </View>
-                    )}
-                </Card.Content>
-            </Card>
 
-            <View style={styles.actions}>
+                        <View style={styles.divider} />
+
+                        <View style={styles.infoRow}>
+                            <MaterialCommunityIcons name="calendar" size={18} color={COLORS.textSecondary} />
+                            <Text style={styles.infoText}>
+                                Submitted {format(new Date(caseData.submissionDate), 'MMM dd, yyyy')}
+                            </Text>
+                        </View>
+
+                        {caseData.assignedAgent && (
+                            <View style={styles.infoRow}>
+                                <MaterialCommunityIcons name="account" size={18} color={COLORS.textSecondary} />
+                                <Text style={styles.infoText}>
+                                    Advisor: {caseData.assignedAgent.firstName} {caseData.assignedAgent.lastName}
+                                </Text>
+                            </View>
+                        )}
+
+                        {caseData.estimatedCompletion && (
+                            <View style={styles.infoRow}>
+                                <MaterialCommunityIcons
+                                    name="clock-outline"
+                                    size={18}
+                                    color={COLORS.textSecondary}
+                                />
+                                <Text style={styles.infoText}>
+                                    Est. completion: {format(new Date(caseData.estimatedCompletion), 'MMM dd, yyyy')}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                </Card>
+            </Animated.View>
+
+            <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.actions}>
                 <Button
-                    mode="contained"
+                    title={t('cases.messageAdvisor')}
                     icon="message"
                     onPress={() => router.push(`/message/${caseData.id}`)}
+                    fullWidth
                     style={styles.actionButton}
-                >
-                    {t('cases.messageAdvisor')}
-                </Button>
+                />
                 <Button
-                    mode="outlined"
+                    title={t('documents.uploadDocument')}
                     icon="upload"
+                    variant="secondary"
                     onPress={() => router.push('/document/upload')}
+                    fullWidth
                     style={styles.actionButton}
-                >
-                    {t('documents.uploadDocument')}
-                </Button>
-            </View>
+                />
+            </Animated.View>
 
             {history.length > 0 && (
-                <Card style={styles.card}>
-                    <Card.Content>
-                        <Text variant="titleLarge" style={styles.sectionTitle}>
-                            {t('cases.statusHistory')}
-                        </Text>
-                        {history.map((item, index) => (
-                            <View key={item.id} style={styles.historyItem}>
-                                <View style={styles.timeline}>
-                                    <View
-                                        style={[
-                                            styles.timelineDot,
-                                            { backgroundColor: CASE_STATUS_COLORS[item.status] },
-                                        ]}
-                                    />
-                                    {index < history.length - 1 && <View style={styles.timelineLine} />}
-                                </View>
-                                <View style={styles.historyContent}>
-                                    <Chip
-                                        style={[
-                                            styles.historyStatusChip,
-                                            { backgroundColor: CASE_STATUS_COLORS[item.status] + '20' },
-                                        ]}
-                                        textStyle={{ color: CASE_STATUS_COLORS[item.status] }}
-                                    >
-                                        {CASE_STATUS_LABELS[item.status]}
-                                    </Chip>
-                                    <Text variant="bodySmall" style={styles.historyDate}>
-                                        {format(new Date(item.timestamp), 'MMM dd, yyyy h:mm a')}
-                                    </Text>
-                                    {item.notes && (
-                                        <Text variant="bodyMedium" style={styles.historyNotes}>
-                                            {item.notes}
+                <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+                    <Card style={styles.card}>
+                        <View style={styles.cardContent}>
+                            <Text style={styles.sectionTitle}>
+                                {t('cases.statusHistory')}
+                            </Text>
+                            {history.map((item, index) => (
+                                <View key={item.id} style={styles.historyItem}>
+                                    <View style={styles.timeline}>
+                                        <View
+                                            style={[
+                                                styles.timelineDot,
+                                                { backgroundColor: CASE_STATUS_COLORS[item.status] },
+                                            ]}
+                                        />
+                                        {index < history.length - 1 && <View style={styles.timelineLine} />}
+                                    </View>
+                                    <View style={styles.historyContent}>
+                                        <StatusBadge status={item.status} />
+                                        <Text style={styles.historyDate}>
+                                            {format(new Date(item.timestamp), 'MMM dd, yyyy h:mm a')}
                                         </Text>
-                                    )}
+                                        {item.notes && (
+                                            <Text style={styles.historyNotes}>
+                                                {item.notes}
+                                            </Text>
+                                        )}
+                                    </View>
                                 </View>
-                            </View>
-                        ))}
-                    </Card.Content>
-                </Card>
+                            ))}
+                        </View>
+                    </Card>
+                </Animated.View>
             )}
         </ScrollView>
     );
@@ -188,18 +195,27 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.background,
     },
-    loading: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     error: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        padding: SPACING.xl,
+    },
+    errorText: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: COLORS.text,
+        marginTop: SPACING.md,
+        marginBottom: SPACING.lg,
+    },
+    errorButton: {
+        marginTop: SPACING.md,
     },
     card: {
         margin: SPACING.md,
+    },
+    cardContent: {
+        padding: SPACING.md,
     },
     header: {
         flexDirection: 'row',
@@ -207,16 +223,34 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: SPACING.md,
     },
+    referenceContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    headerIcon: {
+        marginRight: SPACING.sm,
+    },
     reference: {
-        fontWeight: 'bold',
+        fontSize: 20,
+        fontWeight: '700',
         color: COLORS.text,
     },
-    statusChip: {
-        height: 32,
+    serviceTypeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: SPACING.md,
     },
     serviceType: {
+        fontSize: 16,
+        fontWeight: '600',
         color: COLORS.text,
-        marginBottom: SPACING.md,
+        marginLeft: SPACING.sm,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: COLORS.border,
+        marginVertical: SPACING.md,
     },
     infoRow: {
         flexDirection: 'row',
@@ -225,32 +259,36 @@ const styles = StyleSheet.create({
     },
     infoText: {
         marginLeft: SPACING.sm,
+        fontSize: 14,
         color: COLORS.textSecondary,
     },
     actions: {
-        padding: SPACING.md,
+        paddingHorizontal: SPACING.md,
     },
     actionButton: {
         marginBottom: SPACING.sm,
     },
     sectionTitle: {
-        fontWeight: 'bold',
+        fontSize: 18,
+        fontWeight: '700',
         marginBottom: SPACING.md,
         color: COLORS.text,
     },
     historyItem: {
         flexDirection: 'row',
-        marginBottom: SPACING.md,
+        marginBottom: SPACING.lg,
     },
     timeline: {
         alignItems: 'center',
         marginRight: SPACING.md,
     },
     timelineDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
         marginTop: 4,
+        borderWidth: 3,
+        borderColor: COLORS.background,
     },
     timelineLine: {
         width: 2,
@@ -261,16 +299,16 @@ const styles = StyleSheet.create({
     historyContent: {
         flex: 1,
     },
-    historyStatusChip: {
-        alignSelf: 'flex-start',
-        marginBottom: SPACING.xs,
-    },
     historyDate: {
+        fontSize: 13,
         color: COLORS.textSecondary,
+        marginTop: SPACING.xs,
         marginBottom: SPACING.xs,
     },
     historyNotes: {
+        fontSize: 14,
         color: COLORS.text,
+        lineHeight: 20,
     },
 });
 
