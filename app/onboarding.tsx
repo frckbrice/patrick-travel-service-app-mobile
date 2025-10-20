@@ -26,8 +26,8 @@ import Animated, {
   SharedValue,
 } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+import { completeOnboarding } from '../lib/utils/onboarding';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -148,13 +148,7 @@ const OnboardingItem = ({
 };
 
 const PaginationDot = React.memo(
-  ({
-    index,
-    scrollX,
-  }: {
-    index: number;
-    scrollX: SharedValue<number>;
-  }) => {
+  ({ index, scrollX }: { index: number; scrollX: SharedValue<number> }) => {
     const inputRange = [
       (index - 1) * SCREEN_WIDTH,
       index * SCREEN_WIDTH,
@@ -247,8 +241,8 @@ export default function OnboardingScreen() {
   };
 
   const handleGetStarted = async () => {
-    // Mark onboarding as completed
-    await AsyncStorage.setItem('onboarding_completed', 'true');
+    // Mark onboarding as completed (persists across sessions until app uninstall)
+    await completeOnboarding();
     router.replace('/(auth)/login');
   };
 

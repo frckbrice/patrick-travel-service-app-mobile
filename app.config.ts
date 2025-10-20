@@ -80,6 +80,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     policy: 'appVersion',
   },
   updates: {
+    enabled: false, // Disabled for development builds to prevent crashes
     url: 'https://u.expo.dev/2c78e03f-b77b-4a17-afde-9d7cd2171610',
   },
 });

@@ -318,6 +318,7 @@ pnpm run submit:ios
 
 ### For Mobile Team:
 - **[SETUP_GUIDE.md](./docs/SETUP_GUIDE.md)** - Complete setup instructions
+- **[ANDROID_DEV_GUIDE.md](./ANDROID_DEV_GUIDE.md)** - Android emulator & dev build troubleshooting
 - **[PUSH_NOTIFICATIONS_SETUP.md](./docs/PUSH_NOTIFICATIONS_SETUP.md)** - Push notifications setup
 - **[AUTHENTICATION_SETUP.md](./docs/AUTHENTICATION_SETUP.md)** - Firebase Auth setup
 - **[IMPLEMENTATION_PROGRESS.md](./docs/IMPLEMENTATION_PROGRESS.md)** - Feature status

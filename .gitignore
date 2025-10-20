@@ -94,4 +94,4 @@ firebase-debug.log
 .vscode/
 .cursor/
 expo-env.d.ts
-# @end expo-cli
+# @end expo-cli*.apk

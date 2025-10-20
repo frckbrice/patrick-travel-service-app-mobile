@@ -90,6 +90,14 @@ export const DOCUMENT_STATUS_COLORS = {
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export const ALLOWED_FILE_TYPES = ['image/*', 'application/pdf'];
 
+// AsyncStorage Keys
+export const STORAGE_KEYS = {
+  ONBOARDING_COMPLETED: 'onboarding_completed',
+  BIOMETRIC_ENABLED: 'biometric_enabled',
+  LANGUAGE_PREFERENCE: 'language_preference',
+  THEME_PREFERENCE: 'theme_preference',
+} as const;
+
 export const ROUTES = {
   AUTH: {
     LOGIN: '/(auth)/login',

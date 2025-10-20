@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../stores/auth/authStore';
+import { hasCompletedOnboarding } from '../lib/utils/onboarding';
 import { COLORS } from '../lib/constants';
 
 export default function Index() {
@@ -13,10 +13,9 @@ export default function Index() {
 
   useEffect(() => {
     const checkOnboarding = async () => {
-      const onboardingCompleted = await AsyncStorage.getItem(
-        'onboarding_completed'
-      );
-      setHasSeenOnboarding(onboardingCompleted === 'true');
+      // Check if user has completed onboarding (persists across sessions)
+      const completed = await hasCompletedOnboarding();
+      setHasSeenOnboarding(completed);
       await refreshAuth();
     };
     checkOnboarding();

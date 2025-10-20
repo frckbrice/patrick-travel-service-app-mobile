@@ -194,6 +194,15 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 error={!!errors.email}
                 style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor={COLORS.text}
+                placeholderTextColor={COLORS.textSecondary}
+                theme={{
+                  colors: {
+                    onSurfaceVariant: COLORS.textSecondary,
+                    onSurface: COLORS.text,
+                  },
+                }}
               />
             )}
           />
@@ -214,10 +223,20 @@ export default function LoginScreen() {
                 secureTextEntry={!showPassword}
                 error={!!errors.password}
                 style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor={COLORS.text}
+                placeholderTextColor={COLORS.textSecondary}
+                theme={{
+                  colors: {
+                    onSurfaceVariant: COLORS.textSecondary,
+                    onSurface: COLORS.text,
+                  },
+                }}
                 right={
                   <TextInput.Icon
                     icon={showPassword ? 'eye-off' : 'eye'}
                     onPress={() => setShowPassword(!showPassword)}
+                    iconColor={COLORS.textSecondary}
                   />
                 }
               />
@@ -228,16 +247,24 @@ export default function LoginScreen() {
           )}
 
           <View style={styles.optionsRow}>
-            <View style={styles.checkboxContainer}>
+            <TouchableOpacity
+              style={styles.checkboxContainer}
+              onPress={() => setRememberMe(!rememberMe)}
+              activeOpacity={0.7}
+            >
               <Checkbox
                 status={rememberMe ? 'checked' : 'unchecked'}
                 onPress={() => setRememberMe(!rememberMe)}
+                color={COLORS.primary}
+                uncheckedColor={COLORS.textSecondary}
               />
-              <Text>{t('auth.rememberMe')}</Text>
-            </View>
+              <Text style={styles.checkboxText}>{t('auth.rememberMe')}</Text>
+            </TouchableOpacity>
 
             <Link href="/(auth)/forgot-password" asChild>
-              <Text style={styles.link}>{t('auth.forgotPassword')}</Text>
+              <TouchableOpacity>
+                <Text style={styles.link}>{t('auth.forgotPassword')}</Text>
+              </TouchableOpacity>
             </Link>
           </View>
 
@@ -247,6 +274,8 @@ export default function LoginScreen() {
             loading={isLoading}
             disabled={isLoading || isGoogleLoading || isBiometricLoading}
             style={styles.button}
+            contentStyle={styles.buttonContent}
+            labelStyle={styles.buttonLabel}
           >
             {t('auth.signIn')}
           </Button>
@@ -293,9 +322,11 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text>{t('auth.dontHaveAccount')} </Text>
+            <Text style={styles.footerText}>{t('auth.dontHaveAccount')} </Text>
             <Link href="/(auth)/register" asChild>
-              <Text style={styles.link}>{t('auth.signUp')}</Text>
+              <TouchableOpacity>
+                <Text style={styles.link}>{t('auth.signUp')}</Text>
+              </TouchableOpacity>
             </Link>
           </View>
         </View>
@@ -332,16 +363,22 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: SPACING.sm,
+    backgroundColor: COLORS.surface,
+  },
+  inputOutline: {
+    borderRadius: 12,
+    borderWidth: 1.5,
   },
   fieldError: {
     color: COLORS.error,
     fontSize: 12,
     marginBottom: SPACING.sm,
+    marginTop: -4,
   },
   errorContainer: {
     backgroundColor: '#FEE2E2',
     padding: SPACING.md,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: SPACING.md,
   },
   errorText: {
@@ -358,23 +395,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  checkboxText: {
+    color: COLORS.text,
+    fontSize: 14,
+    marginLeft: 4,
+  },
   link: {
     color: COLORS.primary,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 14,
   },
   button: {
     marginTop: SPACING.md,
-    paddingVertical: SPACING.sm,
+    borderRadius: 12,
+  },
+  buttonContent: {
+    paddingVertical: 8,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   biometricButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary + '10',
-    borderWidth: 1,
+    backgroundColor: COLORS.primary + '15',
+    borderWidth: 1.5,
     borderColor: COLORS.primary,
-    borderRadius: 8,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     marginTop: SPACING.md,
   },
@@ -391,34 +441,45 @@ const styles = StyleSheet.create({
   },
   divider: {
     flex: 1,
+    backgroundColor: COLORS.border,
   },
   dividerText: {
     marginHorizontal: SPACING.md,
     color: COLORS.textSecondary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#DADCE0',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     marginBottom: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   googleButtonText: {
     marginLeft: 12,
     fontSize: 16,
     fontWeight: '600',
-    color: '#3C4043',
+    color: COLORS.text,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: SPACING.lg,
+    alignItems: 'center',
+    marginTop: SPACING.xl,
+  },
+  footerText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
   },
 });

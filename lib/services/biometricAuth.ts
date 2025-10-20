@@ -104,8 +104,7 @@ class BiometricAuthService {
    */
   async isBiometricEnabled(): Promise<boolean> {
     try {
-      const enabled = await secureStorage.getItem(BIOMETRIC_ENABLED_KEY);
-      return enabled === 'true';
+      return await secureStorage.getBiometricEnabled();
     } catch (error) {
       logger.error('Failed to check biometric status', error);
       return false;
@@ -127,7 +126,7 @@ class BiometricAuthService {
       const result = await this.authenticate('Enable biometric authentication');
 
       if (result.success) {
-        await secureStorage.setItem(BIOMETRIC_ENABLED_KEY, 'true');
+        await secureStorage.setBiometricEnabled(true);
         logger.info('Biometric authentication enabled');
         return true;
       }
@@ -144,7 +143,7 @@ class BiometricAuthService {
    */
   async disableBiometric(): Promise<void> {
     try {
-      await secureStorage.deleteItem(BIOMETRIC_ENABLED_KEY);
+      await secureStorage.setBiometricEnabled(false);
       logger.info('Biometric authentication disabled');
     } catch (error) {
       logger.error('Failed to disable biometric', error);
@@ -173,8 +172,8 @@ class BiometricAuthService {
       }
 
       // Get stored credentials
-      const email = await secureStorage.getItem('biometric_email');
-      const password = await secureStorage.getItem('biometric_password');
+      const email = await secureStorage.getSecure('biometric_email');
+      const password = await secureStorage.getSecure('biometric_password');
 
       if (email && password) {
         return { email, password };
@@ -196,8 +195,8 @@ class BiometricAuthService {
     password: string
   ): Promise<boolean> {
     try {
-      await secureStorage.setItem('biometric_email', email);
-      await secureStorage.setItem('biometric_password', password);
+      await secureStorage.setSecure('biometric_email', email);
+      await secureStorage.setSecure('biometric_password', password);
       logger.info('Biometric credentials stored');
       return true;
     } catch (error) {
@@ -211,8 +210,8 @@ class BiometricAuthService {
    */
   async clearBiometricCredentials(): Promise<void> {
     try {
-      await secureStorage.deleteItem('biometric_email');
-      await secureStorage.deleteItem('biometric_password');
+      await secureStorage.deleteSecure('biometric_email');
+      await secureStorage.deleteSecure('biometric_password');
       await this.disableBiometric();
       logger.info('Biometric credentials cleared');
     } catch (error) {
