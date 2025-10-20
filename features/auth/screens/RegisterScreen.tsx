@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { TextInput, Button, Text, Checkbox } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
@@ -92,6 +93,15 @@ export default function RegisterScreen() {
                 onBlur={onBlur}
                 error={!!errors.firstName}
                 style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor={COLORS.text}
+                placeholderTextColor={COLORS.textSecondary}
+                theme={{
+                  colors: {
+                    onSurfaceVariant: COLORS.textSecondary,
+                    onSurface: COLORS.text,
+                  },
+                }}
               />
             )}
           />
@@ -111,6 +121,15 @@ export default function RegisterScreen() {
                 onBlur={onBlur}
                 error={!!errors.lastName}
                 style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor={COLORS.text}
+                placeholderTextColor={COLORS.textSecondary}
+                theme={{
+                  colors: {
+                    onSurfaceVariant: COLORS.textSecondary,
+                    onSurface: COLORS.text,
+                  },
+                }}
               />
             )}
           />
@@ -132,6 +151,15 @@ export default function RegisterScreen() {
                 autoCapitalize="none"
                 error={!!errors.email}
                 style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor={COLORS.text}
+                placeholderTextColor={COLORS.textSecondary}
+                theme={{
+                  colors: {
+                    onSurfaceVariant: COLORS.textSecondary,
+                    onSurface: COLORS.text,
+                  },
+                }}
               />
             )}
           />
@@ -152,6 +180,15 @@ export default function RegisterScreen() {
                 keyboardType="phone-pad"
                 error={!!errors.phone}
                 style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor={COLORS.text}
+                placeholderTextColor={COLORS.textSecondary}
+                theme={{
+                  colors: {
+                    onSurfaceVariant: COLORS.textSecondary,
+                    onSurface: COLORS.text,
+                  },
+                }}
               />
             )}
           />
@@ -169,10 +206,20 @@ export default function RegisterScreen() {
                 secureTextEntry={!showPassword}
                 error={!!errors.password}
                 style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor={COLORS.text}
+                placeholderTextColor={COLORS.textSecondary}
+                theme={{
+                  colors: {
+                    onSurfaceVariant: COLORS.textSecondary,
+                    onSurface: COLORS.text,
+                  },
+                }}
                 right={
                   <TextInput.Icon
                     icon={showPassword ? 'eye-off' : 'eye'}
                     onPress={() => setShowPassword(!showPassword)}
+                    color={COLORS.textSecondary}
                   />
                 }
               />
@@ -195,10 +242,20 @@ export default function RegisterScreen() {
                 secureTextEntry={!showConfirmPassword}
                 error={!!errors.confirmPassword}
                 style={styles.input}
+                outlineStyle={styles.inputOutline}
+                textColor={COLORS.text}
+                placeholderTextColor={COLORS.textSecondary}
+                theme={{
+                  colors: {
+                    onSurfaceVariant: COLORS.textSecondary,
+                    onSurface: COLORS.text,
+                  },
+                }}
                 right={
                   <TextInput.Icon
                     icon={showConfirmPassword ? 'eye-off' : 'eye'}
                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    color={COLORS.textSecondary}
                   />
                 }
               />
@@ -211,36 +268,52 @@ export default function RegisterScreen() {
           )}
 
           {/* Terms & Conditions Consent */}
-          <View style={styles.termsContainer}>
+          <TouchableOpacity
+            style={styles.termsContainer}
+            onPress={() => setAcceptTerms(!acceptTerms)}
+            activeOpacity={0.7}
+          >
             <Checkbox
               status={acceptTerms ? 'checked' : 'unchecked'}
               onPress={() => setAcceptTerms(!acceptTerms)}
+              color={COLORS.primary}
+              uncheckedColor={COLORS.textSecondary}
             />
             <View style={styles.termsTextContainer}>
               <Text style={styles.termsText}>
                 I accept the{' '}
                 <Link href="/(auth)/terms" asChild>
-                  <Text style={styles.link}>Terms & Conditions</Text>
+                  <TouchableOpacity>
+                    <Text style={styles.link}>Terms & Conditions</Text>
+                  </TouchableOpacity>
                 </Link>
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
           {/* Privacy Policy Consent */}
-          <View style={styles.termsContainer}>
+          <TouchableOpacity
+            style={styles.termsContainer}
+            onPress={() => setAcceptPrivacy(!acceptPrivacy)}
+            activeOpacity={0.7}
+          >
             <Checkbox
               status={acceptPrivacy ? 'checked' : 'unchecked'}
               onPress={() => setAcceptPrivacy(!acceptPrivacy)}
+              color={COLORS.primary}
+              uncheckedColor={COLORS.textSecondary}
             />
             <View style={styles.termsTextContainer}>
               <Text style={styles.termsText}>
                 I accept the{' '}
                 <Link href="/(auth)/privacy-policy" asChild>
-                  <Text style={styles.link}>Privacy Policy</Text>
+                  <TouchableOpacity>
+                    <Text style={styles.link}>Privacy Policy</Text>
+                  </TouchableOpacity>
                 </Link>
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
           <Button
             mode="contained"
@@ -248,14 +321,20 @@ export default function RegisterScreen() {
             loading={isLoading}
             disabled={isLoading}
             style={styles.button}
+            contentStyle={styles.buttonContent}
+            labelStyle={styles.buttonLabel}
           >
             {t('auth.signUp')}
           </Button>
 
           <View style={styles.footer}>
-            <Text>{t('auth.alreadyHaveAccount')} </Text>
+            <Text style={styles.footerText}>
+              {t('auth.alreadyHaveAccount')}{' '}
+            </Text>
             <Link href="/(auth)/login" asChild>
-              <Text style={styles.link}>{t('auth.signIn')}</Text>
+              <TouchableOpacity>
+                <Text style={styles.link}>{t('auth.signIn')}</Text>
+              </TouchableOpacity>
             </Link>
           </View>
         </View>
@@ -272,10 +351,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: SPACING.lg,
+    justifyContent: 'center',
   },
   header: {
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.xl,
     alignItems: 'center',
   },
   title: {
@@ -288,20 +367,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   form: {
-    marginTop: SPACING.md,
+    marginTop: SPACING.lg,
   },
   input: {
     marginBottom: SPACING.sm,
+    backgroundColor: COLORS.surface,
+  },
+  inputOutline: {
+    borderRadius: 12,
+    borderWidth: 1.5,
   },
   fieldError: {
     color: COLORS.error,
     fontSize: 12,
     marginBottom: SPACING.sm,
+    marginTop: -4,
   },
   errorContainer: {
     backgroundColor: '#FEE2E2',
     padding: SPACING.md,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: SPACING.md,
   },
   errorText: {
@@ -326,16 +411,28 @@ const styles = StyleSheet.create({
   },
   link: {
     color: COLORS.primary,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 14,
   },
   button: {
     marginTop: SPACING.md,
-    paddingVertical: SPACING.sm,
+    borderRadius: 12,
+  },
+  buttonContent: {
+    paddingVertical: 8,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xxl,
+    alignItems: 'center',
+    marginTop: SPACING.xl,
+  },
+  footerText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
   },
 });

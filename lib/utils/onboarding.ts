@@ -15,13 +15,13 @@ import { STORAGE_KEYS } from '../constants';
  * @returns true if onboarding was completed, false otherwise
  */
 export const hasCompletedOnboarding = async (): Promise<boolean> => {
-    try {
-        const value = await AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_COMPLETED);
-        return value === 'true';
-    } catch (error) {
-        console.error('Error checking onboarding status:', error);
-        return false;
-    }
+  try {
+    const value = await AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_COMPLETED);
+    return value === 'true';
+  } catch (error) {
+    console.error('Error checking onboarding status:', error);
+    return false;
+  }
 };
 
 /**
@@ -29,11 +29,11 @@ export const hasCompletedOnboarding = async (): Promise<boolean> => {
  * This will prevent the onboarding screen from showing again
  */
 export const completeOnboarding = async (): Promise<void> => {
-    try {
-        await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_COMPLETED, 'true');
-    } catch (error) {
-        console.error('Error saving onboarding completion:', error);
-    }
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_COMPLETED, 'true');
+  } catch (error) {
+    console.error('Error saving onboarding completion:', error);
+  }
 };
 
 /**
@@ -41,9 +41,9 @@ export const completeOnboarding = async (): Promise<void> => {
  * WARNING: This will cause onboarding to show again on next app start
  */
 export const resetOnboarding = async (): Promise<void> => {
-    try {
-        await AsyncStorage.removeItem(STORAGE_KEYS.ONBOARDING_COMPLETED);
-    } catch (error) {
-        console.error('Error resetting onboarding:', error);
-    }
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEYS.ONBOARDING_COMPLETED);
+  } catch (error) {
+    console.error('Error resetting onboarding:', error);
+  }
 };
