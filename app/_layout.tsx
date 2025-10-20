@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth/authStore';
 import { ThemeProvider, useTheme } from '../lib/theme/ThemeContext';
 import { setupNotificationListeners, getLastNotificationResponse, handleNotificationNavigation } from '../lib/services/pushNotifications';
 import { logger } from '../lib/utils/logger';
+import { COLORS } from '../lib/constants';
 import '../lib/i18n';
 
 const queryClient = new QueryClient();
@@ -72,17 +74,24 @@ function AppContent() {
   }, [isAuthenticated, refreshAuth]);
 
   return (
-    <PaperProvider theme={theme}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
+    <SafeAreaProvider>
+      <PaperProvider theme={theme}>
+        <StatusBar
+          style={isDark ? 'light' : 'dark'}
+          backgroundColor={Platform.OS === 'android' ? COLORS.primary : undefined}
+        />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: {
+              backgroundColor: COLORS.background,
+            },
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="case/[id]"
           options={{
@@ -173,6 +182,7 @@ function AppContent() {
         />
       </Stack>
     </PaperProvider>
+    </SafeAreaProvider>
   );
 }
 

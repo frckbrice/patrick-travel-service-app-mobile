@@ -877,6 +877,225 @@ Response 200:
 
 ---
 
+### GDPR Compliance (NEW - October 2025)
+
+#### Register with GDPR Consent
+```http
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!",
+  "firstName": "John",
+  "lastName": "Doe",
+  "phone": "+1234567890",
+  "consentedAt": "2025-10-19T10:30:00.000Z",
+  "acceptedTerms": true,
+  "acceptedPrivacy": true,
+  "acceptedMarketing": false
+}
+
+Response 201:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "user-id",
+      "email": "user@example.com",
+      "consentedAt": "2025-10-19T10:30:00.000Z",
+      "acceptedTerms": true,
+      "acceptedPrivacy": true,
+      "acceptedMarketing": false,
+      ...
+    },
+    "token": "jwt-token",
+    "refreshToken": "refresh-token"
+  }
+}
+```
+
+#### Update Consent Preferences
+```http
+POST /api/users/consent
+Authorization: Bearer <firebase-token>
+Content-Type: application/json
+
+{
+  "acceptedMarketing": true,
+  "consentedAt": "2025-10-19T10:30:00.000Z"
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "message": "Consent preferences updated successfully"
+  }
+}
+```
+
+#### Get Consent History (Audit Trail)
+```http
+GET /api/users/consent-history
+Authorization: Bearer <firebase-token>
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "userId": "user-id",
+    "history": [
+      {
+        "id": "consent-001",
+        "consentType": "TERMS_AND_CONDITIONS",
+        "accepted": true,
+        "consentedAt": "2025-10-19T10:30:00.000Z",
+        "ipAddress": "192.168.1.1",
+        "version": "1.0"
+      },
+      {
+        "id": "consent-002",
+        "consentType": "PRIVACY_POLICY",
+        "accepted": true,
+        "consentedAt": "2025-10-19T10:30:00.000Z"
+      },
+      {
+        "id": "consent-003",
+        "consentType": "MARKETING",
+        "accepted": false,
+        "consentedAt": "2025-10-19T10:30:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+#### Export User Data (GDPR Right to Data Portability)
+```http
+GET /api/users/data-export
+Authorization: Bearer <firebase-token>
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "user": { /* full user data */ },
+    "cases": [ /* all user cases */ ],
+    "documents": [ /* all documents */ ],
+    "messages": [ /* all messages */ ],
+    "notifications": [ /* all notifications */ ],
+    "consent": {
+      "consentedAt": "2025-10-19T10:30:00.000Z",
+      "acceptedTerms": true,
+      "acceptedPrivacy": true,
+      "acceptedMarketing": false,
+      "termsAcceptedAt": "2025-10-19T10:30:00.000Z",
+      "privacyAcceptedAt": "2025-10-19T10:30:00.000Z"
+    },
+    "consentHistory": [ /* consent audit trail */ ],
+    "exportedAt": "2025-10-19T15:45:00.000Z",
+    "format": "json"
+  }
+}
+```
+
+#### Delete Account (GDPR Right to Erasure)
+```http
+DELETE /api/users/account
+Authorization: Bearer <firebase-token>
+Content-Type: application/json
+
+{
+  "reason": "No longer need the service"  // Optional
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "message": "Account deletion scheduled. Your data will be permanently deleted within 30 days."
+  }
+}
+```
+
+**Backend Process:**
+1. Immediate: Mark user as inactive, anonymize email, revoke tokens
+2. After 30 days: Permanently delete all user data (scheduled job)
+3. Legal retention: Keep anonymized audit logs if required by law
+
+#### Withdraw Consent
+```http
+POST /api/users/consent/withdraw
+Authorization: Bearer <firebase-token>
+Content-Type: application/json
+
+{
+  "consentType": "marketing"  // or "all" to delete account
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "message": "Consent withdrawn successfully"
+  }
+}
+```
+
+#### Push Token Management
+```http
+PUT /api/users/push-token
+Authorization: Bearer <firebase-token>
+Content-Type: application/json
+
+{
+  "pushToken": "ExponentPushToken[xxxxxx]",
+  "platform": "ios",
+  "deviceId": "device-123",
+  "deviceModel": "iPhone 14 Pro",
+  "osVersion": "17.0"
+}
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "message": "Push token updated successfully"
+  }
+}
+```
+
+```http
+DELETE /api/users/push-token?platform=ios&deviceId=device-123
+Authorization: Bearer <firebase-token>
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "message": "Push token removed successfully"
+  }
+}
+```
+
+#### Get Legal Document Versions
+```http
+GET /api/legal/versions
+
+Response 200:
+{
+  "success": true,
+  "data": {
+    "termsVersion": "1.0",
+    "privacyVersion": "1.0",
+    "lastUpdated": "2025-10-19T00:00:00.000Z"
+  }
+}
+```
+
+---
+
 ### System
 
 #### Health Check
@@ -2076,9 +2295,16 @@ curl https://your-api.com/api/auth/me \
 
 ---
 
-**Last Updated**: October 18, 2025  
+**Last Updated**: October 19, 2025  
 **API Version**: 1.0.0  
 **Status**: Production Ready ✅
+
+**Recent Updates (October 19, 2025):**
+- ✅ **GDPR Compliance Endpoints** - Consent management, data export, account deletion
+- ✅ Enhanced user model with consent tracking fields
+- ✅ Push notification token management
+- ✅ Consent history audit trail
+- ✅ Marketing consent (optional)
 
 **Recent Updates (October 18, 2025):**
 - ✅ Added email messaging feature (`POST /api/emails/send`)

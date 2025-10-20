@@ -15,12 +15,12 @@ export const casesApi = {
     async getCases(
         status?: CaseStatus,
         page = 1,
-        pageSize = 20
+        limit = 20
     ): Promise<PaginatedResponse<Case>> {
         try {
             const params = new URLSearchParams({
                 page: page.toString(),
-                pageSize: pageSize.toString(),
+                limit: limit.toString(),
             });
 
             if (status) {
@@ -36,10 +36,12 @@ export const casesApi = {
             return {
                 success: false,
                 data: [],
-                total: 0,
-                page,
-                pageSize,
-                totalPages: 0,
+                pagination: {
+                    page,
+                    limit,
+                    total: 0,
+                    totalPages: 0,
+                },
             };
         }
     },

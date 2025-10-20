@@ -18,6 +18,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ios: {
         supportsTablet: true,
         bundleIdentifier: 'com.patricktravel.mobile',
+        deploymentTarget: '13.4', // Support iOS 13.4+ (99% of devices)
+        infoPlist: {
+            ITSAppUsesNonExemptEncryption: false,
+            UIViewControllerBasedStatusBarAppearance: true,
+        }
     },
     android: {
         adaptiveIcon: {
@@ -30,6 +35,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
             'android.permission.READ_EXTERNAL_STORAGE',
             'android.permission.WRITE_EXTERNAL_STORAGE',
         ],
+        minSdkVersion: 23, // Android 6.0+ (99% of devices, no filtering)
+        targetSdkVersion: 34, // Latest stable Android
+        compileSdkVersion: 34,
     },
     web: {
         favicon: './assets/favicon.png',

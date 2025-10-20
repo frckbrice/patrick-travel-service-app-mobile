@@ -1,13 +1,15 @@
 import { create } from 'zustand';
-import { User } from '../../lib/types';
+import { User, PushTokenRequest } from '../../lib/types';
 import { secureStorage } from '../../lib/storage/secureStorage';
 import { authApi, LoginRequest, RegisterRequest } from '../../lib/api/auth.api';
+import { userApi } from '../../lib/api/user.api';
 import { logger } from '../../lib/utils/logger';
 import { auth } from '../../lib/firebase/config';
 import { signInWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
 import { signInWithGoogle, signOutFromGoogle } from '../../lib/auth/googleAuth';
 import { registerForPushNotifications } from '../../lib/services/pushNotifications';
 import { biometricAuthService } from '../../lib/services/biometricAuth';
+import { Platform } from 'react-native';
 
 interface AuthState {
   user: User | null;
@@ -189,7 +191,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Remove push token from backend
       try {
-        await authApi.removePushToken();
+        await userApi.removePushToken();
       } catch (error) {
         logger.warn('Failed to remove push token', error);
       }
@@ -280,11 +282,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ pushToken: tokenData.token });
 
         // Send push token to backend with platform and deviceId
-        await authApi.updatePushToken(
-          tokenData.token,
-          tokenData.platform,
-          tokenData.deviceId
-        );
+        const pushTokenRequest: PushTokenRequest = {
+          pushToken: tokenData.token,
+          platform: tokenData.platform as 'ios' | 'android',
+          deviceId: tokenData.deviceId || 'unknown',
+          osVersion: typeof Platform.Version === 'number' 
+            ? Platform.Version.toString() 
+            : Platform.Version,
+        };
+
+        await userApi.updatePushToken(pushTokenRequest);
 
         logger.info('Push token registered', {
           token: tokenData.token,

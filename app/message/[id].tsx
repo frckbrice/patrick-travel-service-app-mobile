@@ -1,14 +1,16 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TextInput as RNTextInput, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, Text, TextInput as RNTextInput, TouchableOpacity, Alert, Image } from 'react-native';
 import { Avatar } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Animated, { FadeInRight, FadeInLeft } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { chatService, ChatMessage } from '../../lib/services/chat';
 import { useThrottle } from '../../lib/hooks';
+import { downloadAndShareFile, formatFileSize, getFileIconForMimeType } from '../../lib/utils/fileDownload';
 import { COLORS, SPACING } from '../../lib/constants';
 import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
@@ -20,6 +22,12 @@ export default function ChatScreen() {
     const user = useAuthStore((state) => state.user);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
+    const [selectedAttachments, setSelectedAttachments] = useState<Array<{
+        name: string;
+        url: string;
+        type: string;
+        size: number;
+    }>>([]);
     const flatListRef = useRef<FlatList>(null);
     const scrollToEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -55,25 +63,73 @@ export default function ChatScreen() {
     }, [caseId, user]);
 
     const handleSendMessage = useCallback(async () => {
-        if (!newMessage.trim() || !user || !caseId) return;
+        if ((!newMessage.trim() && selectedAttachments.length === 0) || !user || !caseId) return;
 
         const messageText = newMessage.trim();
-        setNewMessage(''); // Clear input immediately for better UX
+        const attachments = [...selectedAttachments];
+        
+        // Clear input immediately for better UX
+        setNewMessage('');
+        setSelectedAttachments([]);
 
         try {
-            await chatService.sendMessage(
-                caseId,
-                user.id,
-                `${user.firstName} ${user.lastName}`,
-                user.role as 'CLIENT',
-                messageText
+        await chatService.sendMessage(
+            caseId,
+            user.id,
+            `${user.firstName} ${user.lastName}`,
+            user.role as 'CLIENT',
+                messageText || '📎 Attachment',
+                attachments.length > 0 ? attachments : undefined
             );
-            logger.info('Message sent', { caseId, messageLength: messageText.length });
+            logger.info('Message sent', { 
+                caseId, 
+                messageLength: messageText.length,
+                attachmentsCount: attachments.length 
+            });
         } catch (error) {
             logger.error('Failed to send message', error);
-            setNewMessage(messageText); // Restore message on error
+            setNewMessage(messageText);
+            setSelectedAttachments(attachments);
         }
-    }, [newMessage, user, caseId]);
+    }, [newMessage, selectedAttachments, user, caseId]);
+
+    const handlePickFile = useCallback(async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                quality: 0.8,
+                allowsMultipleSelection: false,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                const file = result.assets[0];
+                // TODO: Upload file to storage and get URL
+                // For now, just show it's selected
+                Alert.alert('Feature Coming Soon', 'File attachments will be available in the next update');
+            }
+        } catch (error) {
+            logger.error('File picker error', error);
+        }
+    }, []);
+
+    const handleDownloadAttachment = useCallback(async (attachment: {
+        name: string;
+        url: string;
+        type: string;
+        size: number;
+    }) => {
+        logger.info('Downloading attachment', { filename: attachment.name });
+        
+        const success = await downloadAndShareFile({
+            url: attachment.url,
+            filename: attachment.name,
+            mimeType: attachment.type,
+        });
+
+        if (success) {
+            logger.info('Attachment downloaded successfully');
+        }
+    }, []);
 
     // Format message timestamp with smart formatting
     const formatMessageTime = useCallback((timestamp: number) => {
@@ -114,16 +170,54 @@ export default function ChatScreen() {
                             {item.senderName}
                         </Text>
                     )}
+                    {item.message && (
                     <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>
                         {item.message}
                     </Text>
+                    )}
+                    
+                    {/* Render attachments */}
+                    {item.attachments && item.attachments.length > 0 && (
+                        <View style={styles.attachmentsContainer}>
+                            {item.attachments.map((attachment, idx) => (
+                                <TouchableOpacity
+                                    key={idx}
+                                    style={[styles.attachmentCard, isMyMessage && styles.myAttachmentCard]}
+                                    onPress={() => handleDownloadAttachment(attachment)}
+                                >
+                                    <MaterialCommunityIcons
+                                        name={getFileIconForMimeType(attachment.type)}
+                                        size={32}
+                                        color={isMyMessage ? COLORS.surface : COLORS.primary}
+                                    />
+                                    <View style={styles.attachmentInfo}>
+                                        <Text 
+                                            style={[styles.attachmentName, isMyMessage && styles.myAttachmentName]}
+                                            numberOfLines={1}
+                                        >
+                                            {attachment.name}
+                                        </Text>
+                                        <Text style={[styles.attachmentSize, isMyMessage && styles.myAttachmentSize]}>
+                                            {formatFileSize(attachment.size)}
+                                        </Text>
+                                    </View>
+                                    <MaterialCommunityIcons
+                                        name="download"
+                                        size={20}
+                                        color={isMyMessage ? COLORS.surface : COLORS.primary}
+                                    />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+                    
                     <Text style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
                         {formatMessageTime(item.timestamp)}
                     </Text>
                 </View>
             </AnimatedView>
         );
-    }, [user, formatMessageTime]);
+    }, [user, formatMessageTime, handleDownloadAttachment]);
 
     // Memoize key extractor
     const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
@@ -155,23 +249,35 @@ export default function ChatScreen() {
             />
 
             <View style={styles.inputContainer}>
+                <TouchableOpacity
+                    style={styles.attachButton}
+                    onPress={handlePickFile}
+                >
+                    <MaterialCommunityIcons
+                        name="paperclip"
+                        size={24}
+                        color={COLORS.primary}
+                    />
+                </TouchableOpacity>
+                
                 <View style={styles.inputWrapper}>
                     <RNTextInput
-                        placeholder={t('messages.typeMessage')}
-                        value={newMessage}
-                        onChangeText={setNewMessage}
-                        style={styles.input}
-                        multiline
-                        maxLength={500}
+                    placeholder={t('messages.typeMessage')}
+                    value={newMessage}
+                    onChangeText={setNewMessage}
+                    style={styles.input}
+                    multiline
+                    maxLength={500}
                         placeholderTextColor={COLORS.textSecondary}
                     />
                 </View>
+                
                 <TouchableOpacity
                     onPress={handleSendMessage}
-                    disabled={!newMessage.trim()}
+                    disabled={!newMessage.trim() && selectedAttachments.length === 0}
                     style={[
                         styles.sendButton,
-                        !newMessage.trim() && styles.sendButtonDisabled
+                        (!newMessage.trim() && selectedAttachments.length === 0) && styles.sendButtonDisabled
                     ]}
                 >
                     <MaterialCommunityIcons
@@ -251,6 +357,42 @@ const styles = StyleSheet.create({
     myTimestamp: {
         color: COLORS.surface + 'CC',
     },
+    attachmentsContainer: {
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    attachmentCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.background,
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 8,
+    },
+    myAttachmentCard: {
+        backgroundColor: COLORS.primary + 'DD',
+    },
+    attachmentInfo: {
+        flex: 1,
+        marginLeft: 12,
+        marginRight: 8,
+    },
+    attachmentName: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: COLORS.text,
+        marginBottom: 2,
+    },
+    myAttachmentName: {
+        color: COLORS.surface,
+    },
+    attachmentSize: {
+        fontSize: 11,
+        color: COLORS.textSecondary,
+    },
+    myAttachmentSize: {
+        color: COLORS.surface + 'CC',
+    },
     inputContainer: {
         flexDirection: 'row',
         padding: SPACING.md,
@@ -258,6 +400,13 @@ const styles = StyleSheet.create({
         alignItems: 'flex-end',
         borderTopWidth: 1,
         borderTopColor: COLORS.border,
+    },
+    attachButton: {
+        width: 40,
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: SPACING.xs,
     },
     inputWrapper: {
         flex: 1,

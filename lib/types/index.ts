@@ -1,4 +1,7 @@
-// Types
+// ============================================================================
+// ENUMERATIONS (Web API Contract - Must match web exactly)
+// ============================================================================
+
 export enum Role {
   CLIENT = 'CLIENT',
   AGENT = 'AGENT',
@@ -53,6 +56,7 @@ export enum DocumentStatus {
 export enum NotificationType {
   CASE_STATUS_UPDATE = 'CASE_STATUS_UPDATE',
   NEW_MESSAGE = 'NEW_MESSAGE',
+  NEW_EMAIL = 'NEW_EMAIL',
   DOCUMENT_UPLOADED = 'DOCUMENT_UPLOADED',
   DOCUMENT_VERIFIED = 'DOCUMENT_VERIFIED',
   DOCUMENT_REJECTED = 'DOCUMENT_REJECTED',
@@ -60,33 +64,54 @@ export enum NotificationType {
   SYSTEM_ANNOUNCEMENT = 'SYSTEM_ANNOUNCEMENT',
 }
 
+export enum MessageType {
+  CHAT = 'CHAT',
+  EMAIL = 'EMAIL',
+}
+
+export enum TransferReason {
+  REASSIGNMENT = 'REASSIGNMENT',
+  COVERAGE = 'COVERAGE',
+  SPECIALIZATION = 'SPECIALIZATION',
+  WORKLOAD = 'WORKLOAD',
+  OTHER = 'OTHER',
+}
+
+// ============================================================================
+// CORE DATA MODELS (Web API Contract - Base fields match web exactly)
+// ============================================================================
+
 export interface User {
+  // Base fields from web API contract
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   phone?: string | null;
+  profilePicture?: string | null;
   role: Role;
   isActive: boolean;
   isVerified: boolean;
   lastLogin?: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  // GDPR Compliance
+
+  // ⚠️ MOBILE-SPECIFIC GDPR FIELDS (Not in web API yet - needs backend implementation)
+  // These fields are sent by mobile app but backend needs to add them to the User model
   consentedAt?: string | null;
   acceptedTerms?: boolean;
   acceptedPrivacy?: boolean;
   termsAcceptedAt?: string | null;
   privacyAcceptedAt?: string | null;
+  dataExportRequests?: number;
+  lastDataExport?: Date | null;
 }
 
 export interface Case {
   id: string;
   referenceNumber: string;
   clientId: string;
-  client?: User;
   assignedAgentId?: string | null;
-  assignedAgent?: User | null;
   serviceType: ServiceType;
   status: CaseStatus;
   priority: Priority;
@@ -94,6 +119,23 @@ export interface Case {
   lastUpdated: Date;
   internalNotes?: string | null;
   estimatedCompletion?: Date | null;
+
+  // Optional relations (when included by API)
+  client?: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+  assignedAgent?: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+  documents?: Document[];
+
+  // ⚠️ MOBILE-SPECIFIC FIELD (Not in web API contract)
   formData?: any;
 }
 
@@ -110,7 +152,6 @@ export interface Document {
   id: string;
   caseId: string;
   uploadedById: string;
-  uploadedBy?: User;
   fileName: string;
   originalName: string;
   filePath: string;
@@ -122,22 +163,45 @@ export interface Document {
   verifiedBy?: string | null;
   verifiedAt?: Date | null;
   rejectionReason?: string | null;
+
+  // Optional relations (when included by API)
+  case?: {
+    id: string;
+    referenceNumber: string;
+    serviceType: ServiceType;
+    status: CaseStatus;
+  };
+  uploadedBy?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+export interface MessageAttachment {
+  id?: string;
+  url: string;
+  name: string;
+  size: number; // bytes
+  type: string; // MIME type
+  uploadedAt?: string; // ISO timestamp
+  metadata?: Record<string, unknown>;
 }
 
 export interface Message {
   id: string;
   senderId: string;
-  sender?: User;
   recipientId: string;
-  recipient?: User;
   caseId?: string | null;
-  case?: Case;
   subject?: string | null;
   content: string;
   isRead: boolean;
   readAt?: Date | null;
   sentAt: Date;
-  attachments?: any;
+  attachments?: MessageAttachment[];
+  messageType?: MessageType;
+  emailThreadId?: string | null;
+  replyToId?: string | null;
 }
 
 export interface Notification {
@@ -151,6 +215,33 @@ export interface Notification {
   readAt?: Date | null;
   createdAt: Date;
   actionUrl?: string | null;
+
+  // Optional relations (when included by API)
+  case?: {
+    id: string;
+    referenceNumber: string;
+    serviceType: ServiceType;
+  };
+}
+
+export interface TransferHistory {
+  id: string;
+  caseId: string;
+  fromAgentId?: string | null;
+  fromAgentName?: string | null;
+  toAgentId?: string | null;
+  toAgentName?: string | null;
+  transferredBy?: string | null;
+  reason: TransferReason;
+  handoverNotes?: string | null;
+  transferredAt: Date;
+  notifyClient: boolean;
+  notifyAgent: boolean;
+
+  // Optional relations (when included by API)
+  fromAgent?: User | null;
+  toAgent?: User | null;
+  transferredByUser?: User | null;
 }
 
 export interface FAQ {
@@ -164,6 +255,30 @@ export interface FAQ {
   updatedAt: Date;
 }
 
+export interface ActivityLog {
+  id: string;
+  userId: string;
+  action: string;
+  description: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  metadata?: ActivityLogMetadata;
+  timestamp: Date;
+}
+
+export interface ActivityLogMetadata {
+  caseId?: string;
+  documentId?: string;
+  messageId?: string;
+  previousValue?: string;
+  newValue?: string;
+  additionalInfo?: string;
+}
+
+// ============================================================================
+// API REQUEST/RESPONSE TYPES (Web API Contract)
+// ============================================================================
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -174,10 +289,13 @@ export interface ApiResponse<T> {
 export interface PaginatedResponse<T> {
   success: boolean;
   data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  message?: string;
 }
 
 export interface DashboardStats {
@@ -185,5 +303,87 @@ export interface DashboardStats {
   activeCases: number;
   pendingDocuments: number;
   unreadMessages: number;
+}
+
+// ============================================================================
+// MOBILE-SPECIFIC GDPR TYPES (Not in web API - Backend implementation needed)
+// ============================================================================
+// These types are used by the mobile app for GDPR compliance features.
+// The backend API needs to implement these to support mobile GDPR features.
+// See docs/BACKEND_GDPR_REQUIREMENTS.md for implementation details.
+
+export enum ConsentType {
+  TERMS_AND_CONDITIONS = 'TERMS_AND_CONDITIONS',
+  PRIVACY_POLICY = 'PRIVACY_POLICY',
+  MARKETING = 'MARKETING',
+  DATA_PROCESSING = 'DATA_PROCESSING',
+}
+
+export interface ConsentRecord {
+  id: string;
+  userId: string;
+  consentType: ConsentType;
+  accepted: boolean;
+  consentedAt: Date;
+  ipAddress?: string;
+  userAgent?: string;
+  version?: string; // Version of the terms/policy accepted
+}
+
+export interface ConsentHistory {
+  userId: string;
+  history: ConsentRecord[];
+}
+
+export interface UpdateConsentRequest {
+  acceptedTerms?: boolean;
+  acceptedPrivacy?: boolean;
+  consentedAt: string; // ISO timestamp
+}
+
+export interface DataExportRequest {
+  id: string;
+  userId: string;
+  requestedAt: Date;
+  completedAt?: Date | null;
+  downloadUrl?: string | null;
+  status: 'PENDING' | 'COMPLETED' | 'FAILED';
+  format: 'JSON' | 'CSV' | 'PDF';
+}
+
+export interface DataExportResponse {
+  user: User;
+  cases: Case[];
+  documents: Document[];
+  messages: Message[];
+  notifications: Notification[];
+  consent: {
+    consentedAt?: string;
+    acceptedTerms?: boolean;
+    acceptedPrivacy?: boolean;
+    termsAcceptedAt?: string;
+    privacyAcceptedAt?: string;
+  };
+  consentHistory?: ConsentRecord[];
+  exportedAt: string;
+  format: string;
+}
+
+export interface AccountDeletionRequest {
+  userId: string;
+  reason?: string;
+  scheduledDeletionDate: Date;
+  immediateDataAnonymization: boolean;
+}
+
+// ⚠️ Note: Web API uses slightly different structure for push tokens
+// Mobile sends: { pushToken, platform, deviceId, deviceModel, osVersion }
+// Web API expects: { token, platform, deviceId } via POST /api/users/push-token
+export interface PushTokenRequest {
+  pushToken: string;
+  platform: 'ios' | 'android' | 'web';
+  deviceId: string;
+  deviceModel?: string;
+  osVersion?: string;
 }
 

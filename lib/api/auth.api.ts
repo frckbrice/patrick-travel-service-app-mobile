@@ -7,12 +7,19 @@ export interface LoginRequest {
     password: string;
 }
 
+// Web API Contract: POST /api/auth/register
 export interface RegisterRequest {
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-    phone?: string;
+    email: string; // Must be valid email
+    password: string; // Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
+    firstName: string; // Min 2 chars
+    lastName: string; // Min 2 chars
+    phone?: string; // Optional, format: +[country code][number]
+    inviteCode?: string; // Required for AGENT/ADMIN registration
+
+    // ⚠️ MOBILE-SPECIFIC GDPR FIELDS (Not in web API yet - needs backend implementation)
+    consentedAt?: string;
+    acceptedTerms?: boolean;
+    acceptedPrivacy?: boolean;
 }
 
 export interface GoogleLoginRequest {
@@ -177,42 +184,5 @@ export const authApi = {
         }
     },
 
-    async updatePushToken(pushToken: string, platform: string, deviceId?: string): Promise<ApiResponse<void>> {
-        try {
-            logger.info('Updating push token', { platform, deviceId });
-            const response = await apiClient.post<ApiResponse<void>>('/users/push-token', {
-                token: pushToken,
-                platform,
-                deviceId,
-            });
-            return response.data;
-        } catch (error: any) {
-            // Error already sanitized by interceptor - safe to use
-            return {
-                success: false,
-                error: error.response?.data?.error || 'Unable to update push token.',
-            };
-        }
-    },
-
-    async removePushToken(platform?: string, deviceId?: string): Promise<ApiResponse<void>> {
-        try {
-            logger.info('Removing push token', { platform, deviceId });
-            const params = new URLSearchParams();
-            if (platform) params.append('platform', platform);
-            if (deviceId) params.append('deviceId', deviceId);
-
-            const response = await apiClient.delete<ApiResponse<void>>(
-                `/users/push-token${params.toString() ? `?${params.toString()}` : ''}`
-            );
-            return response.data;
-        } catch (error: any) {
-            // Error already sanitized by interceptor - safe to use
-            return {
-                success: false,
-                error: error.response?.data?.error || 'Unable to remove push token.',
-            };
-        }
-    },
 };
 

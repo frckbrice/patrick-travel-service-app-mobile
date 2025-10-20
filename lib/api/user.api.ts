@@ -1,11 +1,13 @@
 import { apiClient } from './axios';
-import { User, ApiResponse, DashboardStats } from '../types';
+import { User, ApiResponse, DashboardStats, DataExportResponse, PushTokenRequest } from '../types';
 import { logger } from '../utils/logger';
 
+// Web API Contract: PATCH /api/users/profile
 export interface UpdateProfileRequest {
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
+    firstName?: string; // Min 2 chars
+    lastName?: string; // Min 2 chars
+    phone?: string; // International format: +1234567890 or national: 0123456789
+    profilePicture?: string; // Must be HTTP/HTTPS URL
 }
 
 export interface ChangePasswordRequest {
@@ -30,7 +32,8 @@ export const userApi = {
     async updateProfile(data: UpdateProfileRequest): Promise<ApiResponse<User>> {
         try {
             logger.info('Updating profile');
-            const response = await apiClient.put<ApiResponse<User>>('/users/profile', data);
+            // Web API uses PATCH for partial updates, mobile uses PUT
+            const response = await apiClient.patch<ApiResponse<User>>('/users/profile', data);
             return response.data;
         } catch (error: any) {
             // Error already sanitized by interceptor - safe to use
@@ -69,14 +72,55 @@ export const userApi = {
         }
     },
 
-    async exportData(): Promise<string | null> {
+    async exportData(): Promise<ApiResponse<DataExportResponse>> {
         try {
             logger.info('Exporting user data');
-            const response = await apiClient.get('/users/data-export');
+            const response = await apiClient.get<ApiResponse<DataExportResponse>>('/users/data-export');
             return response.data;
         } catch (error: any) {
             // Error already sanitized by interceptor
-            return null;
+            return {
+                success: false,
+                error: error.response?.data?.error || 'Unable to export data. Please try again.',
+            };
+        }
+    },
+
+    async updatePushToken(data: PushTokenRequest): Promise<ApiResponse<void>> {
+        try {
+            logger.info('Updating push token', { platform: data.platform, deviceId: data.deviceId });
+            // Web API uses POST for saving push tokens, transform mobile request to match
+            const requestData = {
+                token: data.pushToken,
+                platform: data.platform,
+                deviceId: data.deviceId,
+            };
+            const response = await apiClient.post<ApiResponse<void>>('/users/push-token', requestData);
+            return response.data;
+        } catch (error: any) {
+            return {
+                success: false,
+                error: error.response?.data?.error || 'Unable to update push token.',
+            };
+        }
+    },
+
+    async removePushToken(platform?: string, deviceId?: string): Promise<ApiResponse<void>> {
+        try {
+            logger.info('Removing push token', { platform, deviceId });
+            const params = new URLSearchParams();
+            if (platform) params.append('platform', platform);
+            if (deviceId) params.append('deviceId', deviceId);
+
+            const response = await apiClient.delete<ApiResponse<void>>(
+                `/users/push-token${params.toString() ? `?${params.toString()}` : ''}`
+            );
+            return response.data;
+        } catch (error: any) {
+            return {
+                success: false,
+                error: error.response?.data?.error || 'Unable to remove push token.',
+            };
         }
     },
 
