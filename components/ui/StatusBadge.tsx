@@ -11,7 +11,9 @@ interface StatusBadgeProps {
   status: CaseStatus | DocumentStatus;
 }
 
-const getCaseStatusConfig = (status: CaseStatus): { label: string; variant: BadgeVariant } => {
+const getCaseStatusConfig = (
+  status: CaseStatus
+): { label: string; variant: BadgeVariant } => {
   switch (status) {
     case 'SUBMITTED':
       return { label: 'Submitted', variant: 'info' };
@@ -32,7 +34,9 @@ const getCaseStatusConfig = (status: CaseStatus): { label: string; variant: Badg
   }
 };
 
-const getDocumentStatusConfig = (status: DocumentStatus): { label: string; variant: BadgeVariant } => {
+const getDocumentStatusConfig = (
+  status: DocumentStatus
+): { label: string; variant: BadgeVariant } => {
   switch (status) {
     case 'PENDING':
       return { label: 'Pending', variant: 'warning' };
@@ -47,8 +51,16 @@ const getDocumentStatusConfig = (status: DocumentStatus): { label: string; varia
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
   // Determine if it's a case or document status
-  const isCaseStatus = ['SUBMITTED', 'UNDER_REVIEW', 'DOCUMENTS_REQUIRED', 'PROCESSING', 'APPROVED', 'REJECTED', 'CLOSED'].includes(status);
-  
+  const isCaseStatus = [
+    'SUBMITTED',
+    'UNDER_REVIEW',
+    'DOCUMENTS_REQUIRED',
+    'PROCESSING',
+    'APPROVED',
+    'REJECTED',
+    'CLOSED',
+  ].includes(status);
+
   const config = isCaseStatus
     ? getCaseStatusConfig(status as CaseStatus)
     : getDocumentStatusConfig(status as DocumentStatus);
@@ -59,4 +71,3 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
     </Badge>
   );
 };
-

@@ -4,9 +4,9 @@
 
 This document tracks the implementation progress of the Patrick Travel Services mobile application.
 
-**Last Updated:** October 19, 2025  
-**Project Status:** ✅ Production Ready  
-**Completion:** 100% (Core Features + Security + GDPR)
+**Last Updated:** October 20, 2025  
+**Project Status:** ✅ Production Ready - iOS & Android Optimized  
+**Completion:** 100% (Core Features + Security + GDPR + Cross-Platform)
 
 ---
 
@@ -573,12 +573,82 @@ EAS_PROJECT_ID
 
 ---
 
+---
+
+## 🆕 October 20, 2025 - Cross-Platform & GDPR Updates
+
+### ✅ Cross-Platform iOS & Android Optimization
+
+**Issues Fixed:**
+1. **Device Compatibility** (`app.config.ts`)
+   - Added `minSdkVersion: 23` - Android 6.0+ (99% coverage)
+   - Added `targetSdkVersion: 34` - Latest Android
+   - Added `deploymentTarget: '13.4'` - iOS 13.4+ (99% coverage)
+   - **Impact:** No more device filtering, modern Android devices supported
+
+2. **Safe Area Support** (`app/_layout.tsx`)
+   - Added `SafeAreaProvider` wrapper around entire app
+   - Fixed StatusBar with platform-specific background
+   - Content now respects notches, punch holes, navigation bars
+   - **Impact:** Content visible on ALL devices (iPhone 14 Pro notch, Android punch holes, etc.)
+
+3. **Universal Keyboard Handling**
+   - Created `KeyboardAvoidingScrollView` component
+   - Applied to all 7 form screens
+   - Platform-specific behavior (padding for iOS, height for Android)
+   - Safe area insets for proper bottom spacing
+   - **Impact:** Keyboard never covers inputs, smooth UX on both platforms
+
+4. **Build Fixes**
+   - Added missing `babel-preset-expo` dependency
+   - Removed unused `react-native-vector-icons`
+   - **Impact:** Build errors resolved
+
+**Screens Updated with Keyboard Fix:**
+- `app/profile/edit.tsx`
+- `app/profile/change-password.tsx`
+- `app/case/new.tsx`
+- `app/help/contact.tsx`
+
+**New Component:**
+- `components/ui/KeyboardAvoidingScrollView.tsx` - Universal keyboard handling
+
+### ✅ GDPR Backend Requirements
+
+**Created:** `docs/BACKEND_GDPR_REQUIREMENTS.md` - Complete guide for backend team
+
+**Contents:**
+- Complete data flow diagrams (Registration, Profile, Export, Delete)
+- Exact TypeScript types mobile uses
+- Request/response JSON examples
+- 5-step implementation plan (4-6 hours)
+- Database schema SQL (ready to run)
+- Testing guide with curl commands
+
+**Mobile Changes:**
+- Enhanced User type with GDPR fields (consentedAt, acceptedTerms, acceptedPrivacy, etc.)
+- Updated RegisterRequest interface
+- Enhanced data export with proper types
+- Simplified consent (Terms + Privacy only, no marketing)
+
+**Backend Needs:**
+1. Update database (8 columns in users table)
+2. Modify POST /api/auth/register
+3. Create GET /api/users/data-export
+4. Create DELETE /api/users/account
+5. Update GET /api/users/profile
+
+**Estimated Time:** 4-6 hours
+
+---
+
 ## 🎓 Learning Resources
 
 - [Expo Documentation](https://docs.expo.dev/)
 - [React Native Reanimated](https://docs.swmansion.com/react-native-reanimated/)
 - [Firebase Documentation](https://firebase.google.com/docs)
 - [React Navigation](https://reactnavigation.org/)
+- [GDPR Official Guide](https://gdpr.eu/)
 
 ---
 

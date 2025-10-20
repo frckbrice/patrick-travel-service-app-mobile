@@ -7,7 +7,11 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../stores/auth/authStore';
 import { ThemeProvider, useTheme } from '../lib/theme/ThemeContext';
-import { setupNotificationListeners, getLastNotificationResponse, handleNotificationNavigation } from '../lib/services/pushNotifications';
+import {
+  setupNotificationListeners,
+  getLastNotificationResponse,
+  handleNotificationNavigation,
+} from '../lib/services/pushNotifications';
 import { logger } from '../lib/utils/logger';
 import { COLORS } from '../lib/constants';
 import '../lib/i18n';
@@ -50,23 +54,26 @@ function AppContent() {
 
   useEffect(() => {
     // Handle app state changes (background/foreground)
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      // App has come to the foreground from background
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === 'active'
-      ) {
-        logger.info('App has come to foreground, refreshing auth');
+    const subscription = AppState.addEventListener(
+      'change',
+      (nextAppState: AppStateStatus) => {
+        // App has come to the foreground from background
+        if (
+          appState.current.match(/inactive|background/) &&
+          nextAppState === 'active'
+        ) {
+          logger.info('App has come to foreground, refreshing auth');
 
-        // Refresh auth session when app resumes
-        if (isAuthenticated) {
-          refreshAuth();
+          // Refresh auth session when app resumes
+          if (isAuthenticated) {
+            refreshAuth();
+          }
         }
-      }
 
-      appState.current = nextAppState;
-      logger.info('AppState changed to:', nextAppState);
-    });
+        appState.current = nextAppState;
+        logger.info('AppState changed to:', nextAppState);
+      }
+    );
 
     return () => {
       subscription.remove();
@@ -78,7 +85,9 @@ function AppContent() {
       <PaperProvider theme={theme}>
         <StatusBar
           style={isDark ? 'light' : 'dark'}
-          backgroundColor={Platform.OS === 'android' ? COLORS.primary : undefined}
+          backgroundColor={
+            Platform.OS === 'android' ? COLORS.primary : undefined
+          }
         />
         <Stack
           screenOptions={{
@@ -92,96 +101,96 @@ function AppContent() {
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="case/[id]"
-          options={{
-            headerShown: true,
-            title: 'Case Details',
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="case/new"
-          options={{
-            headerShown: true,
-            title: 'New Case',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="document/upload"
-          options={{
-            headerShown: true,
-            title: 'Upload Document',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="document/[id]"
-          options={{
-            headerShown: true,
-            title: 'Document Details',
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="message/[id]"
-          options={{
-            headerShown: true,
-            title: 'Chat',
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="help/faq"
-          options={{
-            headerShown: true,
-            title: 'FAQs',
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="help/contact"
-          options={{
-            headerShown: true,
-            title: 'Contact Support',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="profile/edit"
-          options={{
-            headerShown: true,
-            title: 'Edit Profile',
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="profile/change-password"
-          options={{
-            headerShown: true,
-            title: 'Change Password',
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="profile/notifications"
-          options={{
-            headerShown: true,
-            title: 'Notification Preferences',
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="profile/settings"
-          options={{
-            headerShown: true,
-            title: 'Settings',
-            presentation: 'card',
-          }}
-        />
-      </Stack>
-    </PaperProvider>
+          <Stack.Screen
+            name="case/[id]"
+            options={{
+              headerShown: true,
+              title: 'Case Details',
+              presentation: 'card',
+            }}
+          />
+          <Stack.Screen
+            name="case/new"
+            options={{
+              headerShown: true,
+              title: 'New Case',
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="document/upload"
+            options={{
+              headerShown: true,
+              title: 'Upload Document',
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="document/[id]"
+            options={{
+              headerShown: true,
+              title: 'Document Details',
+              presentation: 'card',
+            }}
+          />
+          <Stack.Screen
+            name="message/[id]"
+            options={{
+              headerShown: true,
+              title: 'Chat',
+              presentation: 'card',
+            }}
+          />
+          <Stack.Screen
+            name="help/faq"
+            options={{
+              headerShown: true,
+              title: 'FAQs',
+              presentation: 'card',
+            }}
+          />
+          <Stack.Screen
+            name="help/contact"
+            options={{
+              headerShown: true,
+              title: 'Contact Support',
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="profile/edit"
+            options={{
+              headerShown: true,
+              title: 'Edit Profile',
+              presentation: 'card',
+            }}
+          />
+          <Stack.Screen
+            name="profile/change-password"
+            options={{
+              headerShown: true,
+              title: 'Change Password',
+              presentation: 'card',
+            }}
+          />
+          <Stack.Screen
+            name="profile/notifications"
+            options={{
+              headerShown: true,
+              title: 'Notification Preferences',
+              presentation: 'card',
+            }}
+          />
+          <Stack.Screen
+            name="profile/settings"
+            options={{
+              headerShown: true,
+              title: 'Settings',
+              presentation: 'card',
+            }}
+          />
+        </Stack>
+      </PaperProvider>
     </SafeAreaProvider>
   );
 }
@@ -195,4 +204,3 @@ export default function RootLayout() {
     </QueryClientProvider>
   );
 }
-

@@ -226,4 +226,3 @@ const styles = StyleSheet.create({
     color: COLORS.error,
   },
 });
-

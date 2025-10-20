@@ -7,11 +7,15 @@ import { COLORS } from '../lib/constants';
 
 export default function Index() {
   const { isAuthenticated, isLoading, refreshAuth } = useAuthStore();
-  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(
+    null
+  );
 
   useEffect(() => {
     const checkOnboarding = async () => {
-      const onboardingCompleted = await AsyncStorage.getItem('onboarding_completed');
+      const onboardingCompleted = await AsyncStorage.getItem(
+        'onboarding_completed'
+      );
       setHasSeenOnboarding(onboardingCompleted === 'true');
       await refreshAuth();
     };

@@ -23,6 +23,7 @@ import Animated, {
   interpolate,
   Extrapolate,
   useAnimatedScrollHandler,
+  SharedValue,
 } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -69,8 +70,20 @@ const getOnboardingSlides = (t: any): OnboardingSlide[] => [
   },
 ];
 
-const OnboardingItem = ({ item, index, scrollX }: { item: OnboardingSlide; index: number; scrollX: Animated.SharedValue<number> }) => {
-  const inputRange = [(index - 1) * SCREEN_WIDTH, index * SCREEN_WIDTH, (index + 1) * SCREEN_WIDTH];
+const OnboardingItem = ({
+  item,
+  index,
+  scrollX,
+}: {
+  item: OnboardingSlide;
+  index: number;
+  scrollX: SharedValue<number>;
+}) => {
+  const inputRange = [
+    (index - 1) * SCREEN_WIDTH,
+    index * SCREEN_WIDTH,
+    (index + 1) * SCREEN_WIDTH,
+  ];
 
   const imageAnimatedStyle = useAnimatedStyle(() => {
     const scale = interpolate(
@@ -116,7 +129,13 @@ const OnboardingItem = ({ item, index, scrollX }: { item: OnboardingSlide; index
 
   return (
     <View style={[styles.slide, { width: SCREEN_WIDTH }]}>
-      <Animated.View style={[styles.iconContainer, imageAnimatedStyle, { backgroundColor: item.color }]}>
+      <Animated.View
+        style={[
+          styles.iconContainer,
+          imageAnimatedStyle,
+          { backgroundColor: item.color },
+        ]}
+      >
         <MaterialCommunityIcons name={item.icon} size={80} color="#FFFFFF" />
       </Animated.View>
 
@@ -128,44 +147,57 @@ const OnboardingItem = ({ item, index, scrollX }: { item: OnboardingSlide; index
   );
 };
 
-const Pagination = ({ scrollX, slidesLength }: { scrollX: Animated.SharedValue<number>; slidesLength: number }) => {
+const PaginationDot = React.memo(
+  ({
+    index,
+    scrollX,
+  }: {
+    index: number;
+    scrollX: SharedValue<number>;
+  }) => {
+    const inputRange = [
+      (index - 1) * SCREEN_WIDTH,
+      index * SCREEN_WIDTH,
+      (index + 1) * SCREEN_WIDTH,
+    ];
+
+    const dotAnimatedStyle = useAnimatedStyle(() => {
+      const width = interpolate(
+        scrollX.value,
+        inputRange,
+        [8, 24, 8],
+        Extrapolate.CLAMP
+      );
+
+      const opacity = interpolate(
+        scrollX.value,
+        inputRange,
+        [0.3, 1, 0.3],
+        Extrapolate.CLAMP
+      );
+
+      return {
+        width,
+        opacity,
+      };
+    });
+
+    return <Animated.View style={[styles.dot, dotAnimatedStyle]} />;
+  }
+);
+
+const Pagination = ({
+  scrollX,
+  slidesLength,
+}: {
+  scrollX: SharedValue<number>;
+  slidesLength: number;
+}) => {
   return (
     <View style={styles.pagination}>
-      {Array.from({ length: slidesLength }).map((_, index) => {
-        const inputRange = [
-          (index - 1) * SCREEN_WIDTH,
-          index * SCREEN_WIDTH,
-          (index + 1) * SCREEN_WIDTH,
-        ];
-
-        const dotAnimatedStyle = useAnimatedStyle(() => {
-          const width = interpolate(
-            scrollX.value,
-            inputRange,
-            [8, 24, 8],
-            Extrapolate.CLAMP
-          );
-
-          const opacity = interpolate(
-            scrollX.value,
-            inputRange,
-            [0.3, 1, 0.3],
-            Extrapolate.CLAMP
-          );
-
-          return {
-            width,
-            opacity,
-          };
-        });
-
-        return (
-          <Animated.View
-            key={index}
-            style={[styles.dot, dotAnimatedStyle]}
-          />
-        );
-      })}
+      {Array.from({ length: slidesLength }).map((_, index) => (
+        <PaginationDot key={index} index={index} scrollX={scrollX} />
+      ))}
     </View>
   );
 };
@@ -190,7 +222,10 @@ export default function OnboardingScreen() {
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems[0]?.index !== null && viewableItems[0]?.index !== undefined) {
+      if (
+        viewableItems[0]?.index !== null &&
+        viewableItems[0]?.index !== undefined
+      ) {
         setCurrentIndex(viewableItems[0].index);
       }
     }

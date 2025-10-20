@@ -386,4 +386,3 @@ export interface PushTokenRequest {
   deviceModel?: string;
   osVersion?: string;
 }
-

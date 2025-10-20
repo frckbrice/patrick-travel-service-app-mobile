@@ -3,7 +3,7 @@
  * Handles downloading and sharing files from chat attachments
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { logger } from './logger';
 import { Platform, Alert } from 'react-native';
@@ -43,9 +43,9 @@ export const downloadFile = async ({
       throw new Error(`Download failed with status ${downloadResult.status}`);
     }
 
-    logger.info('File downloaded successfully', { 
-      filename: uniqueFilename, 
-      localUri: downloadResult.uri 
+    logger.info('File downloaded successfully', {
+      filename: uniqueFilename,
+      localUri: downloadResult.uri,
     });
 
     return {
@@ -110,9 +110,12 @@ export const getFileIconForMimeType = (mimeType: string): string => {
   if (mimeType.includes('video')) return 'file-video';
   if (mimeType.includes('audio')) return 'file-music';
   if (mimeType.includes('zip') || mimeType.includes('rar')) return 'folder-zip';
-  if (mimeType.includes('word') || mimeType.includes('document')) return 'file-word';
-  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'file-excel';
-  if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return 'file-powerpoint';
+  if (mimeType.includes('word') || mimeType.includes('document'))
+    return 'file-word';
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet'))
+    return 'file-excel';
+  if (mimeType.includes('powerpoint') || mimeType.includes('presentation'))
+    return 'file-powerpoint';
   return 'file-document';
 };
 
@@ -121,11 +124,11 @@ export const getFileIconForMimeType = (mimeType: string): string => {
  */
 export const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
-  
+
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 };
 
@@ -155,8 +158,8 @@ export const validateFile = (
     'audio/',
   ];
 
-  const isAllowedType = allowedTypes.some(type => mimeType.includes(type));
-  
+  const isAllowedType = allowedTypes.some((type) => mimeType.includes(type));
+
   if (!isAllowedType) {
     return {
       valid: false,
@@ -170,7 +173,10 @@ export const validateFile = (
 /**
  * Open file with default viewer (iOS/Android)
  */
-export const openFile = async (localUri: string, mimeType?: string): Promise<boolean> => {
+export const openFile = async (
+  localUri: string,
+  mimeType?: string
+): Promise<boolean> => {
   try {
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       const canShare = await Sharing.isAvailableAsync();
@@ -185,4 +191,3 @@ export const openFile = async (localUri: string, mimeType?: string): Promise<boo
     return false;
   }
 };
-

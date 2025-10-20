@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableOpacity,
+  Image,
+} from 'react-native';
 import { TextInput, Button, Text, Checkbox, Divider } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,397 +18,407 @@ import { useAuth, useGuestOnly } from '../hooks/useAuth';
 import { loginSchema, LoginFormData } from '../schemas/authSchemas';
 import { COLORS, SPACING } from '../../../lib/constants';
 import { secureStorage } from '../../../lib/storage/secureStorage';
-import { useGoogleAuth, handleGoogleAuthResponse } from '../../../lib/auth/googleAuth';
+import {
+  useGoogleAuth,
+  handleGoogleAuthResponse,
+} from '../../../lib/auth/googleAuth';
 import { useAuthStore } from '../../../stores/auth/authStore';
 import { logger } from '../../../lib/utils/logger';
 
 export default function LoginScreen() {
-    useGuestOnly();
-    const { t } = useTranslation();
-    const { login, isLoading, error } = useAuth();
-    const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
-    const loginWithBiometric = useAuthStore((state) => state.loginWithBiometric);
-    const biometricEnabled = useAuthStore((state) => state.biometricEnabled);
-    const biometricAvailable = useAuthStore((state) => state.biometricAvailable);
-    const checkBiometricStatus = useAuthStore((state) => state.checkBiometricStatus);
-    const enableBiometric = useAuthStore((state) => state.enableBiometric);
-    const router = useRouter();
-    const [rememberMe, setRememberMe] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
-    const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-    const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+  useGuestOnly();
+  const { t } = useTranslation();
+  const { login, isLoading, error } = useAuth();
+  const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
+  const loginWithBiometric = useAuthStore((state) => state.loginWithBiometric);
+  const biometricEnabled = useAuthStore((state) => state.biometricEnabled);
+  const biometricAvailable = useAuthStore((state) => state.biometricAvailable);
+  const checkBiometricStatus = useAuthStore(
+    (state) => state.checkBiometricStatus
+  );
+  const enableBiometric = useAuthStore((state) => state.enableBiometric);
+  const router = useRouter();
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false);
 
-    // Google OAuth
-    const { request, response, promptAsync } = useGoogleAuth();
+  // Google OAuth
+  const { request, response, promptAsync } = useGoogleAuth();
 
-    const {
-        control,
-        handleSubmit,
-        formState: { errors },
-    } = useForm<LoginFormData>({
-        resolver: zodResolver(loginSchema),
-    });
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+  });
 
-    // Check biometric status on mount
-    useEffect(() => {
-        checkBiometricStatus();
-    }, []);
+  // Check biometric status on mount
+  useEffect(() => {
+    checkBiometricStatus();
+  }, []);
 
-    // Handle Google OAuth response
-    useEffect(() => {
-        if (response) {
-            handleGoogleSignIn();
-        }
-    }, [response]);
+  // Handle Google OAuth response
+  useEffect(() => {
+    if (response) {
+      handleGoogleSignIn();
+    }
+  }, [response]);
 
-    const handleGoogleSignIn = async () => {
-        if (!response) return;
+  const handleGoogleSignIn = async () => {
+    if (!response) return;
 
-        setIsGoogleLoading(true);
-        try {
-            const result = await handleGoogleAuthResponse(response);
+    setIsGoogleLoading(true);
+    try {
+      const result = await handleGoogleAuthResponse(response);
 
-            if (result.success && result.idToken) {
-                const success = await loginWithGoogle(result.idToken, result.accessToken);
-
-                if (success) {
-                    router.replace('/(tabs)');
-                }
-            }
-        } catch (error) {
-            logger.error('Google sign-in error', error);
-        } finally {
-            setIsGoogleLoading(false);
-        }
-    };
-
-    const onGoogleSignIn = async () => {
-        try {
-            setIsGoogleLoading(true);
-            await promptAsync();
-        } catch (error) {
-            logger.error('Error initiating Google sign-in', error);
-            setIsGoogleLoading(false);
-        }
-    };
-
-    const onSubmit = async (data: LoginFormData) => {
-        const success = await login(data);
-
-        if (success) {
-            await secureStorage.setRememberMe(rememberMe);
-
-            // Offer to enable biometric if available and not already enabled
-            if (biometricAvailable && !biometricEnabled) {
-                setTimeout(() => {
-                    promptEnableBiometric(data.email, data.password);
-                }, 500);
-            } else {
-                router.replace('/(tabs)');
-            }
-        }
-    };
-
-    const promptEnableBiometric = (email: string, password: string) => {
-        const biometricType = Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Fingerprint';
-
-        logger.info('Prompting biometric enable', { email });
-
-        // Show native alert using React Native's Alert
-        const { Alert } = require('react-native');
-        Alert.alert(
-            t('settings.enableBiometric'),
-            `Enable ${biometricType} for faster login?`,
-            [
-                {
-                    text: t('common.no'),
-                    style: 'cancel',
-                    onPress: () => router.replace('/(tabs)'),
-                },
-                {
-                    text: t('common.yes'),
-                    onPress: async () => {
-                        const success = await enableBiometric(email, password);
-                        if (success) {
-                            Alert.alert(t('common.success'), t('settings.biometricEnabled'));
-                        }
-                        router.replace('/(tabs)');
-                    },
-                },
-            ]
+      if (result.success && result.idToken) {
+        const success = await loginWithGoogle(
+          result.idToken,
+          result.accessToken
         );
-    };
-
-    const handleBiometricLogin = async () => {
-        setIsBiometricLoading(true);
-        const success = await loginWithBiometric();
 
         if (success) {
-            router.replace('/(tabs)');
+          router.replace('/(tabs)');
         }
-        setIsBiometricLoading(false);
-    };
+      }
+    } catch (error) {
+      logger.error('Google sign-in error', error);
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
-    return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.container}
-        >
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.header}>
-                    <Text variant="headlineLarge" style={styles.title}>
-                        {t('auth.welcomeBack')}
-                    </Text>
-                    <Text variant="bodyLarge" style={styles.subtitle}>
-                        {t('auth.signInToContinue')}
-                    </Text>
-                </View>
+  const onGoogleSignIn = async () => {
+    try {
+      setIsGoogleLoading(true);
+      await promptAsync();
+    } catch (error) {
+      logger.error('Error initiating Google sign-in', error);
+      setIsGoogleLoading(false);
+    }
+  };
 
-                {error && (
-                    <View style={styles.errorContainer}>
-                        <Text style={styles.errorText}>{error}</Text>
-                    </View>
-                )}
+  const onSubmit = async (data: LoginFormData) => {
+    const success = await login(data);
 
-                <View style={styles.form}>
-                    <Controller
-                        control={control}
-                        name="email"
-                        render={({ field: { onChange, onBlur, value } }) => (
-                            <TextInput
-                                label={t('auth.email')}
-                                mode="outlined"
-                                value={value}
-                                onChangeText={onChange}
-                                onBlur={onBlur}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                error={!!errors.email}
-                                style={styles.input}
-                            />
-                        )}
-                    />
-                    {errors.email && (
-                        <Text style={styles.fieldError}>{errors.email.message}</Text>
-                    )}
+    if (success) {
+      await secureStorage.setRememberMe(rememberMe);
 
-                    <Controller
-                        control={control}
-                        name="password"
-                        render={({ field: { onChange, onBlur, value } }) => (
-                            <TextInput
-                                label={t('auth.password')}
-                                mode="outlined"
-                                value={value}
-                                onChangeText={onChange}
-                                onBlur={onBlur}
-                                secureTextEntry={!showPassword}
-                                error={!!errors.password}
-                                style={styles.input}
-                                right={
-                                    <TextInput.Icon
-                                        icon={showPassword ? 'eye-off' : 'eye'}
-                                        onPress={() => setShowPassword(!showPassword)}
-                                    />
-                                }
-                            />
-                        )}
-                    />
-                    {errors.password && (
-                        <Text style={styles.fieldError}>{errors.password.message}</Text>
-                    )}
+      // Offer to enable biometric if available and not already enabled
+      if (biometricAvailable && !biometricEnabled) {
+        setTimeout(() => {
+          promptEnableBiometric(data.email, data.password);
+        }, 500);
+      } else {
+        router.replace('/(tabs)');
+      }
+    }
+  };
 
-                    <View style={styles.optionsRow}>
-                        <View style={styles.checkboxContainer}>
-                            <Checkbox
-                                status={rememberMe ? 'checked' : 'unchecked'}
-                                onPress={() => setRememberMe(!rememberMe)}
-                            />
-                            <Text>{t('auth.rememberMe')}</Text>
-                        </View>
+  const promptEnableBiometric = (email: string, password: string) => {
+    const biometricType =
+      Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Fingerprint';
 
-                        <Link href="/(auth)/forgot-password" asChild>
-                            <Text style={styles.link}>{t('auth.forgotPassword')}</Text>
-                        </Link>
-                    </View>
+    logger.info('Prompting biometric enable', { email });
 
-                    <Button
-                        mode="contained"
-                        onPress={handleSubmit(onSubmit)}
-                        loading={isLoading}
-                        disabled={isLoading || isGoogleLoading || isBiometricLoading}
-                        style={styles.button}
-                    >
-                        {t('auth.signIn')}
-                    </Button>
-
-                    {/* Optional Biometric Login Button - Only shows if user enabled it */}
-                    {biometricAvailable && biometricEnabled && (
-                        <TouchableOpacity
-                            style={styles.biometricButton}
-                            onPress={handleBiometricLogin}
-                            disabled={isLoading || isGoogleLoading || isBiometricLoading}
-                        >
-                            <MaterialCommunityIcons
-                                name={Platform.OS === 'ios' ? 'face-recognition' : 'fingerprint'}
-                                size={24}
-                                color={COLORS.primary}
-                            />
-                            <Text style={styles.biometricButtonText}>
-                                {isBiometricLoading
-                                    ? 'Authenticating...'
-                                    : Platform.OS === 'ios'
-                                        ? 'Login with Face ID / Touch ID'
-                                        : 'Login with Fingerprint'}
-                            </Text>
-                        </TouchableOpacity>
-                    )}
-
-                    <View style={styles.dividerContainer}>
-                        <Divider style={styles.divider} />
-                        <Text style={styles.dividerText}>OR</Text>
-                        <Divider style={styles.divider} />
-                    </View>
-
-                    <TouchableOpacity
-                        style={styles.googleButton}
-                        onPress={onGoogleSignIn}
-                        disabled={!request || isLoading || isGoogleLoading}
-                    >
-                        <MaterialCommunityIcons name="google" size={24} color="#DB4437" />
-                        <Text style={styles.googleButtonText}>
-                            {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
-                        </Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.footer}>
-                        <Text>{t('auth.dontHaveAccount')} </Text>
-                        <Link href="/(auth)/register" asChild>
-                            <Text style={styles.link}>{t('auth.signUp')}</Text>
-                        </Link>
-                    </View>
-                </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
+    // Show native alert using React Native's Alert
+    const { Alert } = require('react-native');
+    Alert.alert(
+      t('settings.enableBiometric'),
+      `Enable ${biometricType} for faster login?`,
+      [
+        {
+          text: t('common.no'),
+          style: 'cancel',
+          onPress: () => router.replace('/(tabs)'),
+        },
+        {
+          text: t('common.yes'),
+          onPress: async () => {
+            const success = await enableBiometric(email, password);
+            if (success) {
+              Alert.alert(t('common.success'), t('settings.biometricEnabled'));
+            }
+            router.replace('/(tabs)');
+          },
+        },
+      ]
     );
+  };
+
+  const handleBiometricLogin = async () => {
+    setIsBiometricLoading(true);
+    const success = await loginWithBiometric();
+
+    if (success) {
+      router.replace('/(tabs)');
+    }
+    setIsBiometricLoading(false);
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <Text variant="headlineLarge" style={styles.title}>
+            {t('auth.welcomeBack')}
+          </Text>
+          <Text variant="bodyLarge" style={styles.subtitle}>
+            {t('auth.signInToContinue')}
+          </Text>
+        </View>
+
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
+        <View style={styles.form}>
+          <Controller
+            control={control}
+            name="email"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                label={t('auth.email')}
+                mode="outlined"
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                error={!!errors.email}
+                style={styles.input}
+              />
+            )}
+          />
+          {errors.email && (
+            <Text style={styles.fieldError}>{errors.email.message}</Text>
+          )}
+
+          <Controller
+            control={control}
+            name="password"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                label={t('auth.password')}
+                mode="outlined"
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                secureTextEntry={!showPassword}
+                error={!!errors.password}
+                style={styles.input}
+                right={
+                  <TextInput.Icon
+                    icon={showPassword ? 'eye-off' : 'eye'}
+                    onPress={() => setShowPassword(!showPassword)}
+                  />
+                }
+              />
+            )}
+          />
+          {errors.password && (
+            <Text style={styles.fieldError}>{errors.password.message}</Text>
+          )}
+
+          <View style={styles.optionsRow}>
+            <View style={styles.checkboxContainer}>
+              <Checkbox
+                status={rememberMe ? 'checked' : 'unchecked'}
+                onPress={() => setRememberMe(!rememberMe)}
+              />
+              <Text>{t('auth.rememberMe')}</Text>
+            </View>
+
+            <Link href="/(auth)/forgot-password" asChild>
+              <Text style={styles.link}>{t('auth.forgotPassword')}</Text>
+            </Link>
+          </View>
+
+          <Button
+            mode="contained"
+            onPress={handleSubmit(onSubmit)}
+            loading={isLoading}
+            disabled={isLoading || isGoogleLoading || isBiometricLoading}
+            style={styles.button}
+          >
+            {t('auth.signIn')}
+          </Button>
+
+          {/* Optional Biometric Login Button - Only shows if user enabled it */}
+          {biometricAvailable && biometricEnabled && (
+            <TouchableOpacity
+              style={styles.biometricButton}
+              onPress={handleBiometricLogin}
+              disabled={isLoading || isGoogleLoading || isBiometricLoading}
+            >
+              <MaterialCommunityIcons
+                name={
+                  Platform.OS === 'ios' ? 'face-recognition' : 'fingerprint'
+                }
+                size={24}
+                color={COLORS.primary}
+              />
+              <Text style={styles.biometricButtonText}>
+                {isBiometricLoading
+                  ? 'Authenticating...'
+                  : Platform.OS === 'ios'
+                    ? 'Login with Face ID / Touch ID'
+                    : 'Login with Fingerprint'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.dividerContainer}>
+            <Divider style={styles.divider} />
+            <Text style={styles.dividerText}>OR</Text>
+            <Divider style={styles.divider} />
+          </View>
+
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={onGoogleSignIn}
+            disabled={!request || isLoading || isGoogleLoading}
+          >
+            <MaterialCommunityIcons name="google" size={24} color="#DB4437" />
+            <Text style={styles.googleButtonText}>
+              {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.footer}>
+            <Text>{t('auth.dontHaveAccount')} </Text>
+            <Link href="/(auth)/register" asChild>
+              <Text style={styles.link}>{t('auth.signUp')}</Text>
+            </Link>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: COLORS.background,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        padding: SPACING.lg,
-        justifyContent: 'center',
-    },
-    header: {
-        marginBottom: SPACING.xl,
-        alignItems: 'center',
-    },
-    title: {
-        fontWeight: 'bold',
-        marginBottom: SPACING.sm,
-        color: COLORS.primary,
-    },
-    subtitle: {
-        color: COLORS.textSecondary,
-        textAlign: 'center',
-    },
-    form: {
-        marginTop: SPACING.lg,
-    },
-    input: {
-        marginBottom: SPACING.sm,
-    },
-    fieldError: {
-        color: COLORS.error,
-        fontSize: 12,
-        marginBottom: SPACING.sm,
-    },
-    errorContainer: {
-        backgroundColor: '#FEE2E2',
-        padding: SPACING.md,
-        borderRadius: 8,
-        marginBottom: SPACING.md,
-    },
-    errorText: {
-        color: COLORS.error,
-        textAlign: 'center',
-    },
-    optionsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginVertical: SPACING.md,
-    },
-    checkboxContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    link: {
-        color: COLORS.primary,
-        fontWeight: 'bold',
-    },
-    button: {
-        marginTop: SPACING.md,
-        paddingVertical: SPACING.sm,
-    },
-    biometricButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.primary + '10',
-        borderWidth: 1,
-        borderColor: COLORS.primary,
-        borderRadius: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        marginTop: SPACING.md,
-    },
-    biometricButtonText: {
-        marginLeft: 12,
-        fontSize: 16,
-        fontWeight: '600',
-        color: COLORS.primary,
-    },
-    dividerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: SPACING.lg,
-    },
-    divider: {
-        flex: 1,
-    },
-    dividerText: {
-        marginHorizontal: SPACING.md,
-        color: COLORS.textSecondary,
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    googleButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1,
-        borderColor: '#DADCE0',
-        borderRadius: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        marginBottom: SPACING.md,
-    },
-    googleButtonText: {
-        marginLeft: 12,
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#3C4043',
-    },
-    footer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginTop: SPACING.lg,
-    },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: SPACING.lg,
+    justifyContent: 'center',
+  },
+  header: {
+    marginBottom: SPACING.xl,
+    alignItems: 'center',
+  },
+  title: {
+    fontWeight: 'bold',
+    marginBottom: SPACING.sm,
+    color: COLORS.primary,
+  },
+  subtitle: {
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  form: {
+    marginTop: SPACING.lg,
+  },
+  input: {
+    marginBottom: SPACING.sm,
+  },
+  fieldError: {
+    color: COLORS.error,
+    fontSize: 12,
+    marginBottom: SPACING.sm,
+  },
+  errorContainer: {
+    backgroundColor: '#FEE2E2',
+    padding: SPACING.md,
+    borderRadius: 8,
+    marginBottom: SPACING.md,
+  },
+  errorText: {
+    color: COLORS.error,
+    textAlign: 'center',
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: SPACING.md,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  link: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  },
+  button: {
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary + '10',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: SPACING.md,
+  },
+  biometricButtonText: {
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: SPACING.lg,
+  },
+  divider: {
+    flex: 1,
+  },
+  dividerText: {
+    marginHorizontal: SPACING.md,
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DADCE0',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: SPACING.md,
+  },
+  googleButtonText: {
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3C4043',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: SPACING.lg,
+  },
 });
-

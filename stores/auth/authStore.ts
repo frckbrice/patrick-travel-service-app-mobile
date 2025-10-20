@@ -5,7 +5,10 @@ import { authApi, LoginRequest, RegisterRequest } from '../../lib/api/auth.api';
 import { userApi } from '../../lib/api/user.api';
 import { logger } from '../../lib/utils/logger';
 import { auth } from '../../lib/firebase/config';
-import { signInWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
+import {
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+} from 'firebase/auth';
 import { signInWithGoogle, signOutFromGoogle } from '../../lib/auth/googleAuth';
 import { registerForPushNotifications } from '../../lib/services/pushNotifications';
 import { biometricAuthService } from '../../lib/services/biometricAuth';
@@ -56,7 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (!googleResult.success || !googleResult.user) {
         set({
           error: googleResult.error || 'Google sign-in failed',
-          isLoading: false
+          isLoading: false,
         });
         return false;
       }
@@ -76,7 +79,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (!response.success || !response.data) {
         set({
           error: response.error || 'Backend sync failed',
-          isLoading: false
+          isLoading: false,
         });
         return false;
       }
@@ -99,7 +102,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Register push token
       await get().registerPushToken();
 
-      logger.info('User logged in with Google successfully', { userId: user.id });
+      logger.info('User logged in with Google successfully', {
+        userId: user.id,
+      });
       return true;
     } catch (error: any) {
       logger.error('Google login error', error);
@@ -168,7 +173,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await authApi.register(data);
 
       if (!response.success) {
-        set({ error: response.error || 'Registration failed', isLoading: false });
+        set({
+          error: response.error || 'Registration failed',
+          isLoading: false,
+        });
         return false;
       }
 
@@ -286,9 +294,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           pushToken: tokenData.token,
           platform: tokenData.platform as 'ios' | 'android',
           deviceId: tokenData.deviceId || 'unknown',
-          osVersion: typeof Platform.Version === 'number' 
-            ? Platform.Version.toString() 
-            : Platform.Version,
+          osVersion:
+            typeof Platform.Version === 'number'
+              ? Platform.Version.toString()
+              : Platform.Version,
         };
 
         await userApi.updatePushToken(pushTokenRequest);
@@ -296,7 +305,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         logger.info('Push token registered', {
           token: tokenData.token,
           platform: tokenData.platform,
-          deviceId: tokenData.deviceId
+          deviceId: tokenData.deviceId,
         });
       }
     } catch (error) {

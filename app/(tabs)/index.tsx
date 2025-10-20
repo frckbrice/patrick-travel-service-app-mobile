@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Text } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  Text,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -41,7 +47,10 @@ export default function HomeScreen() {
     <ScrollView
       style={styles.container}
       refreshControl={
-        <RefreshControl refreshing={isLoading} onRefresh={fetchDashboardStats} />
+        <RefreshControl
+          refreshing={isLoading}
+          onRefresh={fetchDashboardStats}
+        />
       }
     >
       <View style={styles.header}>
@@ -50,13 +59,11 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>
               {t('dashboard.welcomeUser', { name: user?.firstName })}
             </Text>
-            <Text style={styles.subtext}>
-              {t('dashboard.overview')}
-            </Text>
+            <Text style={styles.subtext}>{t('dashboard.overview')}</Text>
           </View>
-          <MaterialCommunityIcons 
-            name="bell-outline" 
-            size={28} 
+          <MaterialCommunityIcons
+            name="bell-outline"
+            size={28}
             color={COLORS.text}
             onPress={() => router.push('/(tabs)/profile')}
           />
@@ -98,9 +105,7 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.quickActions}>
-        <Text style={styles.sectionTitle}>
-          {t('dashboard.quickActions')}
-        </Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.quickActions')}</Text>
         <Button
           title={t('dashboard.submitNewCase')}
           icon="plus"

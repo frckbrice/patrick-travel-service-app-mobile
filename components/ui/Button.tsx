@@ -15,7 +15,12 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'outline'
+  | 'ghost'
+  | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps {
@@ -129,7 +134,11 @@ export const Button: React.FC<ButtonProps> = ({
     if (loading) {
       return (
         <ActivityIndicator
-          color={variant === 'outline' || variant === 'ghost' ? COLORS.primary : COLORS.white}
+          color={
+            variant === 'outline' || variant === 'ghost'
+              ? COLORS.primary
+              : COLORS.white
+          }
           size="small"
         />
       );
@@ -231,4 +240,3 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 });
-

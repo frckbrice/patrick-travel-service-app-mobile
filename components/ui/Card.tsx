@@ -36,11 +36,7 @@ export const Card: React.FC<CardProps> = ({
 
   if (onPress) {
     return (
-      <TouchableOpacity
-        style={cardStyle}
-        onPress={onPress}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity style={cardStyle} onPress={onPress} activeOpacity={0.7}>
         {children}
       </TouchableOpacity>
     );
@@ -84,7 +80,7 @@ interface CardTitleProps {
 }
 
 export const CardTitle: React.FC<CardTitleProps> = ({ children, style }) => {
-  return <View style={[styles.cardTitle, style]}>{children}</View>;
+  return <View style={[cardSubStyles.cardTitle, style]}>{children}</View>;
 };
 
 // Card Content Component
@@ -93,8 +89,11 @@ interface CardContentProps {
   style?: ViewStyle;
 }
 
-export const CardContent: React.FC<CardContentProps> = ({ children, style }) => {
-  return <View style={[styles.cardContent, style]}>{children}</View>;
+export const CardContent: React.FC<CardContentProps> = ({
+  children,
+  style,
+}) => {
+  return <View style={[cardSubStyles.cardContent, style]}>{children}</View>;
 };
 
 // Card Footer Component
@@ -104,7 +103,7 @@ interface CardFooterProps {
 }
 
 export const CardFooter: React.FC<CardFooterProps> = ({ children, style }) => {
-  return <View style={[styles.cardFooter, style]}>{children}</View>;
+  return <View style={[cardSubStyles.cardFooter, style]}>{children}</View>;
 };
 
 const cardSubStyles = StyleSheet.create({
@@ -123,4 +122,3 @@ const cardSubStyles = StyleSheet.create({
 });
 
 Object.assign(styles, cardSubStyles);
-

@@ -6,7 +6,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 
-export type BadgeVariant = 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'secondary';
+export type BadgeVariant =
+  | 'primary'
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'info'
+  | 'secondary';
 export type BadgeSize = 'sm' | 'md' | 'lg';
 
 interface BadgeProps {
@@ -121,4 +127,3 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
-

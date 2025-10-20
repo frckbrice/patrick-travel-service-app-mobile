@@ -36,11 +36,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       <Text style={styles.title}>{title}</Text>
       {description && <Text style={styles.description}>{description}</Text>}
       {actionText && onAction && (
-        <Button
-          title={actionText}
-          onPress={onAction}
-          style={styles.button}
-        />
+        <Button title={actionText} onPress={onAction} style={styles.button} />
       )}
     </View>
   );
@@ -75,4 +71,3 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
 });
-

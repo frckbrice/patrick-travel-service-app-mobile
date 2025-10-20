@@ -30,7 +30,11 @@ export default function TabsLayout() {
         options={{
           title: 'Cases',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="briefcase" size={size} color={color} />
+            <MaterialCommunityIcons
+              name="briefcase"
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -39,7 +43,11 @@ export default function TabsLayout() {
         options={{
           title: 'Documents',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="file-document" size={size} color={color} />
+            <MaterialCommunityIcons
+              name="file-document"
+              size={size}
+              color={color}
+            />
           ),
         }}
       />

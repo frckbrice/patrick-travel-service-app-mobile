@@ -4,7 +4,13 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ViewStyle,
+  TouchableOpacity,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export type AlertVariant = 'info' | 'success' | 'warning' | 'error';
@@ -45,7 +51,10 @@ const COLORS = {
   },
 };
 
-const ICONS: Record<AlertVariant, keyof typeof MaterialCommunityIcons.glyphMap> = {
+const ICONS: Record<
+  AlertVariant,
+  keyof typeof MaterialCommunityIcons.glyphMap
+> = {
   info: 'information-outline',
   success: 'check-circle-outline',
   warning: 'alert-outline',
@@ -87,11 +96,7 @@ export const Alert: React.FC<AlertProps> = ({
       </View>
       {dismissible && onDismiss && (
         <TouchableOpacity onPress={onDismiss} style={styles.closeButton}>
-          <MaterialCommunityIcons
-            name="close"
-            size={20}
-            color={colors.text}
-          />
+          <MaterialCommunityIcons name="close" size={20} color={colors.text} />
         </TouchableOpacity>
       )}
     </View>
@@ -127,4 +132,3 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 });
-

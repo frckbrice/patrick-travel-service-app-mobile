@@ -40,94 +40,96 @@ export interface PushNotificationToken {
 /**
  * Register for push notifications and get Expo push token
  */
-export const registerForPushNotifications = async (): Promise<PushNotificationToken | null> => {
-  try {
-    // Check if running on physical device
-    if (!Device.isDevice) {
-      logger.warn('Push notifications require a physical device');
+export const registerForPushNotifications =
+  async (): Promise<PushNotificationToken | null> => {
+    try {
+      // Check if running on physical device
+      if (!Device.isDevice) {
+        logger.warn('Push notifications require a physical device');
+        return null;
+      }
+
+      // Check existing permissions
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      // Request permission if not granted
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        logger.warn('Push notification permission not granted');
+        return null;
+      }
+
+      // Get Expo push token
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+
+      if (!projectId) {
+        logger.error('EAS Project ID not found in app config');
+        return null;
+      }
+
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId,
+      });
+
+      logger.info('Push notification token obtained', {
+        token: tokenData.data,
+        platform: Platform.OS,
+      });
+
+      // Configure Android notification channel
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#0066CC',
+          sound: 'default',
+          enableVibrate: true,
+          showBadge: true,
+        });
+
+        // Create additional channels for different notification types
+        await Notifications.setNotificationChannelAsync('case-updates', {
+          name: 'Case Updates',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#0066CC',
+          sound: 'default',
+        });
+
+        await Notifications.setNotificationChannelAsync('messages', {
+          name: 'Messages',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#0066CC',
+          sound: 'default',
+        });
+
+        await Notifications.setNotificationChannelAsync('documents', {
+          name: 'Document Updates',
+          importance: Notifications.AndroidImportance.DEFAULT,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#0066CC',
+          sound: 'default',
+        });
+      }
+
+      return {
+        token: tokenData.data,
+        platform: Platform.OS as 'ios' | 'android' | 'web',
+        deviceId: Constants.deviceId || Constants.sessionId, // Unique device identifier
+      };
+    } catch (error: any) {
+      logger.error('Error registering for push notifications', error);
       return null;
     }
-
-    // Check existing permissions
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    // Request permission if not granted
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      logger.warn('Push notification permission not granted');
-      return null;
-    }
-
-    // Get Expo push token
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-    
-    if (!projectId) {
-      logger.error('EAS Project ID not found in app config');
-      return null;
-    }
-
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
-
-    logger.info('Push notification token obtained', {
-      token: tokenData.data,
-      platform: Platform.OS,
-    });
-
-    // Configure Android notification channel
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'Default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#0066CC',
-        sound: 'default',
-        enableVibrate: true,
-        showBadge: true,
-      });
-
-      // Create additional channels for different notification types
-      await Notifications.setNotificationChannelAsync('case-updates', {
-        name: 'Case Updates',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#0066CC',
-        sound: 'default',
-      });
-
-      await Notifications.setNotificationChannelAsync('messages', {
-        name: 'Messages',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#0066CC',
-        sound: 'default',
-      });
-
-      await Notifications.setNotificationChannelAsync('documents', {
-        name: 'Document Updates',
-        importance: Notifications.AndroidImportance.DEFAULT,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#0066CC',
-        sound: 'default',
-      });
-    }
-
-    return {
-      token: tokenData.data,
-      platform: Platform.OS as 'ios' | 'android' | 'web',
-      deviceId: Constants.deviceId || Constants.sessionId, // Unique device identifier
-    };
-  } catch (error: any) {
-    logger.error('Error registering for push notifications', error);
-    return null;
-  }
-};
+  };
 
 /**
  * Handle notification received while app is in foreground
@@ -206,9 +208,7 @@ export const scheduleLocalNotification = async (
   trigger?: Notifications.NotificationTriggerInput
 ) => {
   try {
-    const channelId = data?.type
-      ? getChannelIdForType(data.type)
-      : 'default';
+    const channelId = data?.type ? getChannelIdForType(data.type) : 'default';
 
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -353,7 +353,8 @@ export const getLastNotificationResponse = async () => {
   try {
     const response = await Notifications.getLastNotificationResponseAsync();
     if (response) {
-      const data = response.notification.request.content.data as NotificationData;
+      const data = response.notification.request.content
+        .data as NotificationData;
       return data;
     }
     return null;
@@ -362,4 +363,3 @@ export const getLastNotificationResponse = async () => {
     return null;
   }
 };
-
