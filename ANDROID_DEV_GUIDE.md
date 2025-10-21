@@ -636,3 +636,22 @@ That's it! 🚀
 **App Package**: `com.patricktravel.mobile`  
 **Recommended Emulator**: Pixel_9_Pro_XL
 
+## From Dev Menu (After Cmd+M)
+
+Reload - Refresh the app
+Debug - Open React DevTools
+Toggle Inspector - Inspect elements
+Settings - Configure dev settings
+
+**Command Line Options**
+```bash
+# Reload via adb (what I just did)
+adb shell input text "RR"
+
+# Force stop and restart
+adb shell am force-stop com.patricktravel.mobile
+adb shell am start -n com.patricktravel.mobile/.MainActivity
+
+# Reload via adb shell
+adb shell input keyevent 82  # Opens dev menu
+```

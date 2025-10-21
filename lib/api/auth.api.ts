@@ -3,8 +3,7 @@ import { User, ApiResponse, Role } from '../types';
 import { logger } from '../utils/logger';
 
 export interface LoginRequest {
-  email: string;
-  password: string;
+  // Empty body – auth via Firebase ID token in Authorization header
 }
 
 // Web API Contract: POST /api/auth/register
@@ -37,12 +36,12 @@ export interface LoginResponse {
 }
 
 export const authApi = {
-  async login(data: LoginRequest): Promise<ApiResponse<LoginResponse>> {
+  async login(_data: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     try {
-      logger.info('Logging in user', { email: data.email });
+      logger.info('Logging in user using Firebase ID token');
       const response = await apiClient.post<ApiResponse<LoginResponse>>(
         '/auth/login',
-        data
+        {}
       );
       return response.data;
     } catch (error: any) {

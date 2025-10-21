@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { TextInput, Button, Text } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { TextInput, Text, ActivityIndicator } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from 'expo-router';
@@ -9,8 +9,10 @@ import {
   forgotPasswordSchema,
   ForgotPasswordFormData,
 } from '../schemas/authSchemas';
-import { authApi } from '../../../lib/api/auth.api';
+import { auth } from '../../../lib/firebase/config';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { COLORS, SPACING } from '../../../lib/constants';
+import { logger } from '../../../lib/utils/logger';
 
 export default function ForgotPasswordScreen() {
   const { t } = useTranslation();
@@ -27,18 +29,31 @@ export default function ForgotPasswordScreen() {
   });
 
   const onSubmit = async (data: ForgotPasswordFormData) => {
+    console.log('🔥 Forgot Password - Form submitted with email:', data.email);
     setIsLoading(true);
     setError(null);
 
-    const response = await authApi.forgotPassword(data.email);
+    try {
+      logger.info('Sending password reset email via Firebase', {
+        email: data.email,
+      });
+      console.log('🔥 Calling sendPasswordResetEmail...');
 
-    if (response.success) {
+      await sendPasswordResetEmail(auth, data.email);
+
+      console.log('✅ Password reset email sent successfully');
+      logger.info('Password reset email sent successfully');
       setSuccess(true);
-    } else {
-      setError(response.error || 'Failed to send reset email');
+    } catch (e: any) {
+      console.error('❌ Failed to send password reset email:', e);
+      logger.error('Failed to send password reset email', e);
+      const errorMessage = e?.code
+        ? `Firebase error: ${e.code} - ${e.message}`
+        : e?.message || 'Failed to send reset email';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   if (success) {
@@ -46,15 +61,18 @@ export default function ForgotPasswordScreen() {
       <View style={styles.container}>
         <View style={styles.successContainer}>
           <Text variant="headlineMedium" style={styles.successTitle}>
-            {t('auth.checkEmail')}
+            {t('auth.checkEmail') || 'Check Your Email'}
           </Text>
           <Text variant="bodyLarge" style={styles.successText}>
-            {t('auth.resetEmailSent')}
+            {t('auth.resetEmailSent') ||
+              "We've sent you instructions to reset your password. Please check your inbox and spam folder."}
           </Text>
           <Link href="/(auth)/login" asChild>
-            <Button mode="contained" style={styles.button}>
-              {t('auth.backToLogin')}
-            </Button>
+            <TouchableOpacity style={styles.button} activeOpacity={0.8}>
+              <Text style={styles.buttonLabel}>
+                {t('auth.backToLogin') || 'Back to Login'}
+              </Text>
+            </TouchableOpacity>
           </Link>
         </View>
       </View>
@@ -68,7 +86,8 @@ export default function ForgotPasswordScreen() {
           {t('auth.forgotPassword')}
         </Text>
         <Text variant="bodyLarge" style={styles.subtitle}>
-          {t('auth.resetEmailSent')}
+          {t('auth.enterEmailToReset') ||
+            'Enter your email to reset your password.'}
         </Text>
       </View>
 
@@ -93,6 +112,15 @@ export default function ForgotPasswordScreen() {
               autoCapitalize="none"
               error={!!errors.email}
               style={styles.input}
+              outlineStyle={styles.inputOutline}
+              textColor={COLORS.text}
+              placeholderTextColor={COLORS.textSecondary}
+              theme={{
+                colors: {
+                  onSurfaceVariant: COLORS.textSecondary,
+                  onSurface: COLORS.text,
+                },
+              }}
             />
           )}
         />
@@ -100,18 +128,26 @@ export default function ForgotPasswordScreen() {
           <Text style={styles.fieldError}>{errors.email.message}</Text>
         )}
 
-        <Button
-          mode="contained"
-          onPress={handleSubmit(onSubmit)}
-          loading={isLoading}
-          disabled={isLoading}
+        <TouchableOpacity
+          onPress={() => {
+            if (isLoading) return;
+            handleSubmit(onSubmit)();
+          }}
           style={styles.button}
+          activeOpacity={0.8}
         >
-          {t('auth.resetPassword')}
-        </Button>
+          {isLoading ? (
+            <View style={styles.buttonLoading}>
+              <ActivityIndicator color={COLORS.surface} size="small" />
+              <Text style={styles.buttonLabel}>{t('auth.resetPassword')}</Text>
+            </View>
+          ) : (
+            <Text style={styles.buttonLabel}>{t('auth.resetPassword')}</Text>
+          )}
+        </TouchableOpacity>
 
         <View style={styles.footer}>
-          <Text>{t('auth.alreadyHaveAccount')} </Text>
+          <Text style={styles.footerText}>{t('auth.alreadyHaveAccount')} </Text>
           <Link href="/(auth)/login" asChild>
             <Text style={styles.link}>{t('auth.signIn')}</Text>
           </Link>
@@ -146,6 +182,11 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: SPACING.sm,
+    backgroundColor: COLORS.surface,
+  },
+  inputOutline: {
+    borderRadius: 12,
+    borderWidth: 1.5,
   },
   fieldError: {
     color: COLORS.error,
@@ -155,7 +196,7 @@ const styles = StyleSheet.create({
   errorContainer: {
     backgroundColor: '#FEE2E2',
     padding: SPACING.md,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: SPACING.md,
   },
   errorText: {
@@ -164,16 +205,41 @@ const styles = StyleSheet.create({
   },
   link: {
     color: COLORS.primary,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 14,
   },
   button: {
     marginTop: SPACING.md,
-    paddingVertical: SPACING.sm,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.surface,
+  },
+  buttonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: SPACING.lg,
+  },
+  footerText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
   },
   successContainer: {
     alignItems: 'center',

@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 
 export interface CreateCaseRequest {
   serviceType: ServiceType;
+  destinationId?: string;
   formData: any;
 }
 
@@ -107,7 +108,7 @@ export const casesApi = {
   async getCaseHistory(id: string): Promise<ApiResponse<StatusHistory[]>> {
     try {
       const response = await apiClient.get<ApiResponse<StatusHistory[]>>(
-        `/admin/cases/${id}/history`
+        `/cases/${id}/history`
       );
       return response.data;
     } catch (error: any) {

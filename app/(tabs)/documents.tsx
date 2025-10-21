@@ -6,6 +6,7 @@ import {
   RefreshControl,
   Text,
   TextInput,
+  Platform,
 } from 'react-native';
 import { FAB, Chip } from 'react-native-paper';
 import { useRouter } from 'expo-router';
@@ -138,7 +139,7 @@ export default function DocumentsScreen() {
         <View style={styles.searchContainer}>
           <MaterialCommunityIcons
             name="magnify"
-            size={20}
+            size={22}
             color={COLORS.textSecondary}
             style={styles.searchIcon}
           />
@@ -219,16 +220,25 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    padding: SPACING.md,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingBottom: SPACING.md,
+    paddingHorizontal: SPACING.md,
     backgroundColor: COLORS.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.background,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: SPACING.md,
-    height: 48,
+    height: 52,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   searchIcon: {
     marginRight: SPACING.sm,
@@ -237,6 +247,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: COLORS.text,
+    fontWeight: '500',
   },
   filters: {
     flexDirection: 'row',
@@ -250,9 +261,16 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: SPACING.md,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
   },
   card: {
     marginBottom: SPACING.md,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   cardContent: {
     padding: SPACING.md,
@@ -311,7 +329,13 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: SPACING.md,
-    bottom: SPACING.md,
+    bottom: Platform.OS === 'ios' ? 100 : 80,
     backgroundColor: COLORS.primary,
+    borderRadius: 28,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
 });

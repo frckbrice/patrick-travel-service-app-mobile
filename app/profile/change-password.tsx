@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
-import { TextInput, Button, Text } from 'react-native-paper';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
+import { TextInput, Text } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +14,7 @@ import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { userApi, ChangePasswordRequest } from '../../lib/api/user.api';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
 import { COLORS, SPACING } from '../../lib/constants';
+import { toast } from '../../lib/services/toast';
 
 interface PasswordFormData extends ChangePasswordRequest {
   confirmNewPassword: string;
@@ -35,7 +41,10 @@ export default function ChangePasswordScreen() {
 
   const onSubmit = async (data: PasswordFormData) => {
     if (data.newPassword !== data.confirmNewPassword) {
-      Alert.alert(t('common.error'), t('errors.passwordsDontMatch'));
+      toast.error({
+        title: t('common.error'),
+        message: t('errors.passwordsDontMatch'),
+      });
       return;
     }
 
@@ -48,17 +57,20 @@ export default function ChangePasswordScreen() {
       });
 
       if (response.success) {
-        Alert.alert(t('common.success'), t('profile.passwordChanged'), [
-          { text: t('common.ok'), onPress: () => router.back() },
-        ]);
+        toast.success({
+          title: t('common.success'),
+          message: t('profile.passwordChanged'),
+        });
+        // Navigate back after a short delay to let user see the toast
+        setTimeout(() => router.back(), 1000);
       } else {
         throw new Error(response.error || t('errors.somethingWrong'));
       }
     } catch (error: any) {
-      Alert.alert(
-        t('common.error'),
-        error.message || t('errors.somethingWrong')
-      );
+      toast.error({
+        title: t('common.error'),
+        message: error.message || t('errors.somethingWrong'),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -72,11 +84,16 @@ export default function ChangePasswordScreen() {
         paddingBottom: insets.bottom + SPACING.lg,
       }}
     >
-      <View style={styles.content}>
-        <Text variant="bodyLarge" style={styles.description}>
+      <View style={styles.header}>
+        <Text variant="headlineMedium" style={styles.title}>
+          {t('profile.changePassword')}
+        </Text>
+        <Text variant="bodyLarge" style={styles.subtitle}>
           {t('profile.updatePassword')}
         </Text>
+      </View>
 
+      <View style={styles.form}>
         <Controller
           control={control}
           name="currentPassword"
@@ -91,17 +108,29 @@ export default function ChangePasswordScreen() {
               secureTextEntry={!showCurrentPassword}
               error={!!errors.currentPassword}
               style={styles.input}
+              outlineStyle={styles.inputOutline}
+              textColor={COLORS.text}
+              placeholderTextColor={COLORS.textSecondary}
+              theme={{
+                colors: {
+                  onSurfaceVariant: COLORS.textSecondary,
+                  onSurface: COLORS.text,
+                },
+              }}
               right={
                 <TextInput.Icon
                   icon={showCurrentPassword ? 'eye-off' : 'eye'}
                   onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                  color={COLORS.textSecondary}
                 />
               }
             />
           )}
         />
         {errors.currentPassword && (
-          <Text style={styles.errorText}>{errors.currentPassword.message}</Text>
+          <Text style={styles.fieldError}>
+            {errors.currentPassword.message}
+          </Text>
         )}
 
         <Controller
@@ -128,17 +157,27 @@ export default function ChangePasswordScreen() {
               secureTextEntry={!showNewPassword}
               error={!!errors.newPassword}
               style={styles.input}
+              outlineStyle={styles.inputOutline}
+              textColor={COLORS.text}
+              placeholderTextColor={COLORS.textSecondary}
+              theme={{
+                colors: {
+                  onSurfaceVariant: COLORS.textSecondary,
+                  onSurface: COLORS.text,
+                },
+              }}
               right={
                 <TextInput.Icon
                   icon={showNewPassword ? 'eye-off' : 'eye'}
                   onPress={() => setShowNewPassword(!showNewPassword)}
+                  color={COLORS.textSecondary}
                 />
               }
             />
           )}
         />
         {errors.newPassword && (
-          <Text style={styles.errorText}>{errors.newPassword.message}</Text>
+          <Text style={styles.fieldError}>{errors.newPassword.message}</Text>
         )}
 
         <Controller
@@ -159,17 +198,27 @@ export default function ChangePasswordScreen() {
               secureTextEntry={!showConfirmPassword}
               error={!!errors.confirmNewPassword}
               style={styles.input}
+              outlineStyle={styles.inputOutline}
+              textColor={COLORS.text}
+              placeholderTextColor={COLORS.textSecondary}
+              theme={{
+                colors: {
+                  onSurfaceVariant: COLORS.textSecondary,
+                  onSurface: COLORS.text,
+                },
+              }}
               right={
                 <TextInput.Icon
                   icon={showConfirmPassword ? 'eye-off' : 'eye'}
                   onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  color={COLORS.textSecondary}
                 />
               }
             />
           )}
         />
         {errors.confirmNewPassword && (
-          <Text style={styles.errorText}>
+          <Text style={styles.fieldError}>
             {errors.confirmNewPassword.message}
           </Text>
         )}
@@ -192,15 +241,27 @@ export default function ChangePasswordScreen() {
           </Text>
         </View>
 
-        <Button
-          mode="contained"
-          onPress={handleSubmit(onSubmit)}
-          loading={isSubmitting}
-          disabled={isSubmitting}
+        <TouchableOpacity
+          onPress={() => {
+            if (isSubmitting) return;
+            handleSubmit(onSubmit)();
+          }}
           style={styles.button}
+          activeOpacity={0.8}
         >
-          {t('profile.changePassword')}
-        </Button>
+          {isSubmitting ? (
+            <View style={styles.buttonLoading}>
+              <ActivityIndicator color={COLORS.surface} size="small" />
+              <Text style={styles.buttonLabel}>
+                {t('profile.changePassword')}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.buttonLabel}>
+              {t('profile.changePassword')}
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
     </KeyboardAvoidingScrollView>
   );
@@ -213,39 +274,79 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-  },
-  content: {
     padding: SPACING.lg,
   },
-  description: {
+  header: {
+    marginBottom: SPACING.xl,
+    alignItems: 'center',
+  },
+  title: {
+    fontWeight: 'bold',
+    marginBottom: SPACING.sm,
+    color: COLORS.primary,
+  },
+  subtitle: {
     color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
+    textAlign: 'center',
+  },
+  form: {
+    marginTop: SPACING.lg,
   },
   input: {
     marginBottom: SPACING.sm,
+    backgroundColor: COLORS.surface,
   },
-  errorText: {
+  inputOutline: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  fieldError: {
     color: COLORS.error,
     fontSize: 12,
     marginBottom: SPACING.sm,
+    marginTop: -4,
   },
   requirements: {
     backgroundColor: COLORS.surface,
     padding: SPACING.md,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   requirementsTitle: {
     fontWeight: 'bold',
     marginBottom: SPACING.xs,
     color: COLORS.text,
+    fontSize: 13,
   },
   requirement: {
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
+    fontSize: 12,
   },
   button: {
     marginTop: SPACING.md,
-    paddingVertical: SPACING.sm,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.surface,
+  },
+  buttonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
 });

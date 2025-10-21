@@ -15,7 +15,7 @@ export interface ContactFormData {
   name: string;
   email: string;
   phone?: string;
-  subject: string;
+  subject?: string;
   message: string;
 }
 
@@ -39,7 +39,7 @@ class EmailService {
 
   async sendContactForm(data: ContactFormData): Promise<boolean> {
     try {
-      logger.info('Submitting contact form', { email: data.email });
+      logger.info('Submitting contact form', { email: data.email, data });
 
       await apiClient.post('/contact', data);
 
@@ -47,6 +47,8 @@ class EmailService {
       return true;
     } catch (error: any) {
       logger.error('Failed to submit contact form', error);
+      logger.error('Error response data', error.response?.data);
+      logger.error('Sent data', data);
       return false;
     }
   }

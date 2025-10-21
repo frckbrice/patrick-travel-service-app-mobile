@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Text } from 'react-native';
+import { View, StyleSheet, FlatList, Text, Platform } from 'react-native';
 import { Avatar } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { chatService, Conversation } from '../../lib/services/chat';
@@ -106,7 +107,10 @@ export default function MessagesScreen() {
         data={conversations}
         renderItem={renderConversationItem}
         keyExtractor={keyExtractor}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingBottom: Platform.OS === 'ios' ? 100 : 80 }
+        ]}
         ListEmptyComponent={
           <EmptyState
             icon="message-outline"
@@ -136,6 +140,12 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: SPACING.md,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   cardContent: {
     flexDirection: 'row',

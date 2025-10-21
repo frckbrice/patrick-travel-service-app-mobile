@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { User, PushTokenRequest } from '../../lib/types';
 import { secureStorage } from '../../lib/storage/secureStorage';
-import { authApi, LoginRequest, RegisterRequest } from '../../lib/api/auth.api';
+import { authApi, RegisterRequest } from '../../lib/api/auth.api';
 import { userApi } from '../../lib/api/user.api';
+import { apiClient } from '../../lib/api/axios';
 import { logger } from '../../lib/utils/logger';
 import { auth } from '../../lib/firebase/config';
 import {
@@ -23,20 +24,25 @@ interface AuthState {
   error: string | null;
   biometricAvailable: boolean;
   biometricEnabled: boolean;
+  previousUser: User | null; // PERFORMANCE: For optimistic rollback
 
   // Actions
-  login: (data: LoginRequest) => Promise<boolean>;
+  login: (data: { email: string; password: string }) => Promise<boolean>;
   loginWithGoogle: (idToken: string, accessToken?: string) => Promise<boolean>;
   loginWithBiometric: () => Promise<boolean>;
   register: (data: RegisterRequest) => Promise<boolean>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   clearError: () => void;
-  updateUser: (user: User) => void;
+  updateUser: (user: User) => Promise<void>;
   registerPushToken: () => Promise<void>;
   enableBiometric: (email: string, password: string) => Promise<boolean>;
   disableBiometric: () => Promise<void>;
   checkBiometricStatus: () => Promise<void>;
+  
+  // PERFORMANCE: Optimistic update actions
+  updateUserOptimistic: (updates: Partial<User>) => void;
+  revertUserUpdate: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -48,6 +54,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
   biometricAvailable: false,
   biometricEnabled: false,
+  previousUser: null,
 
   loginWithGoogle: async (idToken: string, accessToken?: string) => {
     try {
@@ -84,16 +91,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
 
-      const { user, token, refreshToken } = response.data;
+      const { user } = response.data;
 
-      // Store auth data
-      await secureStorage.setAuthToken(token);
-      await secureStorage.setRefreshToken(refreshToken);
+      // Validate response data
+      if (!user) {
+        logger.error(
+          'Invalid Google login response from server - missing user'
+        );
+        set({
+          error: 'Invalid server response. Please contact support.',
+          isLoading: false,
+        });
+        return false;
+      }
+
+      // Get Firebase refresh token
+      const firebaseRefreshToken = googleResult.user.refreshToken;
+
+      // Store Firebase tokens (not custom backend tokens)
+      await secureStorage.setAuthToken(firebaseToken);
+      await secureStorage.setRefreshToken(firebaseRefreshToken);
       await secureStorage.setUserData(user);
 
       set({
         user,
-        token,
+        token: firebaseToken,
         isAuthenticated: true,
         isLoading: false,
         error: null,
@@ -116,36 +138,50 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  login: async (data: LoginRequest) => {
+  login: async (data: { email: string; password: string }) => {
     try {
       set({ isLoading: true, error: null });
 
-      // Login via API
-      const response = await authApi.login(data);
+      // Sign in with Firebase first to obtain ID token
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        data.email,
+        data.password
+      );
+
+      // Get Firebase tokens (these are what we'll use throughout the app)
+      const firebaseToken = await userCredential.user.getIdToken();
+      const firebaseRefreshToken = userCredential.user.refreshToken;
+
+      // With Firebase user signed in, axios interceptor will attach ID token
+      // Backend verifies token, syncs user in DB, and sets custom claims
+      const response = await authApi.login({});
 
       if (!response.success || !response.data) {
         set({ error: response.error || 'Login failed', isLoading: false });
         return false;
       }
 
-      const { user, token, refreshToken } = response.data;
+      const { user } = response.data;
 
-      // Also sign in to Firebase for chat functionality
-      try {
-        await signInWithEmailAndPassword(auth, data.email, data.password);
-      } catch (firebaseError) {
-        logger.warn('Firebase login failed', firebaseError);
-        // Continue even if Firebase login fails
+      // Validate response data
+      if (!user) {
+        logger.error('Invalid login response from server - missing user');
+        set({
+          error: 'Invalid server response. Please contact support.',
+          isLoading: false,
+        });
+        return false;
       }
 
-      // Store auth data
-      await secureStorage.setAuthToken(token);
-      await secureStorage.setRefreshToken(refreshToken);
+      // Store Firebase tokens (not custom backend tokens)
+      await secureStorage.setAuthToken(firebaseToken);
+      await secureStorage.setRefreshToken(firebaseRefreshToken);
       await secureStorage.setUserData(user);
 
       set({
         user,
-        token,
+        token: firebaseToken,
         isAuthenticated: true,
         isLoading: false,
         error: null,
@@ -236,29 +272,67 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   refreshAuth: async () => {
     try {
+      console.log('🔄 refreshAuth - Starting...');
       set({ isLoading: true });
 
-      // Get stored data
-      const token = await secureStorage.getAuthToken();
-      const user = await secureStorage.getUserData<User>();
+      // Wait for Firebase auth state to initialize
+      await new Promise<void>((resolve) => {
+        const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+          unsubscribe();
+          resolve();
+        });
+      });
 
-      if (token && user) {
-        // Verify token is still valid by fetching current user
-        const response = await authApi.getMe();
+      const firebaseUser = auth.currentUser;
+      console.log('🔄 refreshAuth - Firebase user:', !!firebaseUser);
 
-        if (response.success && response.data) {
+      if (firebaseUser) {
+        // Get fresh Firebase token
+        const firebaseToken = await firebaseUser.getIdToken(false); // Don't force refresh on app load
+
+        // Get stored user data
+        const user = await secureStorage.getUserData<User>();
+        console.log('📖 Loaded user from storage:', user ? `${user.firstName} ${user.lastName}` : 'null');
+
+        if (user) {
+          // Update stored token
+          await secureStorage.setAuthToken(firebaseToken);
+
           set({
-            user: response.data,
-            token,
+            user,
+            token: firebaseToken,
             isAuthenticated: true,
             isLoading: false,
           });
-          logger.info('Auth refreshed successfully');
+          logger.info('Auth refreshed successfully with Firebase token', {
+            firstName: user.firstName,
+            lastName: user.lastName
+          });
           return;
+        } else {
+          // Firebase user exists but no stored user data - fetch from backend
+          logger.info(
+            'Firebase user exists but no stored user data, fetching from backend'
+          );
+          const response = await apiClient.get('/auth/me');
+          if (response.data?.success && response.data?.data) {
+            const userData = response.data.data;
+            await secureStorage.setUserData(userData);
+            await secureStorage.setAuthToken(firebaseToken);
+
+            set({
+              user: userData,
+              token: firebaseToken,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+            logger.info('User data fetched and auth restored');
+            return;
+          }
         }
       }
 
-      // If token invalid or not found, clear auth
+      // If no Firebase user or data fetch failed, clear auth
       await secureStorage.clearAuthData();
       set({
         user: null,
@@ -266,6 +340,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: false,
         isLoading: false,
       });
+      logger.info('No active Firebase session, cleared auth');
     } catch (error: any) {
       logger.error('Refresh auth error', error);
       await secureStorage.clearAuthData();
@@ -280,7 +355,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  updateUser: (user: User) => set({ user }),
+  updateUser: async (user: User) => {
+    try {
+      console.log('📝 Updating user in store:', user);
+      // Update both state and secure storage
+      set({ user });
+      await secureStorage.setUserData(user);
+      console.log('✅ User data saved to state and storage');
+      logger.info('User data updated in state and storage', {
+        firstName: user.firstName,
+        lastName: user.lastName
+      });
+    } catch (error) {
+      console.error('❌ Failed to update user data in storage:', error);
+      logger.error('Failed to update user data in storage', error);
+      // Still update state even if storage fails
+      set({ user });
+    }
+  },
 
   registerPushToken: async () => {
     try {
@@ -383,4 +475,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       logger.error('Check biometric status error', error);
     }
   },
+  
+  // PERFORMANCE: Optimistic profile update - O(1) shallow merge
+  updateUserOptimistic: (updates: Partial<User>) =>
+    set((state) => {
+      if (!state.user) return state;
+      
+      return {
+        previousUser: state.user, // Save for rollback
+        user: { ...state.user, ...updates }, // Shallow merge
+      };
+    }),
+  
+  // PERFORMANCE: Instant rollback - O(1)
+  revertUserUpdate: () =>
+    set((state) => ({
+      user: state.previousUser,
+      previousUser: null,
+    })),
 }));

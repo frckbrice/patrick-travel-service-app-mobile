@@ -17,6 +17,11 @@ interface CasesState {
   setCurrentCase: (caseItem: Case | null) => void;
   clearError: () => void;
   reset: () => void;
+
+  // PERFORMANCE: Optimistic update actions - O(1) operations
+  addOptimisticCase: (caseItem: Case) => void;
+  updateCaseById: (id: string, updates: Partial<Case>) => void;
+  removeOptimisticCase: (id: string) => void;
 }
 
 export const useCasesStore = create<CasesState>((set, get) => ({
@@ -39,13 +44,33 @@ export const useCasesStore = create<CasesState>((set, get) => ({
         return;
       }
 
-      const newCases = response.data || [];
+      // Handle API response structure: { success, data: [...], pagination: {...} }
+      // OR nested: { success, data: { cases: [...], pagination: {...} } }
+      let newCases: Case[] = [];
+      let pagination;
+
+      if (Array.isArray(response.data)) {
+        // Direct array format
+        newCases = response.data;
+        pagination = (response as any).pagination;
+      } else if (response.data && (response.data as any).cases) {
+        // Nested format { data: { cases: [...], pagination: {...} } }
+        newCases = Array.isArray((response.data as any).cases)
+          ? (response.data as any).cases
+          : [];
+        pagination = (response.data as any).pagination;
+      }
+
       const existingCases = refresh ? [] : get().cases;
+      const hasMore =
+        pagination?.hasMore ||
+        pagination?.page < pagination?.totalPages ||
+        false;
 
       set({
         cases: [...existingCases, ...newCases],
         page: currentPage + 1,
-        hasMore: response.page < response.totalPages,
+        hasMore,
         isLoading: false,
       });
 
@@ -91,4 +116,28 @@ export const useCasesStore = create<CasesState>((set, get) => ({
       hasMore: true,
       error: null,
     }),
+
+  // PERFORMANCE: O(1) - Add to start of array (unshift pattern)
+  addOptimisticCase: (caseItem: Case) =>
+    set((state) => ({
+      cases: [caseItem, ...state.cases],
+    })),
+
+  // PERFORMANCE: O(n) findIndex + O(1) update - faster than map which creates n objects
+  updateCaseById: (id: string, updates: Partial<Case>) =>
+    set((state) => {
+      const index = state.cases.findIndex((c) => c.id === id);
+      if (index === -1) return state; // Early return - no change needed
+
+      const updatedCases = [...state.cases];
+      updatedCases[index] = { ...state.cases[index], ...updates };
+
+      return { cases: updatedCases };
+    }),
+
+  // PERFORMANCE: O(n) filter - single pass, creates one array
+  removeOptimisticCase: (id: string) =>
+    set((state) => ({
+      cases: state.cases.filter((c) => c.id !== id),
+    })),
 }));

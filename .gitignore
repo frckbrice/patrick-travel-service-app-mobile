@@ -95,3 +95,4 @@ firebase-debug.log
 .cursor/
 expo-env.d.ts
 # @end expo-cli*.apk
+*.apk

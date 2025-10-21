@@ -28,6 +28,10 @@ export interface ChatMessage {
     type: string;
     size: number;
   }[];
+  // Optimistic update states
+  status?: 'pending' | 'sent' | 'failed';
+  tempId?: string; // Temporary ID for optimistic messages
+  error?: string; // Error message if failed
 }
 
 export interface Conversation {

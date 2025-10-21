@@ -23,3 +23,5 @@ export type { AlertVariant } from './Alert';
 export { StatusBadge } from './StatusBadge';
 
 export { KeyboardAvoidingScrollView } from './KeyboardAvoidingScrollView';
+
+export { CalendarDatePicker } from './CalendarDatePicker';

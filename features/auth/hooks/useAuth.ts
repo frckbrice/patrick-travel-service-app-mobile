@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuthStore } from '../../../stores/auth/authStore';
 import { useRouter } from 'expo-router';
 import { logger } from '../../../lib/utils/logger';
@@ -22,21 +22,26 @@ export const useAuth = () => {
 };
 
 export const useRequireAuth = () => {
-  const { isAuthenticated, isLoading, refreshAuth } = useAuth();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
   const router = useRouter();
+  const hasChecked = useRef(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      await refreshAuth();
+    // Only check once after initial load
+    if (hasChecked.current) {
+      return;
+    }
 
-      if (!isLoading && !isAuthenticated) {
+    if (!isLoading) {
+      hasChecked.current = true;
+
+      if (!isAuthenticated) {
         logger.info('User not authenticated, redirecting to login');
         router.replace('/(auth)/login');
       }
-    };
-
-    checkAuth();
-  }, [isAuthenticated, isLoading]);
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   return { isAuthenticated, isLoading };
 };

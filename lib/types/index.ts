@@ -120,6 +120,9 @@ export interface Case {
   internalNotes?: string | null;
   estimatedCompletion?: Date | null;
 
+  // Optimistic update state
+  isPending?: boolean;
+
   // Optional relations (when included by API)
   client?: {
     id: string;

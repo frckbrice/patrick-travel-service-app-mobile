@@ -8,7 +8,12 @@ import {
   Alert,
   TouchableOpacity,
 } from 'react-native';
-import { TextInput, Button, Text, Checkbox } from 'react-native-paper';
+import {
+  TextInput,
+  Text,
+  Checkbox,
+  ActivityIndicator,
+} from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useRouter } from 'expo-router';
@@ -315,17 +320,23 @@ export default function RegisterScreen() {
             </View>
           </TouchableOpacity>
 
-          <Button
-            mode="contained"
-            onPress={handleSubmit(onSubmit)}
-            loading={isLoading}
-            disabled={isLoading}
+          <TouchableOpacity
+            onPress={() => {
+              if (isLoading) return;
+              handleSubmit(onSubmit)();
+            }}
             style={styles.button}
-            contentStyle={styles.buttonContent}
-            labelStyle={styles.buttonLabel}
+            activeOpacity={0.8}
           >
-            {t('auth.signUp')}
-          </Button>
+            {isLoading ? (
+              <View style={styles.buttonLoading}>
+                <ActivityIndicator color={COLORS.surface} size="small" />
+                <Text style={styles.buttonLabel}>{t('auth.signUp')}</Text>
+              </View>
+            ) : (
+              <Text style={styles.buttonLabel}>{t('auth.signUp')}</Text>
+            )}
+          </TouchableOpacity>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>
@@ -395,19 +406,20 @@ const styles = StyleSheet.create({
   },
   termsContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 6,
     marginVertical: SPACING.sm,
     paddingRight: SPACING.md,
   },
   termsTextContainer: {
     flex: 1,
-    marginLeft: SPACING.sm,
-    marginTop: 2,
+    marginLeft: SPACING.xs,
   },
   termsText: {
     fontSize: 14,
     color: COLORS.text,
     lineHeight: 20,
+    includeFontPadding: false,
   },
   link: {
     color: COLORS.primary,
@@ -417,13 +429,26 @@ const styles = StyleSheet.create({
   button: {
     marginTop: SPACING.md,
     borderRadius: 12,
-  },
-  buttonContent: {
-    paddingVertical: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   buttonLabel: {
     fontSize: 16,
     fontWeight: '600',
+    color: COLORS.surface,
+  },
+  buttonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   footer: {
     flexDirection: 'row',

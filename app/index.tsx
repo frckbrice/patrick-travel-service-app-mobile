@@ -6,7 +6,7 @@ import { hasCompletedOnboarding } from '../lib/utils/onboarding';
 import { COLORS } from '../lib/constants';
 
 export default function Index() {
-  const { isAuthenticated, isLoading, refreshAuth } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(
     null
   );
@@ -16,7 +16,7 @@ export default function Index() {
       // Check if user has completed onboarding (persists across sessions)
       const completed = await hasCompletedOnboarding();
       setHasSeenOnboarding(completed);
-      await refreshAuth();
+      // refreshAuth is already called in _layout.tsx on mount
     };
     checkOnboarding();
   }, []);

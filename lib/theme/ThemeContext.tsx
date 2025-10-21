@@ -18,11 +18,14 @@ const lightTheme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
-    primary: '#0066CC',
-    secondary: '#00C853',
-    error: '#DC2626',
+    primary: '#5B7C99',
+    secondary: '#7C9885',
+    tertiary: '#9B8B7E',
+    error: '#C85C5C',
     surface: '#FFFFFF',
-    background: '#F9FAFB',
+    background: '#F5F6F7',
+    onSurface: '#2C3E50',
+    onBackground: '#2C3E50',
   },
 };
 
@@ -30,11 +33,14 @@ const darkTheme = {
   ...MD3DarkTheme,
   colors: {
     ...MD3DarkTheme.colors,
-    primary: '#4A9EFF',
-    secondary: '#00E676',
-    error: '#EF4444',
-    surface: '#1E1E1E',
-    background: '#121212',
+    primary: '#7A9BB8',
+    secondary: '#94B5A0',
+    tertiary: '#B5A899',
+    error: '#D77C7C',
+    surface: '#1E2329',
+    background: '#15191E',
+    onSurface: '#E8EAED',
+    onBackground: '#E8EAED',
   },
 };
 
@@ -75,4 +81,38 @@ export const useTheme = () => {
     throw new Error('useTheme must be used within ThemeProvider');
   }
   return context;
+};
+
+// Export theme-aware colors
+export const useThemeColors = () => {
+  const { theme, isDark } = useTheme();
+
+  return {
+    // Primary Palette
+    primary: theme.colors.primary,
+    secondary: theme.colors.secondary,
+    accent: theme.colors.tertiary,
+
+    // Status Colors
+    error: theme.colors.error,
+    success: isDark ? '#6B9E78' : '#6B9E78',
+    warning: isDark ? '#D4A574' : '#D4A574',
+    info: isDark ? '#7A9BB8' : '#6B8CAE',
+
+    // Neutral Palette
+    background: theme.colors.background,
+    surface: theme.colors.surface,
+    card: isDark ? '#1E2329' : '#FAFBFC',
+
+    // Text Colors
+    text: theme.colors.onSurface,
+    textSecondary: isDark ? '#A8B2BD' : '#7D8A96',
+    textTertiary: isDark ? '#7D8A96' : '#A8B2BD',
+
+    // UI Elements
+    border: isDark ? '#2A3038' : '#E1E4E8',
+    divider: isDark ? '#252A31' : '#EDF0F2',
+    disabled: isDark ? '#3E4852' : '#C4CDD5',
+    overlay: isDark ? 'rgba(0, 0, 0, 0.7)' : 'rgba(44, 62, 80, 0.6)',
+  };
 };

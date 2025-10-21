@@ -50,7 +50,7 @@ export default function ChatScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const flatListRef = useRef<FlatList>(null);
-  const scrollToEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollToEndTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!caseId) return;
@@ -97,12 +97,37 @@ export default function ChatScreen() {
 
     const messageText = newMessage.trim();
     const attachments = [...selectedAttachments];
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
 
-    // Clear input immediately for better UX
+    // OPTIMISTIC UPDATE: Create optimistic message
+    const optimisticMessage: ChatMessage = {
+      id: tempId,
+      tempId,
+      caseId,
+      senderId: user.id,
+      senderName: `${user.firstName} ${user.lastName}`,
+      senderRole: user.role as 'CLIENT',
+      message: messageText || '📎 Attachment',
+      timestamp: Date.now(),
+      isRead: false,
+      attachments: attachments.length > 0 ? attachments : undefined,
+      status: 'pending', // Mark as pending
+    };
+
+    // 1. Add message to UI immediately
+    setMessages((prev) => [...prev, optimisticMessage]);
+
+    // 2. Clear input immediately for better UX
     setNewMessage('');
     setSelectedAttachments([]);
 
+    // 3. Scroll to end to show new message
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+
     try {
+      // 4. Send to server in background
       await chatService.sendMessage(
         caseId,
         user.id,
@@ -111,17 +136,119 @@ export default function ChatScreen() {
         messageText || '📎 Attachment',
         attachments.length > 0 ? attachments : undefined
       );
-      logger.info('Message sent', {
+
+      // 5. PERFORMANCE: Update message status efficiently (avoid full map)
+      setMessages((prev) => {
+        const index = prev.findIndex((m) => m.tempId === tempId);
+        if (index === -1) return prev;
+
+        const updated = [...prev];
+        updated[index] = { ...prev[index], status: 'sent' };
+        return updated;
+      });
+
+      logger.info('Message sent successfully', {
         caseId,
         messageLength: messageText.length,
         attachmentsCount: attachments.length,
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to send message', error);
-      setNewMessage(messageText);
-      setSelectedAttachments(attachments);
+
+      // 6. PERFORMANCE: Mark as failed efficiently (avoid full map)
+      setMessages((prev) => {
+        const index = prev.findIndex((m) => m.tempId === tempId);
+        if (index === -1) return prev;
+
+        const updated = [...prev];
+        updated[index] = {
+          ...prev[index],
+          status: 'failed',
+          error: error.message || 'Failed to send'
+        };
+        return updated;
+      });
     }
   }, [newMessage, selectedAttachments, user, caseId]);
+
+  // RETRY: Retry sending a failed message
+  const handleRetryMessage = useCallback(
+    async (failedMessage: ChatMessage) => {
+      if (!user || !caseId) return;
+
+      // PERFORMANCE: Mark as pending efficiently
+      setMessages((prev) => {
+        const index = prev.findIndex((m) => m.id === failedMessage.id);
+        if (index === -1) return prev;
+
+        const updated = [...prev];
+        updated[index] = { ...prev[index], status: 'pending', error: undefined };
+        return updated;
+      });
+
+      try {
+        await chatService.sendMessage(
+          caseId,
+          user.id,
+          `${user.firstName} ${user.lastName}`,
+          user.role as 'CLIENT',
+          failedMessage.message,
+          failedMessage.attachments
+        );
+
+        // PERFORMANCE: Mark as sent efficiently
+        setMessages((prev) => {
+          const index = prev.findIndex((m) => m.id === failedMessage.id);
+          if (index === -1) return prev;
+
+          const updated = [...prev];
+          updated[index] = { ...prev[index], status: 'sent' };
+          return updated;
+        });
+
+        logger.info('Message retry successful', { messageId: failedMessage.id });
+      } catch (error: any) {
+        logger.error('Message retry failed', error);
+
+        // PERFORMANCE: Mark as failed efficiently
+        setMessages((prev) => {
+          const index = prev.findIndex((m) => m.id === failedMessage.id);
+          if (index === -1) return prev;
+
+          const updated = [...prev];
+          updated[index] = {
+            ...prev[index],
+            status: 'failed',
+            error: error.message || 'Failed to send'
+          };
+          return updated;
+        });
+      }
+    },
+    [user, caseId]
+  );
+
+  // DELETE: Remove a failed message
+  const handleDeleteFailedMessage = useCallback(
+    (messageId: string) => {
+      Alert.alert(
+        t('common.confirm'),
+        t('messages.deleteFailedMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('common.delete'),
+            style: 'destructive',
+            onPress: () => {
+              setMessages((prev) => prev.filter((m) => m.id !== messageId));
+              logger.info('Failed message deleted', { messageId });
+            },
+          },
+        ]
+      );
+    },
+    [t]
+  );
 
   const handlePickFile = useCallback(async () => {
     try {
@@ -286,6 +413,8 @@ export default function ChatScreen() {
                 style={[
                   styles.messageText,
                   isMyMessage && styles.myMessageText,
+                  item.status === 'pending' && styles.pendingMessageText,
+                  item.status === 'failed' && styles.failedMessageText,
                 ]}
               >
                 {item.message}
@@ -338,14 +467,74 @@ export default function ChatScreen() {
               </View>
             )}
 
-            <Text style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
-              {formatMessageTime(item.timestamp)}
-            </Text>
+            {/* Timestamp and Status Indicators */}
+            <View style={styles.messageFooter}>
+              <Text style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
+                {formatMessageTime(item.timestamp)}
+              </Text>
+
+              {/* Status Indicator for My Messages */}
+              {isMyMessage && (
+                <View style={styles.statusIndicator}>
+                  {item.status === 'pending' && (
+                    <MaterialCommunityIcons
+                      name="clock-outline"
+                      size={14}
+                      color={COLORS.textSecondary}
+                    />
+                  )}
+                  {item.status === 'sent' && (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={14}
+                      color={COLORS.success}
+                    />
+                  )}
+                  {item.status === 'failed' && (
+                    <MaterialCommunityIcons
+                      name="alert-circle"
+                      size={14}
+                      color={COLORS.error}
+                    />
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Failed Message Actions */}
+            {item.status === 'failed' && isMyMessage && (
+              <View style={styles.failedActions}>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => handleRetryMessage(item)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons
+                    name="refresh"
+                    size={16}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteFailedMessage(item.id)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons
+                    name="delete"
+                    size={16}
+                    color={COLORS.error}
+                  />
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </AnimatedView>
       );
     },
-    [user, formatMessageTime, handleDownloadAttachment]
+    [user, formatMessageTime, handleDownloadAttachment, handleRetryMessage, handleDeleteFailedMessage]
   );
 
   // Memoize key extractor
@@ -656,5 +845,56 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: COLORS.textSecondary,
     opacity: 0.5,
+  },
+  // OPTIMISTIC UPDATE STYLES
+  pendingMessageText: {
+    opacity: 0.6,
+  },
+  failedMessageText: {
+    color: COLORS.error,
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statusIndicator: {
+    marginLeft: 4,
+  },
+  failedActions: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.error + '20',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary + '10',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
+  },
+  retryButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.error + '10',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.error,
   },
 });

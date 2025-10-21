@@ -19,6 +19,7 @@ import {
   DOCUMENT_STATUS_COLORS,
 } from '../../lib/constants';
 import { format } from 'date-fns';
+import { toast } from '../../lib/services/toast';
 
 const { width } = Dimensions.get('window');
 
@@ -59,16 +60,19 @@ export default function DocumentDetailsScreen() {
         if (canShare) {
           await Sharing.shareAsync(downloadResult.uri);
         } else {
-          Alert.alert(t('common.success'), t('documents.downloadSuccess'));
+          toast.success({
+            title: t('common.success'),
+            message: t('documents.downloadSuccess'),
+          });
         }
       } else {
         throw new Error(t('errors.downloadFailed'));
       }
     } catch (error: any) {
-      Alert.alert(
-        t('common.error'),
-        error.message || t('errors.downloadFailed')
-      );
+      toast.error({
+        title: t('common.error'),
+        message: error.message || t('errors.downloadFailed'),
+      });
     } finally {
       setIsDownloading(false);
     }
@@ -77,6 +81,7 @@ export default function DocumentDetailsScreen() {
   const handleDelete = () => {
     if (!document) return;
 
+    // Keep Alert for confirmation (destructive action)
     Alert.alert(t('documents.deleteDocument'), t('documents.confirmDelete'), [
       { text: t('common.cancel'), style: 'cancel' },
       {
@@ -85,11 +90,16 @@ export default function DocumentDetailsScreen() {
         onPress: async () => {
           const response = await documentsApi.deleteDocument(document.id);
           if (response.success) {
-            Alert.alert(t('common.success'), t('documents.deleteDocument'), [
-              { text: t('common.ok'), onPress: () => router.back() },
-            ]);
+            toast.success({
+              title: t('common.success'),
+              message: t('documents.documentDeleted'),
+            });
+            setTimeout(() => router.back(), 1000);
           } else {
-            Alert.alert(t('common.error'), t('errors.somethingWrong'));
+            toast.error({
+              title: t('common.error'),
+              message: t('errors.somethingWrong'),
+            });
           }
         },
       },

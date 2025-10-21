@@ -5,6 +5,7 @@ import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../stores/auth/authStore';
 import { ThemeProvider, useTheme } from '../lib/theme/ThemeContext';
 import {
@@ -12,6 +13,7 @@ import {
   getLastNotificationResponse,
   handleNotificationNavigation,
 } from '../lib/services/pushNotifications';
+import { useCaseUpdates } from '../lib/hooks/useCaseUpdates';
 import { logger } from '../lib/utils/logger';
 import { COLORS } from '../lib/constants';
 import '../lib/i18n';
@@ -24,6 +26,9 @@ function AppContent() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { theme, isDark } = useTheme();
   const appState = useRef<AppStateStatus>(AppState.currentState);
+
+  // Enable fallback case update monitoring (acts as backup if push notifications fail)
+  useCaseUpdates();
 
   useEffect(() => {
     // Check auth status on app load
@@ -78,7 +83,8 @@ function AppContent() {
     return () => {
       subscription.remove();
     };
-  }, [isAuthenticated, refreshAuth]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]); // refreshAuth is stable, don't include in deps
 
   return (
     <SafeAreaProvider>
@@ -95,6 +101,15 @@ function AppContent() {
             contentStyle: {
               backgroundColor: COLORS.background,
             },
+            headerStyle: {
+              backgroundColor: COLORS.surface,
+            },
+            headerTintColor: COLORS.text,
+            headerTitleStyle: {
+              fontWeight: '700',
+              fontSize: 18,
+            },
+            headerShadowVisible: true,
           }}
         >
           <Stack.Screen name="index" />
@@ -107,6 +122,9 @@ function AppContent() {
               headerShown: true,
               title: 'Case Details',
               presentation: 'card',
+              headerLargeTitle: false,
+              headerTransparent: false,
+              headerBlurEffect: 'light',
             }}
           />
           <Stack.Screen
@@ -115,6 +133,7 @@ function AppContent() {
               headerShown: true,
               title: 'New Case',
               presentation: 'modal',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -123,6 +142,7 @@ function AppContent() {
               headerShown: true,
               title: 'Upload Document',
               presentation: 'modal',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -131,6 +151,7 @@ function AppContent() {
               headerShown: true,
               title: 'Document Details',
               presentation: 'card',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -139,6 +160,7 @@ function AppContent() {
               headerShown: true,
               title: 'Chat',
               presentation: 'card',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -147,6 +169,7 @@ function AppContent() {
               headerShown: true,
               title: 'FAQs',
               presentation: 'card',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -155,6 +178,7 @@ function AppContent() {
               headerShown: true,
               title: 'Contact Support',
               presentation: 'modal',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -163,6 +187,7 @@ function AppContent() {
               headerShown: true,
               title: 'Edit Profile',
               presentation: 'card',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -171,6 +196,7 @@ function AppContent() {
               headerShown: true,
               title: 'Change Password',
               presentation: 'card',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -179,6 +205,7 @@ function AppContent() {
               headerShown: true,
               title: 'Notification Preferences',
               presentation: 'card',
+              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
@@ -187,9 +214,11 @@ function AppContent() {
               headerShown: true,
               title: 'Settings',
               presentation: 'card',
+              headerLargeTitle: false,
             }}
           />
         </Stack>
+        <Toast />
       </PaperProvider>
     </SafeAreaProvider>
   );

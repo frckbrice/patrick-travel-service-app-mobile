@@ -1,17 +1,31 @@
-// Constants
+// Constants - Muted Professional Color Palette
 export const COLORS = {
-  primary: '#0066CC',
-  secondary: '#00C853',
-  error: '#DC2626',
-  success: '#10B981',
-  warning: '#F59E0B',
-  info: '#3B82F6',
-  background: '#F9FAFB',
+  // Primary Palette (Muted Blue-Grey)
+  primary: '#5B7C99', // Muted slate blue
+  secondary: '#7C9885', // Muted sage green
+  accent: '#9B8B7E', // Muted taupe
+
+  // Status Colors (Modern, User-Friendly)
+  error: '#F87171', // Soft red (modern validation standard)
+  success: '#6B9E78', // Muted green
+  warning: '#FBBF24', // Warm amber (modern warning standard)
+  info: '#60A5FA', // Bright blue (modern info standard)
+
+  // Neutral Palette
+  background: '#F5F6F7', // Soft off-white
   surface: '#FFFFFF',
-  text: '#1F2937',
-  textSecondary: '#6B7280',
-  border: '#E5E7EB',
-  disabled: '#9CA3AF',
+  card: '#FAFBFC', // Subtle card background
+
+  // Text Colors
+  text: '#2C3E50', // Dark blue-grey
+  textSecondary: '#7D8A96',
+  textTertiary: '#A8B2BD',
+
+  // UI Elements
+  border: '#E1E4E8',
+  divider: '#EDF0F2',
+  disabled: '#C4CDD5',
+  overlay: 'rgba(44, 62, 80, 0.6)',
 };
 
 export const SPACING = {

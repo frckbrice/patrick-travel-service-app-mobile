@@ -79,7 +79,11 @@ class SecureStorage {
   }
 
   // Specific methods for common operations
-  async setAuthToken(token: string): Promise<void> {
+  async setAuthToken(token: string | null | undefined): Promise<void> {
+    if (!token || typeof token !== 'string') {
+      console.warn('Invalid auth token provided:', typeof token);
+      throw new Error('Auth token must be a non-empty string');
+    }
     await this.setSecure(STORAGE_KEYS.AUTH_TOKEN, token);
   }
 
@@ -87,7 +91,11 @@ class SecureStorage {
     return await this.getSecure(STORAGE_KEYS.AUTH_TOKEN);
   }
 
-  async setRefreshToken(token: string): Promise<void> {
+  async setRefreshToken(token: string | null | undefined): Promise<void> {
+    if (!token || typeof token !== 'string') {
+      console.warn('Invalid refresh token provided:', typeof token);
+      throw new Error('Refresh token must be a non-empty string');
+    }
     await this.setSecure(STORAGE_KEYS.REFRESH_TOKEN, token);
   }
 

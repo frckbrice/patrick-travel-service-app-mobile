@@ -19,6 +19,15 @@ const firebaseConfig = {
   databaseURL: Constants.expoConfig?.extra?.firebaseDatabaseUrl,
 };
 
+// Validate Firebase configuration
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error('Firebase config is missing required fields:', {
+    hasApiKey: !!firebaseConfig.apiKey,
+    hasProjectId: !!firebaseConfig.projectId,
+    hasAuthDomain: !!firebaseConfig.authDomain,
+  });
+}
+
 let app: FirebaseApp;
 let auth: ReturnType<typeof getAuth>;
 let database: ReturnType<typeof getDatabase>;

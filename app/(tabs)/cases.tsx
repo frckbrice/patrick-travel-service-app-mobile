@@ -1,172 +1,447 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
   FlatList,
   RefreshControl,
   TouchableOpacity,
-  Text,
   TextInput,
+  ActivityIndicator,
+  ScrollView,
+  Platform,
 } from 'react-native';
-import { Searchbar, Chip } from 'react-native-paper';
+import { Text as PaperText, Chip, Menu, Button, Divider } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useCasesStore } from '../../stores/cases/casesStore';
-import { Case, CaseStatus } from '../../lib/types';
+import { Case, CaseStatus, ServiceType, Priority } from '../../lib/types';
 import {
   Card,
   StatusBadge,
   EmptyState,
-  Button,
-  Input,
 } from '../../components/ui';
 import {
   COLORS,
   SPACING,
   CASE_STATUS_LABELS,
-  CASE_STATUS_COLORS,
   SERVICE_TYPE_LABELS,
 } from '../../lib/constants';
 import { format } from 'date-fns';
+
+type SortOption = 'date-desc' | 'date-asc' | 'status' | 'priority';
 
 export default function CasesScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
   const { cases, isLoading, fetchCases } = useCasesStore();
+
+  // State management
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<
-    CaseStatus | undefined
-  >();
+  const [selectedStatus, setSelectedStatus] = useState<CaseStatus | undefined>();
+  const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | undefined>();
+  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
+  const [statusMenuVisible, setStatusMenuVisible] = useState(false);
+  const [sortMenuVisible, setSortMenuVisible] = useState(false);
+  const [serviceTypeMenuVisible, setServiceTypeMenuVisible] = useState(false);
 
   useEffect(() => {
     fetchCases(selectedStatus, true);
   }, [selectedStatus]);
 
-  const filteredCases = cases.filter((c) =>
-    c.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase())
+  // Memoized filtered and sorted cases for performance
+  const filteredAndSortedCases = useMemo(() => {
+    let filtered = cases.filter((c) => {
+      const matchesSearch = c.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesServiceType = !selectedServiceType || c.serviceType === selectedServiceType;
+      return matchesSearch && matchesServiceType;
+    });
+
+    // Sort cases
+    switch (sortBy) {
+      case 'date-desc':
+        filtered.sort((a, b) => new Date(b.submissionDate).getTime() - new Date(a.submissionDate).getTime());
+        break;
+      case 'date-asc':
+        filtered.sort((a, b) => new Date(a.submissionDate).getTime() - new Date(b.submissionDate).getTime());
+        break;
+      case 'status':
+        filtered.sort((a, b) => a.status.localeCompare(b.status));
+        break;
+      case 'priority':
+        const priorityOrder = { URGENT: 0, HIGH: 1, NORMAL: 2, LOW: 3 };
+        filtered.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+        break;
+    }
+
+    return filtered;
+  }, [cases, searchQuery, selectedServiceType, sortBy]);
+
+  // Get priority color
+  const getPriorityColor = (priority: Priority) => {
+    switch (priority) {
+      case 'URGENT': return '#DC2626';
+      case 'HIGH': return '#F59E0B';
+      case 'NORMAL': return '#3B82F6';
+      case 'LOW': return '#6B7280';
+      default: return COLORS.textSecondary;
+    }
+  };
+
+  // Get priority icon
+  const getPriorityIcon = (priority: Priority) => {
+    switch (priority) {
+      case 'URGENT': return 'alert-octagon';
+      case 'HIGH': return 'alert';
+      case 'NORMAL': return 'information';
+      case 'LOW': return 'minus-circle';
+      default: return 'information';
+    }
+  };
+
+  // Memoized render function for performance
+  const renderCaseItem = useCallback(
+    ({ item, index }: { item: Case; index: number }) => (
+      <Animated.View entering={FadeInDown.delay(Math.min(index * 30, 200)).springify()}>
+        <Card onPress={() => router.push(`/case/${item.id}`)} style={styles.card}>
+          <View style={styles.cardContent}>
+            {/* Header with reference and status */}
+            <View style={styles.cardHeader}>
+              <View style={styles.referenceContainer}>
+                <MaterialCommunityIcons
+                  name="briefcase-outline"
+                  size={20}
+                  color={COLORS.primary}
+                  style={styles.icon}
+                />
+                <PaperText style={styles.reference}>{item.referenceNumber}</PaperText>
+              </View>
+              <StatusBadge status={item.status} />
+            </View>
+
+            {/* Priority and Service Type Row */}
+            <View style={styles.metaRow}>
+              <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) + '15' }]}>
+                <MaterialCommunityIcons
+                  name={getPriorityIcon(item.priority)}
+                  size={12}
+                  color={getPriorityColor(item.priority)}
+                />
+                <PaperText style={[styles.priorityText, { color: getPriorityColor(item.priority) }]}>
+                  {item.priority}
+                </PaperText>
+              </View>
+              <View style={styles.serviceTypeChip}>
+                <MaterialCommunityIcons
+                  name="airplane"
+                  size={12}
+                  color={COLORS.textSecondary}
+                  style={styles.serviceIcon}
+                />
+                <PaperText style={styles.serviceTypeText}>
+                  {SERVICE_TYPE_LABELS[item.serviceType]}
+                </PaperText>
+              </View>
+            </View>
+
+            {/* Info Row */}
+            <View style={styles.infoContainer}>
+              <View style={styles.infoItem}>
+                <MaterialCommunityIcons
+                  name="calendar"
+                  size={14}
+                  color={COLORS.textSecondary}
+                />
+                <PaperText style={styles.infoText}>
+                  {format(new Date(item.submissionDate), 'MMM dd, yyyy')}
+                </PaperText>
+              </View>
+
+              {item.assignedAgent && (
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons
+                    name="account"
+                    size={14}
+                    color={COLORS.textSecondary}
+                  />
+                  <PaperText style={styles.infoText} numberOfLines={1}>
+                    {item.assignedAgent.firstName} {item.assignedAgent.lastName}
+                  </PaperText>
+                </View>
+              )}
+            </View>
+
+            {/* OPTIMISTIC: Show pending indicator */}
+            {item.isPending && (
+              <View style={styles.pendingBadge}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <PaperText style={styles.pendingText}>Submitting...</PaperText>
+              </View>
+            )}
+          </View>
+        </Card>
+      </Animated.View>
+    ),
+    [router]
   );
 
-  const renderCaseItem = ({ item, index }: { item: Case; index: number }) => (
-    <Animated.View entering={FadeInDown.delay(index * 100).springify()}>
-      <Card onPress={() => router.push(`/case/${item.id}`)} style={styles.card}>
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <View style={styles.referenceContainer}>
-              <MaterialCommunityIcons
-                name="briefcase-outline"
-                size={20}
-                color={COLORS.primary}
-                style={styles.icon}
-              />
-              <Text style={styles.reference}>{item.referenceNumber}</Text>
-            </View>
-            <StatusBadge status={item.status} />
-          </View>
-
-          <View style={styles.serviceTypeContainer}>
-            <MaterialCommunityIcons
-              name="airplane"
-              size={16}
-              color={COLORS.textSecondary}
-              style={styles.serviceIcon}
-            />
-            <Text style={styles.serviceType}>
-              {SERVICE_TYPE_LABELS[item.serviceType]}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons
-              name="calendar"
-              size={14}
-              color={COLORS.textSecondary}
-            />
-            <Text style={styles.date}>
-              {format(new Date(item.submissionDate), 'MMM dd, yyyy')}
-            </Text>
-          </View>
-
-          {item.assignedAgent && (
-            <View style={styles.infoRow}>
-              <MaterialCommunityIcons
-                name="account"
-                size={14}
-                color={COLORS.textSecondary}
-              />
-              <Text style={styles.agent}>
-                {item.assignedAgent.firstName} {item.assignedAgent.lastName}
-              </Text>
-            </View>
-          )}
-        </View>
-      </Card>
-    </Animated.View>
-  );
 
   return (
     <View style={styles.container}>
+      {/* Modern Search Header */}
       <View style={styles.header}>
-        <View style={styles.searchContainer}>
-          <MaterialCommunityIcons
-            name="magnify"
-            size={20}
-            color={COLORS.textSecondary}
-            style={styles.searchIcon}
-          />
-          <TextInput
-            placeholder={t('cases.searchByReference')}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchInput}
-            placeholderTextColor={COLORS.textSecondary}
-          />
-        </View>
+        <View style={styles.headerContent}>
+          <View style={styles.searchContainer}>
+            <MaterialCommunityIcons
+              name="magnify"
+              size={22}
+              color={COLORS.textSecondary}
+              style={styles.searchIcon}
+            />
+            <TextInput
+              placeholder={t('cases.searchByReference')}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.searchInput}
+              placeholderTextColor={COLORS.textSecondary}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <MaterialCommunityIcons
+                  name="close-circle"
+                  size={20}
+                  color={COLORS.textSecondary}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
 
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => router.push('/case/new')}
-        >
-          <MaterialCommunityIcons
-            name="plus"
-            size={24}
-            color={COLORS.primary}
-          />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.filters}>
-        <Chip
-          selected={!selectedStatus}
-          onPress={() => setSelectedStatus(undefined)}
-          style={styles.filterChip}
-        >
-          {t('cases.all')}
-        </Chip>
-        {Object.values(CaseStatus).map((status) => (
-          <Chip
-            key={status}
-            selected={selectedStatus === status}
-            onPress={() => setSelectedStatus(status)}
-            style={styles.filterChip}
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => router.push('/case/new')}
           >
-            {CASE_STATUS_LABELS[status]}
-          </Chip>
-        ))}
+            <MaterialCommunityIcons
+              name="plus"
+              size={26}
+              color="#FFF"
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
+      {/* Filter Bar with Menus */}
+      <View style={styles.filtersBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersContent}
+        >
+          {/* Status Filter */}
+          <Menu
+            visible={statusMenuVisible}
+            onDismiss={() => setStatusMenuVisible(false)}
+            anchor={
+              <TouchableOpacity
+                style={[styles.filterButton, selectedStatus && styles.filterButtonActive]}
+                onPress={() => setStatusMenuVisible(!statusMenuVisible)}
+              >
+                <MaterialCommunityIcons
+                  name="filter-variant"
+                  size={16}
+                  color={selectedStatus ? COLORS.primary : COLORS.textSecondary}
+                  style={{ marginRight: SPACING.xs }}
+                />
+                <PaperText style={[styles.filterButtonText, selectedStatus && styles.filterButtonTextActive]}>
+                  {selectedStatus ? CASE_STATUS_LABELS[selectedStatus] : 'Status'}
+                </PaperText>
+                <MaterialCommunityIcons
+                  name="chevron-down"
+                  size={16}
+                  color={selectedStatus ? COLORS.primary : COLORS.textSecondary}
+                  style={{ marginLeft: SPACING.xs }}
+                />
+              </TouchableOpacity>
+            }
+          >
+            <Menu.Item
+              onPress={() => {
+                setSelectedStatus(undefined);
+                setStatusMenuVisible(false);
+              }}
+              title="All Statuses"
+              leadingIcon={!selectedStatus ? "check" : undefined}
+            />
+            <Divider />
+            {Object.values(CaseStatus).map((status) => (
+              <Menu.Item
+                key={status}
+                onPress={() => {
+                  setSelectedStatus(status);
+                  setStatusMenuVisible(false);
+                }}
+                title={CASE_STATUS_LABELS[status]}
+                leadingIcon={selectedStatus === status ? "check" : undefined}
+              />
+            ))}
+          </Menu>
+
+          {/* Service Type Filter */}
+          <Menu
+            visible={serviceTypeMenuVisible}
+            onDismiss={() => setServiceTypeMenuVisible(false)}
+            anchor={
+              <TouchableOpacity
+                style={[styles.filterButton, selectedServiceType && styles.filterButtonActive]}
+                onPress={() => setServiceTypeMenuVisible(!serviceTypeMenuVisible)}
+              >
+                <MaterialCommunityIcons
+                  name="briefcase"
+                  size={16}
+                  color={selectedServiceType ? COLORS.primary : COLORS.textSecondary}
+                  style={{ marginRight: SPACING.xs }}
+                />
+                <PaperText style={[styles.filterButtonText, selectedServiceType && styles.filterButtonTextActive]}>
+                  {selectedServiceType ? SERVICE_TYPE_LABELS[selectedServiceType] : 'Service'}
+                </PaperText>
+                <MaterialCommunityIcons
+                  name="chevron-down"
+                  size={16}
+                  color={selectedServiceType ? COLORS.primary : COLORS.textSecondary}
+                  style={{ marginLeft: SPACING.xs }}
+                />
+              </TouchableOpacity>
+            }
+          >
+            <Menu.Item
+              onPress={() => {
+                setSelectedServiceType(undefined);
+                setServiceTypeMenuVisible(false);
+              }}
+              title="All Services"
+              leadingIcon={!selectedServiceType ? "check" : undefined}
+            />
+            <Divider />
+            {Object.values(ServiceType).map((type) => (
+              <Menu.Item
+                key={type}
+                onPress={() => {
+                  setSelectedServiceType(type);
+                  setServiceTypeMenuVisible(false);
+                }}
+                title={SERVICE_TYPE_LABELS[type]}
+                leadingIcon={selectedServiceType === type ? "check" : undefined}
+              />
+            ))}
+          </Menu>
+
+          {/* Sort Menu */}
+          <Menu
+            visible={sortMenuVisible}
+            onDismiss={() => setSortMenuVisible(false)}
+            anchor={
+              <TouchableOpacity
+                style={styles.filterButton}
+                onPress={() => setSortMenuVisible(!sortMenuVisible)}
+              >
+                <MaterialCommunityIcons
+                  name="sort"
+                  size={16}
+                  color={COLORS.textSecondary}
+                  style={{ marginRight: SPACING.xs }}
+                />
+                <PaperText style={styles.filterButtonText}>
+                  {sortBy === 'date-desc' && 'Newest'}
+                  {sortBy === 'date-asc' && 'Oldest'}
+                  {sortBy === 'status' && 'Status'}
+                  {sortBy === 'priority' && 'Priority'}
+                </PaperText>
+                <MaterialCommunityIcons
+                  name="chevron-down"
+                  size={16}
+                  color={COLORS.textSecondary}
+                  style={{ marginLeft: SPACING.xs }}
+                />
+              </TouchableOpacity>
+            }
+          >
+            <Menu.Item
+              onPress={() => {
+                setSortBy('date-desc');
+                setSortMenuVisible(false);
+              }}
+              title="Newest First"
+              leadingIcon={sortBy === 'date-desc' ? "check" : undefined}
+            />
+            <Menu.Item
+              onPress={() => {
+                setSortBy('date-asc');
+                setSortMenuVisible(false);
+              }}
+              title="Oldest First"
+              leadingIcon={sortBy === 'date-asc' ? "check" : undefined}
+            />
+            <Menu.Item
+              onPress={() => {
+                setSortBy('priority');
+                setSortMenuVisible(false);
+              }}
+              title="By Priority"
+              leadingIcon={sortBy === 'priority' ? "check" : undefined}
+            />
+            <Menu.Item
+              onPress={() => {
+                setSortBy('status');
+                setSortMenuVisible(false);
+              }}
+              title="By Status"
+              leadingIcon={sortBy === 'status' ? "check" : undefined}
+            />
+          </Menu>
+
+          {/* Clear Filters */}
+          {(selectedStatus || selectedServiceType) && (
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={() => {
+                setSelectedStatus(undefined);
+                setSelectedServiceType(undefined);
+              }}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={16}
+                color={COLORS.error}
+              />
+              <PaperText style={styles.clearButtonText}>Clear</PaperText>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </View>
+
+      {/* Results Count */}
+      <View style={styles.resultsBar}>
+        <PaperText style={styles.resultsText}>
+          {filteredAndSortedCases.length} {filteredAndSortedCases.length === 1 ? 'case' : 'cases'} found
+        </PaperText>
+      </View>
+
+      {/* Cases List */}
       <FlatList
-        data={filteredCases}
+        data={filteredAndSortedCases}
         renderItem={renderCaseItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingBottom: Platform.OS === 'ios' ? 100 : 80 }
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
             onRefresh={() => fetchCases(selectedStatus, true)}
+            tintColor={COLORS.primary}
           />
         }
         ListEmptyComponent={
@@ -178,6 +453,17 @@ export default function CasesScreen() {
             onAction={() => router.push('/case/new')}
           />
         }
+        // Performance optimizations for large lists
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={10}
+        windowSize={10}
+        getItemLayout={(data, index) => ({
+          length: 180,
+          offset: 180 * index,
+          index,
+        })}
       />
     </View>
   );
@@ -189,19 +475,32 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
+    backgroundColor: COLORS.surface,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingBottom: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderBottomWidth: 0,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.md,
-    backgroundColor: COLORS.surface,
+    gap: SPACING.md,
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.background,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: SPACING.md,
-    height: 48,
+    height: 52,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   searchIcon: {
     marginRight: SPACING.sm,
@@ -210,31 +509,88 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: COLORS.text,
+    fontWeight: '500',
   },
   addButton: {
-    marginLeft: SPACING.sm,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.primary + '20',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  filters: {
+  filtersBar: {
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  filtersContent: {
+    paddingLeft: SPACING.md,
+    paddingRight: SPACING.md + SPACING.sm,
+    paddingVertical: SPACING.sm,
+  },
+  filterButton: {
     flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    flexWrap: 'wrap',
-  },
-  filterChip: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     marginRight: SPACING.sm,
-    marginBottom: SPACING.sm,
+  },
+  filterButtonActive: {
+    backgroundColor: COLORS.primary + '15',
+    borderColor: COLORS.primary,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: COLORS.primary,
+  },
+  clearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 20,
+  },
+  clearButtonText: {
+    fontSize: 14,
+    color: COLORS.error,
+    fontWeight: '500',
+    marginLeft: SPACING.xs,
+  },
+  resultsBar: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.surface,
+  },
+  resultsText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
   },
   list: {
     padding: SPACING.md,
   },
   card: {
     marginBottom: SPACING.md,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    borderRadius: 16,
   },
   cardContent: {
     padding: SPACING.md,
@@ -242,7 +598,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: SPACING.sm,
   },
   referenceContainer: {
@@ -257,33 +613,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.text,
+    flex: 1,
   },
-  serviceTypeContainer: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: SPACING.sm,
   },
-  serviceIcon: {
-    marginRight: SPACING.xs,
-  },
-  serviceType: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
-  infoRow: {
+  priorityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: SPACING.sm,
+  },
+  priorityText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginLeft: 4,
+  },
+  serviceTypeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  serviceIcon: {
+    marginRight: 4,
+  },
+  serviceTypeText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  infoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: SPACING.md,
     marginTop: SPACING.xs,
   },
-  date: {
+  infoText: {
     fontSize: 13,
     color: COLORS.textSecondary,
-    marginLeft: SPACING.xs,
+    marginLeft: 4,
   },
-  agent: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginLeft: SPACING.xs,
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary + '10',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: SPACING.sm,
+  },
+  pendingText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginLeft: 4,
   },
 });

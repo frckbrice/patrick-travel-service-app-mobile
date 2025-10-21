@@ -22,6 +22,11 @@ apiClient.interceptors.request.use(
       if (user) {
         const token = await user.getIdToken();
         config.headers.Authorization = `Bearer ${token}`;
+        console.log(`🔑 API Request to ${config.url} with auth token`);
+      } else {
+        console.warn(
+          `⚠️ API Request to ${config.url} WITHOUT auth token - no Firebase user`
+        );
       }
     } catch (error) {
       logger.error('Error getting auth token', error);

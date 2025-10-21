@@ -34,7 +34,9 @@ export default function FAQScreen() {
     setIsLoading(true);
     const response = await faqApi.getAllFAQs();
     if (response.success && response.data) {
-      setFaqs(response.data.filter((faq) => faq.isActive));
+      // Ensure data is an array before filtering
+      const faqData = Array.isArray(response.data) ? response.data : [];
+      setFaqs(faqData.filter((faq) => faq.isActive));
     }
     setIsLoading(false);
   };

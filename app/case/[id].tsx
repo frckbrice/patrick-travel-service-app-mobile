@@ -115,16 +115,47 @@ export default function CaseDetailsScreen() {
               </Text>
             </View>
 
-            {caseData.assignedAgent && (
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons
-                  name="account"
-                  size={18}
-                  color={COLORS.textSecondary}
-                />
-                <Text style={styles.infoText}>
-                  Advisor: {caseData.assignedAgent.firstName}{' '}
-                  {caseData.assignedAgent.lastName}
+            {caseData.assignedAgent ? (
+              <View style={styles.advisorSection}>
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons
+                    name="account"
+                    size={18}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.infoText}>
+                    <Text style={styles.advisorLabel}>Advisor: </Text>
+                    <Text style={styles.advisorName}>
+                      {caseData.assignedAgent.firstName}{' '}
+                      {caseData.assignedAgent.lastName}
+                    </Text>
+                  </Text>
+                </View>
+                <View style={styles.chatAvailableBadge}>
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={14}
+                    color={COLORS.success}
+                  />
+                  <Text style={styles.chatAvailableText}>
+                    {t('cases.chatAvailable')}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.noAdvisorSection}>
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons
+                    name="account-clock"
+                    size={18}
+                    color={COLORS.warning}
+                  />
+                  <Text style={styles.pendingText}>
+                    {t('cases.awaitingAssignment')}
+                  </Text>
+                </View>
+                <Text style={styles.helperText}>
+                  {t('cases.assignmentHelper')}
                 </Text>
               </View>
             )}
@@ -153,13 +184,35 @@ export default function CaseDetailsScreen() {
         entering={FadeInDown.delay(100).duration(400)}
         style={styles.actions}
       >
-        <Button
-          title={t('cases.messageAdvisor')}
-          icon="message"
-          onPress={() => router.push(`/message/${caseData.id}`)}
-          fullWidth
-          style={styles.actionButton}
-        />
+        {caseData.assignedAgent ? (
+          <>
+            <Button
+              title={t('cases.messageAdvisor')}
+              icon="message"
+              onPress={() => router.push(`/message/${caseData.id}`)}
+              fullWidth
+              style={styles.actionButton}
+            />
+            <Text style={styles.chatHint}>
+              💬 {t('cases.chatHint')}
+            </Text>
+          </>
+        ) : (
+          <View style={styles.disabledChatSection}>
+            <MaterialCommunityIcons
+              name="message-off"
+              size={48}
+              color={COLORS.textSecondary}
+            />
+            <Text style={styles.disabledChatTitle}>
+              {t('cases.chatNotAvailable')}
+            </Text>
+            <Text style={styles.disabledChatDescription}>
+              {t('cases.chatNotAvailableDesc')}
+            </Text>
+          </View>
+        )}
+
         <Button
           title={t('documents.uploadDocument')}
           icon="upload"
@@ -281,11 +334,90 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
   },
+  advisorSection: {
+    backgroundColor: COLORS.primary + '08',
+    padding: SPACING.md,
+    borderRadius: 12,
+    marginTop: SPACING.sm,
+  },
+  advisorLabel: {
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  advisorName: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  chatAvailableBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+    paddingTop: SPACING.xs,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    gap: 4,
+  },
+  chatAvailableText: {
+    fontSize: 12,
+    color: COLORS.success,
+    fontWeight: '600',
+  },
+  noAdvisorSection: {
+    backgroundColor: COLORS.warning + '08',
+    padding: SPACING.md,
+    borderRadius: 12,
+    marginTop: SPACING.sm,
+  },
+  pendingText: {
+    fontSize: 14,
+    color: COLORS.warning,
+    marginLeft: SPACING.sm,
+    fontWeight: '600',
+  },
+  helperText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.sm,
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
   actions: {
     paddingHorizontal: SPACING.md,
   },
   actionButton: {
     marginBottom: SPACING.sm,
+  },
+  chatHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.md,
+    fontStyle: 'italic',
+  },
+  disabledChatSection: {
+    alignItems: 'center',
+    padding: SPACING.xl,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+  disabledChatTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: SPACING.md,
+  },
+  disabledChatDescription: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+    lineHeight: 20,
   },
   sectionTitle: {
     fontSize: 18,

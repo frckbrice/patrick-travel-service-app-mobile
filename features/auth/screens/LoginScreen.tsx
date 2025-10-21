@@ -7,8 +7,9 @@ import {
   Platform,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
-import { TextInput, Button, Text, Checkbox, Divider } from 'react-native-paper';
+import { TextInput, Text, Divider } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useRouter } from 'expo-router';
@@ -38,7 +39,6 @@ export default function LoginScreen() {
   );
   const enableBiometric = useAuthStore((state) => state.enableBiometric);
   const router = useRouter();
-  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
@@ -104,8 +104,6 @@ export default function LoginScreen() {
     const success = await login(data);
 
     if (success) {
-      await secureStorage.setRememberMe(rememberMe);
-
       // Offer to enable biometric if available and not already enabled
       if (biometricAvailable && !biometricEnabled) {
         setTimeout(() => {
@@ -236,7 +234,7 @@ export default function LoginScreen() {
                   <TextInput.Icon
                     icon={showPassword ? 'eye-off' : 'eye'}
                     onPress={() => setShowPassword(!showPassword)}
-                    iconColor={COLORS.textSecondary}
+                    color={COLORS.textSecondary}
                   />
                 }
               />
@@ -246,21 +244,7 @@ export default function LoginScreen() {
             <Text style={styles.fieldError}>{errors.password.message}</Text>
           )}
 
-          <View style={styles.optionsRow}>
-            <TouchableOpacity
-              style={styles.checkboxContainer}
-              onPress={() => setRememberMe(!rememberMe)}
-              activeOpacity={0.7}
-            >
-              <Checkbox
-                status={rememberMe ? 'checked' : 'unchecked'}
-                onPress={() => setRememberMe(!rememberMe)}
-                color={COLORS.primary}
-                uncheckedColor={COLORS.textSecondary}
-              />
-              <Text style={styles.checkboxText}>{t('auth.rememberMe')}</Text>
-            </TouchableOpacity>
-
+          <View style={styles.forgotPasswordContainer}>
             <Link href="/(auth)/forgot-password" asChild>
               <TouchableOpacity>
                 <Text style={styles.link}>{t('auth.forgotPassword')}</Text>
@@ -268,17 +252,23 @@ export default function LoginScreen() {
             </Link>
           </View>
 
-          <Button
-            mode="contained"
-            onPress={handleSubmit(onSubmit)}
-            loading={isLoading}
-            disabled={isLoading || isGoogleLoading || isBiometricLoading}
+          <TouchableOpacity
+            onPress={() => {
+              if (isLoading || isGoogleLoading || isBiometricLoading) return;
+              handleSubmit(onSubmit)();
+            }}
             style={styles.button}
-            contentStyle={styles.buttonContent}
-            labelStyle={styles.buttonLabel}
+            activeOpacity={0.8}
           >
-            {t('auth.signIn')}
-          </Button>
+            {isLoading ? (
+              <View style={styles.buttonLoading}>
+                <ActivityIndicator color={COLORS.surface} size="small" />
+                <Text style={styles.buttonLabel}>{t('auth.signIn')}</Text>
+              </View>
+            ) : (
+              <Text style={styles.buttonLabel}>{t('auth.signIn')}</Text>
+            )}
+          </TouchableOpacity>
 
           {/* Optional Biometric Login Button - Only shows if user enabled it */}
           {biometricAvailable && biometricEnabled && (
@@ -385,20 +375,9 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     textAlign: 'center',
   },
-  optionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  forgotPasswordContainer: {
+    alignItems: 'flex-end',
     marginVertical: SPACING.md,
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkboxText: {
-    color: COLORS.text,
-    fontSize: 14,
-    marginLeft: 4,
   },
   link: {
     color: COLORS.primary,
@@ -408,13 +387,26 @@ const styles = StyleSheet.create({
   button: {
     marginTop: SPACING.md,
     borderRadius: 12,
-  },
-  buttonContent: {
-    paddingVertical: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   buttonLabel: {
     fontSize: 16,
     fontWeight: '600',
+    color: COLORS.surface,
+  },
+  buttonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   biometricButton: {
     flexDirection: 'row',
