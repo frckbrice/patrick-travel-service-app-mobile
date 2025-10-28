@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, memo, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,7 +8,7 @@ import {
   Text,
   TextInput as RNTextInput,
   TouchableOpacity,
-  Alert,
+  Alert,Keyboard, KeyboardEvent 
 } from 'react-native';
 import { Avatar } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
@@ -19,7 +19,7 @@ import Animated, { FadeInRight, FadeInLeft } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
-import { chatService, ChatMessage } from '../../lib/services/chat';
+import { chatService, ChatMessage, Conversation } from '../../lib/services/chat';
 import { useChatPagination } from '../../lib/hooks/usePagination';
 import { useThrottle } from '../../lib/hooks';
 import {
@@ -32,6 +32,37 @@ import { uploadThingService } from '../../lib/services/uploadthing';
 import { COLORS, SPACING } from '../../lib/constants';
 import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
+import { SafeAreaView } from 'react-native-safe-area-context'; // Make sure this import exists
+
+
+ // Standalone memoized chat input prevents parent re-renders on keystrokes
+ const ChatInput = memo(function ChatInput({
+  value,
+  onChangeText,
+  placeholder,
+  editable,
+}: {
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder: string;
+  editable: boolean;
+}) {
+  const onChange = React.useCallback((text: string) => onChangeText(text), [onChangeText]);
+  return (
+    <View style={styles.inputWrapperInner}>
+      <RNTextInput
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChange}
+        style={styles.input}
+        multiline
+        maxLength={500}
+        placeholderTextColor={COLORS.textSecondary}
+        editable={editable}
+      />
+    </View>
+  );
+});
 
 export default function ChatScreen() {
   useRequireAuth();
@@ -53,11 +84,38 @@ export default function ChatScreen() {
   const flatListRef = useRef<FlatList>(null);
   const scrollToEndTimeoutRef = useRef<number | null>(null);
   const [unsubscribeMessages, setUnsubscribeMessages] = useState<(() => void) | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+  useEffect(() => {
+    const onShow = (e: KeyboardEvent) => {
+      const height = (e as any)?.endCoordinates?.height ?? 0;
+      console.log('keyboard show, height', height);
+      setKeyboardHeight(height);
+    };
+    const onHide = () => {
+      console.log('keyboard hide');
+      setKeyboardHeight(0);
+    };
+
+    const subs = Platform.OS === 'ios'
+      ? [
+          Keyboard.addListener('keyboardWillShow', onShow),
+          Keyboard.addListener('keyboardWillHide', onHide),
+        ]
+      : [
+          Keyboard.addListener('keyboardDidShow', onShow),
+          Keyboard.addListener('keyboardDidHide', onHide),
+        ];
+
+    return () => {
+      subs.forEach(sub => sub.remove());
+    };
+  }, []);
   // Use pagination hook for messages
   const {
     data: messages,
     setData: setMessages,
+    prependData,
     appendData: appendMessages,
     isLoading,
     isLoadingMore,
@@ -90,25 +148,6 @@ export default function ChatScreen() {
 
     initializeChat();
 
-    // Set up real-time listener for new messages only
-    const unsubscribe = chatService.onNewMessagesChange(
-      caseId,
-      (newMessages) => {
-        logger.info('Received new messages', { count: newMessages.length });
-        appendMessages(newMessages);
-        
-        // Throttle scroll to end to avoid performance issues
-        if (scrollToEndTimeoutRef.current) {
-          clearTimeout(scrollToEndTimeoutRef.current);
-        }
-        scrollToEndTimeoutRef.current = setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      }
-    );
-    
-    setUnsubscribeMessages(unsubscribe);
-
     // Mark messages as read when opening chat
     if (user) {
       chatService.markMessagesAsRead(caseId, user.id).catch(error => {
@@ -118,12 +157,70 @@ export default function ChatScreen() {
     }
 
     return () => {
-      unsubscribe();
+      if (unsubscribeMessages) {
+        unsubscribeMessages();
+      }
       if (scrollToEndTimeoutRef.current) {
         clearTimeout(scrollToEndTimeoutRef.current);
       }
+      
+      // Clean up cache when chat is closed (FIFO - keep only last 20 messages)
+      if (caseId) {
+        chatService.cleanupCacheOnChatClose(caseId).catch(error => {
+          logger.warn('Failed to cleanup cache on chat close', error);
+        });
+      }
     };
   }, [caseId, user]);
+
+  // Set up real-time listener for new messages
+  useEffect(() => {
+    if (!caseId) return;
+
+    // Clean up existing listener
+    if (unsubscribeMessages) {
+      unsubscribeMessages();
+    }
+
+    // Only set up listener if we have messages loaded
+    if (messages.length > 0) {
+      logger.info('Setting up real-time listener', { caseId, messageCount: messages.length });
+      
+      // Get the latest timestamp from current messages
+      const latestTimestamp = messages[messages.length - 1].timestamp;
+      logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
+      
+      const unsubscribe = chatService.onNewMessagesChange(
+        caseId,
+        (newMessages) => {
+          logger.info('Received new messages via real-time listener', { 
+            count: newMessages.length,
+            messageIds: newMessages.map(m => m.id),
+            senderIds: newMessages.map(m => m.senderId)
+          });
+          appendMessages(newMessages);
+          
+          // Throttle scroll to end to avoid performance issues
+          if (scrollToEndTimeoutRef.current) {
+            clearTimeout(scrollToEndTimeoutRef.current);
+          }
+          scrollToEndTimeoutRef.current = setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        },
+        latestTimestamp
+      );
+      
+      setUnsubscribeMessages(unsubscribe);
+
+      return () => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+      };
+    }
+  }, [caseId, messages.length]);
+
 
   const handleSendMessage = useCallback(async () => {
     if (
@@ -206,6 +303,16 @@ export default function ChatScreen() {
         };
         return updated;
       });
+
+      // Friendly feedback for permission issues
+      const errorMessage = String(error?.message || '');
+      const errorCode = (error as any)?.code;
+      if (errorCode === 'PERMISSION_DENIED' || /PERMISSION_DENIED/i.test(errorMessage)) {
+        Alert.alert(
+          t('common.error'),
+          t('messages.permissionDeniedSend') || 'You do not have permission to send messages in this conversation.'
+        );
+      }
     }
   }, [newMessage, selectedAttachments, user, caseId]);
 
@@ -439,11 +546,7 @@ export default function ChatScreen() {
 
       return (
         <AnimatedView
-          entering={
-            isMyMessage
-              ? FadeInRight.delay(index * 20)
-              : FadeInLeft.delay(index * 20)
-          }
+          entering={Platform.OS === 'android' ? undefined : (isMyMessage ? FadeInRight.delay(index * 20) : FadeInLeft.delay(index * 20))}
           style={[
             styles.messageContainer,
             isMyMessage && styles.myMessageContainer,
@@ -610,179 +713,326 @@ export default function ChatScreen() {
 
   // Handle load more (pull to refresh for older messages)
   const handleLoadMore = useCallback(() => {
-    if (hasMore && !isLoadingMore) {
-      loadMore();
+    if (hasMore && !isLoadingMore && messages.length > 0) {
+      const oldestMessage = messages[messages.length - 1];
+      if (oldestMessage) {
+        loadMore(oldestMessage.timestamp);
+      }
     }
-  }, [hasMore, isLoadingMore, loadMore]);
+  }, [hasMore, isLoadingMore, messages.length, loadMore]);
 
   // Handle pull to refresh
   const handleRefresh = useCallback(() => {
     refresh();
   }, [refresh]);
 
-  // Calculate exact input area height for proper message spacing
-  const inputAreaHeight = React.useMemo(() => {
-    const containerPadding = SPACING.xs; // paddingTop from styles
-    const rowPadding = 6 + 10; // paddingVertical + paddingBottom
-    const inputHeight = 44; // minHeight of inputWrapperInner
-    const bottomPadding = Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 30;
-    const extraPadding = 10; // Additional padding for visual separation
-    
-    return containerPadding + rowPadding + inputHeight + bottomPadding + extraPadding;
-  }, [insets.bottom]);
+  // Dynamically measure input container height (includes safe area) to avoid overlap
+  const [inputHeight, setInputHeight] = useState(0);
 
-  // Memoize input container style to prevent re-renders
-  const inputContainerStyle = React.useMemo(() => [
-    styles.inputContainer, 
-    { paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 30 }
-  ], [insets.bottom]);
+  // Memoize all styles to prevent re-renders
+  const inputContainerStyle = useMemo(() => [
+    styles.inputContainer,
+    {
+      paddingBottom: keyboardHeight === 0 || inputHeight === 0 ? insets.bottom + 10 : insets.bottom + 40,
+    },
+  ], [keyboardHeight, inputHeight, insets.bottom]);
 
-  // Memoize input component to prevent re-renders
-  const InputComponent = React.useMemo(() => (
-    <View style={styles.inputWrapperInner}>
-      <RNTextInput
-        placeholder={t('messages.typeMessage')}
-        value={newMessage}
-        onChangeText={setNewMessage}
-        style={styles.input}
-        multiline
-        maxLength={500}
-        placeholderTextColor={COLORS.textSecondary}
-        editable={!isUploading}
-      />
-    </View>
-  ), [newMessage, isUploading, t]);
+  const flatListContentStyle = useMemo(() => ({
+    paddingBottom: inputHeight + keyboardHeight + insets.bottom + 12,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+  }), [inputHeight, keyboardHeight, insets.bottom]);
+
+  // Memoize ListHeaderComponent to prevent re-renders
+  const ListHeaderComponent = useMemo(() => {
+    if (!isLoadingMore) return null;
+    return (
+      <View style={styles.loadingIndicator}>
+        <Text style={styles.loadingText}>{t('common.loading')}...</Text>
+      </View>
+    );
+  }, [isLoadingMore, t]);
+
+  // Memoize FlatList props
+  const flatListProps = useMemo(() => ({
+    removeClippedSubviews: true,
+    maxToRenderPerBatch: 15,
+    initialNumToRender: 15,
+    windowSize: 10,
+    inverted: false,
+    showsVerticalScrollIndicator: false,
+    keyboardShouldPersistTaps: 'handled' as const,
+    onEndReachedThreshold: 0.1,
+  }), []);
+
+  // Memoize attachment removal callback
+  const removeAttachment = useCallback((index: number) => {
+    setSelectedAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+
+  console.log('keyboardHeight', keyboardHeight);
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 100}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom : 0}
     >
-      <FlatList
+        <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
         keyExtractor={keyExtractor}
-        contentContainerStyle={[
-          styles.messagesList,
-          { paddingBottom: inputAreaHeight } // Precise spacing for input area
-        ]}
+        contentContainerStyle={flatListContentStyle}
         onContentSizeChange={scrollToEnd}
-        // Pagination features
         onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.1}
         refreshing={isLoading}
         onRefresh={handleRefresh}
-        // Performance optimizations
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={15}
-        initialNumToRender={15}
-        windowSize={10}
-        inverted={false}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        // Loading indicators
-        ListHeaderComponent={
-          isLoadingMore ? (
-            <View style={styles.loadingIndicator}>
-              <Text style={styles.loadingText}>{t('common.loading')}...</Text>
-            </View>
-          ) : null
-        }
+        ListHeaderComponent={ListHeaderComponent}
+        {...flatListProps}
+        removeClippedSubviews={Platform.OS === 'android' ? false : flatListProps.removeClippedSubviews}
       />
-
-      {/* <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 120}
-        style={styles.inputWrapper}
-      > */}
-        <View style={inputContainerStyle}>
-        {/* Selected Attachments Preview */}
-        {selectedAttachments.length > 0 && (
-          <View style={styles.selectedAttachmentsContainer}>
-            {selectedAttachments.map((attachment, index) => (
-              <View key={index} style={styles.selectedAttachment}>
-                <MaterialCommunityIcons
-                  name={getFileIconForMimeType(attachment.type) as any}
-                  size={20}
-                  color={COLORS.primary}
-                />
-                <Text style={styles.selectedAttachmentName} numberOfLines={1}>
-                  {attachment.name}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setSelectedAttachments((prev) =>
-                      prev.filter((_, i) => i !== index)
-                    );
-                  }}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
+  
+      {/* WhatsApp-like input above nav bar */}
+      <View
+        style={[
+          inputContainerStyle,
+          { paddingBottom: keyboardHeight > 0 ? insets.bottom + 40 : insets.bottom + 10 }
+        ]}
+        onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
+      >
+          {selectedAttachments.length > 0 && (
+            <View style={styles.selectedAttachmentsContainer}>
+              {selectedAttachments.map((attachment, index) => (
+                <View key={index} style={styles.selectedAttachment}>
                   <MaterialCommunityIcons
-                    name="close-circle"
-                    size={18}
-                    color={COLORS.error}
+                    name={getFileIconForMimeType(attachment.type) as any}
+                    size={20}
+                    color={COLORS.primary}
                   />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Upload Progress Indicator */}
-        {isUploading && (
-          <View style={styles.uploadProgressContainer}>
-            <View style={styles.progressBar}>
-              <View
-                style={[styles.progressFill, { width: `${uploadProgress}%` }]}
-              />
+                  <Text style={styles.selectedAttachmentName} numberOfLines={1}>
+                    {attachment.name}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => removeAttachment(index)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={18}
+                      color={COLORS.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
-            <Text style={styles.uploadProgressText}>
-              {t('common.uploading')} {Math.round(uploadProgress)}%
-            </Text>
+          )}
+  
+          {isUploading && (
+            <View style={styles.uploadProgressContainer}>
+              <View style={styles.progressBar}>
+                <View
+                  style={[styles.progressFill, { width: `${uploadProgress}%` }]}
+                />
+              </View>
+              <Text style={styles.uploadProgressText}>
+                {t('common.uploading')} {Math.round(uploadProgress)}%
+              </Text>
+            </View>
+          )}
+  
+          <View style={styles.inputRow}>
+            <TouchableOpacity
+              style={styles.attachButton}
+              onPress={handlePickFile}
+              disabled={isUploading}
+            >
+              <MaterialCommunityIcons
+                name="paperclip"
+                size={24}
+                color={isUploading ? COLORS.textSecondary : COLORS.primary}
+              />
+            </TouchableOpacity>
+  
+            <ChatInput
+              value={newMessage}
+              onChangeText={setNewMessage}
+              placeholder={t('messages.typeMessage')}
+              editable={!isUploading}
+            />
+  
+            <TouchableOpacity
+              onPress={handleSendMessage}
+              disabled={
+                (!newMessage.trim() && selectedAttachments.length === 0) ||
+                isUploading
+              }
+              style={[
+                styles.sendButton,
+                ((!newMessage.trim() && selectedAttachments.length === 0) ||
+                  isUploading) &&
+                  styles.sendButtonDisabled,
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="send"
+                size={24}
+                color={COLORS.surface}
+              />
+            </TouchableOpacity>
           </View>
-        )}
-
-        <View style={styles.inputRow}>
-          <TouchableOpacity
-            style={styles.attachButton}
-            onPress={handlePickFile}
-            disabled={isUploading}
-          >
-            <MaterialCommunityIcons
-              name="paperclip"
-              size={24}
-              color={isUploading ? COLORS.textSecondary : COLORS.primary}
-            />
-          </TouchableOpacity>
-
-          {InputComponent}
-
-          <TouchableOpacity
-            onPress={handleSendMessage}
-            disabled={
-              (!newMessage.trim() && selectedAttachments.length === 0) ||
-              isUploading
-            }
-            style={[
-              styles.sendButton,
-              ((!newMessage.trim() && selectedAttachments.length === 0) ||
-                isUploading) &&
-                styles.sendButtonDisabled,
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="send"
-              size={24}
-              color={COLORS.surface}
-            />
-          </TouchableOpacity>
         </View>
-      </View>
-  </KeyboardAvoidingView>
+    </KeyboardAvoidingView>
   );
+  
 }
+//   return (
+//     <KeyboardAvoidingView
+//   style={{ flex: 1, backgroundColor: COLORS.background }}
+//   behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+//   keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+// >
+//       <FlatList
+//         ref={flatListRef}
+//         data={messages}
+//         renderItem={renderMessage}
+//         keyExtractor={keyExtractor}
+//         // contentContainerStyle={[
+//         //   styles.messagesList,
+//         //   { paddingBottom: inputHeight + insets.bottom + 16 },
+//         // ]}
+//         contentContainerStyle={{
+//           paddingHorizontal: SPACING.md,
+//           paddingTop: SPACING.md,
+//           paddingBottom: inputHeight + SPACING.sm, // add space equal to input height
+//         }}
+//         keyboardShouldPersistTaps="handled"
+//         onContentSizeChange={scrollToEnd}
+//         onEndReached={handleLoadMore}
+//         onEndReachedThreshold={0.1}
+//         refreshing={isLoading}
+//         onRefresh={handleRefresh}
+//         removeClippedSubviews
+//         maxToRenderPerBatch={15}
+//         initialNumToRender={15}
+//         windowSize={10}
+//         inverted={false}
+//         showsVerticalScrollIndicator={false}
+//         keyboardShouldPersistTaps="handled"
+//         ListHeaderComponent={
+//           isLoadingMore ? (
+//             <View style={styles.loadingIndicator}>
+//               <Text style={styles.loadingText}>{t('common.loading')}...</Text>
+//             </View>
+//           ) : null
+//         }
+//       />
+  
+//       {/* WhatsApp-like input above nav bar */}
+//       {/* <KeyboardAvoidingView
+//         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+//         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom : 0}
+//       > */}
+//         <View
+//           style={[
+//             styles.inputContainer,
+//             {
+//               paddingBottom: insets.bottom > 0 ? insets.bottom : 12,
+//             },
+//           ]}
+//           onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
+//         >
+//           {selectedAttachments.length > 0 && (
+//             <View style={styles.selectedAttachmentsContainer}>
+//               {selectedAttachments.map((attachment, index) => (
+//                 <View key={index} style={styles.selectedAttachment}>
+//                   <MaterialCommunityIcons
+//                     name={getFileIconForMimeType(attachment.type) as any}
+//                     size={20}
+//                     color={COLORS.primary}
+//                   />
+//                   <Text style={styles.selectedAttachmentName} numberOfLines={1}>
+//                     {attachment.name}
+//                   </Text>
+//                   <TouchableOpacity
+//                     onPress={() => {
+//                       setSelectedAttachments((prev) =>
+//                         prev.filter((_, i) => i !== index)
+//                       );
+//                     }}
+//                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+//                   >
+//                     <MaterialCommunityIcons
+//                       name="close-circle"
+//                       size={18}
+//                       color={COLORS.error}
+//                     />
+//                   </TouchableOpacity>
+//                 </View>
+//               ))}
+//             </View>
+//           )}
+  
+//           {isUploading && (
+//             <View style={styles.uploadProgressContainer}>
+//               <View style={styles.progressBar}>
+//                 <View
+//                   style={[styles.progressFill, { width: `${uploadProgress}%` }]}
+//                 />
+//               </View>
+//               <Text style={styles.uploadProgressText}>
+//                 {t('common.uploading')} {Math.round(uploadProgress)}%
+//               </Text>
+//             </View>
+//           )}
+  
+//           <View style={styles.inputRow}>
+//             <TouchableOpacity
+//               style={styles.attachButton}
+//               onPress={handlePickFile}
+//               disabled={isUploading}
+//             >
+//               <MaterialCommunityIcons
+//                 name="paperclip"
+//                 size={24}
+//                 color={isUploading ? COLORS.textSecondary : COLORS.primary}
+//               />
+//             </TouchableOpacity>
+  
+//             <ChatInput
+//               value={newMessage}
+//               onChangeText={setNewMessage}
+//               placeholder={t('messages.typeMessage')}
+//               editable={!isUploading}
+//             />
+  
+//             <TouchableOpacity
+//               onPress={handleSendMessage}
+//               disabled={
+//                 (!newMessage.trim() && selectedAttachments.length === 0) ||
+//                 isUploading
+//               }
+//               style={[
+//                 styles.sendButton,
+//                 ((!newMessage.trim() && selectedAttachments.length === 0) ||
+//                   isUploading) &&
+//                   styles.sendButtonDisabled,
+//               ]}
+//             >
+//               <MaterialCommunityIcons
+//                 name="send"
+//                 size={24}
+//                 color={COLORS.surface}
+//               />
+//             </TouchableOpacity>
+//           </View>
+//         </View>
+//       </KeyboardAvoidingView>
+//   );
+  
+  
+// }
 
 const styles = StyleSheet.create({
   container: {
@@ -790,20 +1040,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     // Subtle pattern background effect
   },
-  // inputWrapper: {
-  //   position: 'absolute',
-  //   bottom: 0,
-  //   left: 0,
-  //   right: 0,
-  //   backgroundColor: 'red',
-  //   borderTopLeftRadius: 20,
-  //   borderTopRightRadius: 20,
-  //   shadowColor: '#000',
-  //   shadowOffset: { width: 0, height: -4 },
-  //   shadowOpacity: 0.1,
-  //   shadowRadius: 12,
-  //   elevation: 12,
-  // },
+
   messagesList: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
@@ -921,21 +1158,24 @@ const styles = StyleSheet.create({
   myAttachmentSize: {
     color: COLORS.surface + 'DD',
   },
+
   inputContainer: {
     paddingTop: SPACING.xs,
     paddingHorizontal: SPACING.sm,
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    shadowColor: COLORS.text,
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 6,
+    minHeight: 60, // Ensure minimum height for visibility
+   
   },
+  
   selectedAttachmentsContainer: {
     marginBottom: SPACING.sm,
     gap: SPACING.xs,
@@ -981,8 +1221,8 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingVertical: 6,
-    paddingBottom: 10,
+    paddingVertical: 8,
+    paddingBottom: 8,
   },
   attachButton: {
     width: 44,
