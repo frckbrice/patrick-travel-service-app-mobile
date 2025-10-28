@@ -69,6 +69,13 @@ export enum MessageType {
   EMAIL = 'EMAIL',
 }
 
+export enum TemplateCategory {
+  FORM = 'FORM',
+  GUIDE = 'GUIDE',
+  SAMPLE = 'SAMPLE',
+  CHECKLIST = 'CHECKLIST',
+}
+
 export enum TransferReason {
   REASSIGNMENT = 'REASSIGNMENT',
   COVERAGE = 'COVERAGE',
@@ -377,6 +384,36 @@ export interface AccountDeletionRequest {
   reason?: string;
   scheduledDeletionDate: Date;
   immediateDataAnonymization: boolean;
+}
+
+// ============================================================================
+// TEMPLATE TYPES
+// ============================================================================
+
+export interface DocumentTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  serviceType: ServiceType;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  category: TemplateCategory;
+  isRequired: boolean;
+  downloadCount: number;
+  version: string;
+  fileUrl?: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CachedTemplate {
+  templateId: string;
+  localUri: string;
+  version: string;
+  cachedAt: string;
+  fileName: string;
 }
 
 // ⚠️ Note: Web API uses slightly different structure for push tokens

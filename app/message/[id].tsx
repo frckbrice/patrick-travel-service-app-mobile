@@ -9,7 +9,6 @@ import {
   TextInput as RNTextInput,
   TouchableOpacity,
   Alert,
-  Image,
 } from 'react-native';
 import { Avatar } from 'react-native-paper';
 import { useLocalSearchParams } from 'expo-router';
@@ -17,9 +16,11 @@ import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { FadeInRight, FadeInLeft } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { chatService, ChatMessage } from '../../lib/services/chat';
+import { useChatPagination } from '../../lib/hooks/usePagination';
 import { useThrottle } from '../../lib/hooks';
 import {
   downloadAndShareFile,
@@ -35,9 +36,9 @@ import { logger } from '../../lib/utils/logger';
 export default function ChatScreen() {
   useRequireAuth();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { id: caseId } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [selectedAttachments, setSelectedAttachments] = useState<
     {
@@ -51,18 +52,51 @@ export default function ChatScreen() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const scrollToEndTimeoutRef = useRef<number | null>(null);
+  const [unsubscribeMessages, setUnsubscribeMessages] = useState<(() => void) | null>(null);
+
+  // Use pagination hook for messages
+  const {
+    data: messages,
+    setData: setMessages,
+    appendData: appendMessages,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    error: paginationError,
+    loadInitial,
+    loadMore,
+    refresh,
+  } = useChatPagination(
+    caseId || '',
+    chatService.loadInitialMessages,
+    (beforeTimestamp: number) => chatService.loadOlderMessages(caseId || '', beforeTimestamp)
+  );
 
   useEffect(() => {
     if (!caseId) return;
 
     logger.info('Chat screen mounted', { caseId });
 
-    // Subscribe to messages with limit for performance
-    const unsubscribe = chatService.onMessagesChange(
-      caseId,
-      (msgs) => {
-        setMessages(msgs);
+    // Load initial messages using pagination hook
+    const initializeChat = async () => {
+      try {
+        logger.info('Starting chat initialization', { caseId });
+        await loadInitial();
+        logger.info('Chat initialization completed', { caseId });
+      } catch (error) {
+        logger.error('Failed to initialize chat', error);
+      }
+    };
 
+    initializeChat();
+
+    // Set up real-time listener for new messages only
+    const unsubscribe = chatService.onNewMessagesChange(
+      caseId,
+      (newMessages) => {
+        logger.info('Received new messages', { count: newMessages.length });
+        appendMessages(newMessages);
+        
         // Throttle scroll to end to avoid performance issues
         if (scrollToEndTimeoutRef.current) {
           clearTimeout(scrollToEndTimeoutRef.current);
@@ -70,13 +104,17 @@ export default function ChatScreen() {
         scrollToEndTimeoutRef.current = setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 100);
-      },
-      100
-    ); // Limit to last 100 messages
+      }
+    );
+    
+    setUnsubscribeMessages(unsubscribe);
 
     // Mark messages as read when opening chat
     if (user) {
-      chatService.markMessagesAsRead(caseId, user.id);
+      chatService.markMessagesAsRead(caseId, user.id).catch(error => {
+        // Silently handle permission errors - user may not have permission to mark messages as read
+        logger.warn('Failed to mark messages as read (non-blocking)', error);
+      });
     }
 
     return () => {
@@ -115,7 +153,7 @@ export default function ChatScreen() {
     };
 
     // 1. Add message to UI immediately
-    setMessages((prev) => [...prev, optimisticMessage]);
+    appendMessages([optimisticMessage]);
 
     // 2. Clear input immediately for better UX
     setNewMessage('');
@@ -343,16 +381,22 @@ export default function ChatScreen() {
       type: string;
       size: number;
     }) => {
-      logger.info('Downloading attachment', { filename: attachment.name });
+      try {
+        logger.info('Downloading attachment', { filename: attachment.name });
 
-      const success = await downloadAndShareFile({
-        url: attachment.url,
-        filename: attachment.name,
-        mimeType: attachment.type,
-      });
+        const success = await downloadAndShareFile({
+          url: attachment.url,
+          filename: attachment.name,
+          mimeType: attachment.type,
+        });
 
-      if (success) {
-        logger.info('Attachment downloaded successfully');
+        if (success) {
+          logger.info('Attachment downloaded successfully');
+        } else {
+          logger.warn('Attachment download failed');
+        }
+      } catch (error) {
+        logger.error('Error downloading attachment', error);
       }
     },
     []
@@ -360,13 +404,28 @@ export default function ChatScreen() {
 
   // Format message timestamp with smart formatting
   const formatMessageTime = useCallback((timestamp: number) => {
-    const date = new Date(timestamp);
-    if (isToday(date)) {
-      return format(date, 'h:mm a');
-    } else if (isYesterday(date)) {
-      return `Yesterday ${format(date, 'h:mm a')}`;
-    } else {
-      return format(date, 'MMM dd, h:mm a');
+    // Validate timestamp
+    if (!timestamp || isNaN(timestamp) || timestamp <= 0) {
+      return 'Invalid date';
+    }
+    
+    try {
+      const date = new Date(timestamp);
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return 'Invalid date';
+      }
+      
+      if (isToday(date)) {
+        return format(date, 'h:mm a');
+      } else if (isYesterday(date)) {
+        return `Yesterday ${format(date, 'h:mm a')}`;
+      } else {
+        return format(date, 'MMM dd, h:mm a');
+      }
+    } catch (error) {
+      logger.error('Error formatting timestamp', { timestamp, error });
+      return 'Invalid date';
     }
   }, []);
 
@@ -408,7 +467,7 @@ export default function ChatScreen() {
             {!isMyMessage && (
               <Text style={styles.senderName}>{item.senderName}</Text>
             )}
-            {item.message && (
+            {(item.message && item.message.trim() !== '') && (
               <Text
                 style={[
                   styles.messageText,
@@ -416,6 +475,7 @@ export default function ChatScreen() {
                   item.status === 'pending' && styles.pendingMessageText,
                   item.status === 'failed' && styles.failedMessageText,
                 ]}
+                numberOfLines={100}
               >
                 {item.message}
               </Text>
@@ -537,36 +597,107 @@ export default function ChatScreen() {
     [user, formatMessageTime, handleDownloadAttachment, handleRetryMessage, handleDeleteFailedMessage]
   );
 
-  // Memoize key extractor
-  const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
+  // Memoize key extractor with unique key generation
+  const keyExtractor = useCallback((item: ChatMessage, index: number) => {
+    // Use tempId for optimistic messages, otherwise use id with index for uniqueness
+    return item.tempId || `${item.id}-${index}`;
+  }, []);
 
   // Throttled scroll to end for performance
   const scrollToEnd = useThrottle(() => {
     flatListRef.current?.scrollToEnd({ animated: true });
   }, 200);
 
+  // Handle load more (pull to refresh for older messages)
+  const handleLoadMore = useCallback(() => {
+    if (hasMore && !isLoadingMore) {
+      loadMore();
+    }
+  }, [hasMore, isLoadingMore, loadMore]);
+
+  // Handle pull to refresh
+  const handleRefresh = useCallback(() => {
+    refresh();
+  }, [refresh]);
+
+  // Calculate exact input area height for proper message spacing
+  const inputAreaHeight = React.useMemo(() => {
+    const containerPadding = SPACING.xs; // paddingTop from styles
+    const rowPadding = 6 + 10; // paddingVertical + paddingBottom
+    const inputHeight = 44; // minHeight of inputWrapperInner
+    const bottomPadding = Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 30;
+    const extraPadding = 10; // Additional padding for visual separation
+    
+    return containerPadding + rowPadding + inputHeight + bottomPadding + extraPadding;
+  }, [insets.bottom]);
+
+  // Memoize input container style to prevent re-renders
+  const inputContainerStyle = React.useMemo(() => [
+    styles.inputContainer, 
+    { paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 30 }
+  ], [insets.bottom]);
+
+  // Memoize input component to prevent re-renders
+  const InputComponent = React.useMemo(() => (
+    <View style={styles.inputWrapperInner}>
+      <RNTextInput
+        placeholder={t('messages.typeMessage')}
+        value={newMessage}
+        onChangeText={setNewMessage}
+        style={styles.input}
+        multiline
+        maxLength={500}
+        placeholderTextColor={COLORS.textSecondary}
+        editable={!isUploading}
+      />
+    </View>
+  ), [newMessage, isUploading, t]);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 100}
     >
       <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
         keyExtractor={keyExtractor}
-        contentContainerStyle={styles.messagesList}
+        contentContainerStyle={[
+          styles.messagesList,
+          { paddingBottom: inputAreaHeight } // Precise spacing for input area
+        ]}
         onContentSizeChange={scrollToEnd}
+        // Pagination features
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.1}
+        refreshing={isLoading}
+        onRefresh={handleRefresh}
         // Performance optimizations
         removeClippedSubviews={true}
         maxToRenderPerBatch={15}
         initialNumToRender={15}
         windowSize={10}
         inverted={false}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        // Loading indicators
+        ListHeaderComponent={
+          isLoadingMore ? (
+            <View style={styles.loadingIndicator}>
+              <Text style={styles.loadingText}>{t('common.loading')}...</Text>
+            </View>
+          ) : null
+        }
       />
 
-      <View style={styles.inputContainer}>
+      {/* <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 120}
+        style={styles.inputWrapper}
+      > */}
+        <View style={inputContainerStyle}>
         {/* Selected Attachments Preview */}
         {selectedAttachments.length > 0 && (
           <View style={styles.selectedAttachmentsContainer}>
@@ -626,18 +757,7 @@ export default function ChatScreen() {
             />
           </TouchableOpacity>
 
-          <View style={styles.inputWrapper}>
-            <RNTextInput
-              placeholder={t('messages.typeMessage')}
-              value={newMessage}
-              onChangeText={setNewMessage}
-              style={styles.input}
-              multiline
-              maxLength={500}
-              placeholderTextColor={COLORS.textSecondary}
-              editable={!isUploading}
-            />
-          </View>
+          {InputComponent}
 
           <TouchableOpacity
             onPress={handleSendMessage}
@@ -660,25 +780,44 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </KeyboardAvoidingView>
+  </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.background,
+    // Subtle pattern background effect
   },
+  // inputWrapper: {
+  //   position: 'absolute',
+  //   bottom: 0,
+  //   left: 0,
+  //   right: 0,
+  //   backgroundColor: 'red',
+  //   borderTopLeftRadius: 20,
+  //   borderTopRightRadius: 20,
+  //   shadowColor: '#000',
+  //   shadowOffset: { width: 0, height: -4 },
+  //   shadowOpacity: 0.1,
+  //   shadowRadius: 12,
+  //   elevation: 12,
+  // },
   messagesList: {
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.lg,
   },
   messageContainer: {
     flexDirection: 'row',
-    marginBottom: SPACING.md,
+    marginBottom: 12,
     alignItems: 'flex-end',
+    paddingHorizontal: 0,
   },
   myMessageContainer: {
     justifyContent: 'flex-end',
+    alignItems: 'flex-end',
   },
   avatar: {
     marginRight: SPACING.sm,
@@ -689,24 +828,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   messageBubble: {
-    maxWidth: '75%',
+    maxWidth: '80%',
+    minWidth: 60,
+    minHeight: 40,
     backgroundColor: COLORS.surface,
     borderRadius: 18,
-    borderBottomLeftRadius: 4,
-    padding: 12,
+    borderBottomLeftRadius: 4, // Tail at bottom left for incoming messages
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingTop: 12,
+    paddingBottom: 12,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 1,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   myMessageBubble: {
     backgroundColor: COLORS.primary,
+  
     borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 4,
+    borderBottomRightRadius: 4, // Tail at bottom right for my messages
   },
   senderName: {
     fontSize: 12,
@@ -715,20 +860,29 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   messageText: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 22,
     color: COLORS.text,
+    fontWeight: '500',
+    marginBottom: 4,
+    opacity: 1,
   },
   myMessageText: {
-    color: COLORS.surface,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    marginBottom: 4,
+    fontSize: 16,
+    lineHeight: 22,
+    opacity: 1,
   },
   timestamp: {
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: 10,
+    marginTop: 6,
     color: COLORS.textSecondary,
+    fontWeight: '500',
   },
   myTimestamp: {
-    color: COLORS.surface + 'CC',
+    color: COLORS.surface + 'DD',
   },
   attachmentsContainer: {
     marginTop: 8,
@@ -738,17 +892,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.background,
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 6,
   },
   myAttachmentCard: {
-    backgroundColor: COLORS.primary + 'DD',
+    backgroundColor: COLORS.primary + 'E6',
   },
   attachmentInfo: {
     flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
+    marginLeft: 10,
+    marginRight: 6,
   },
   attachmentName: {
     fontSize: 13,
@@ -760,91 +914,120 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
   },
   attachmentSize: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.textSecondary,
+    fontWeight: '500',
   },
   myAttachmentSize: {
-    color: COLORS.surface + 'CC',
+    color: COLORS.surface + 'DD',
   },
   inputContainer: {
-    padding: SPACING.md,
+    paddingTop: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    shadowColor: COLORS.text,
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 8,
   },
   selectedAttachmentsContainer: {
     marginBottom: SPACING.sm,
     gap: SPACING.xs,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   selectedAttachment: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.primary + '15',
     padding: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: 20,
     gap: SPACING.xs,
+    marginRight: SPACING.xs,
   },
   selectedAttachmentName: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.text,
+    fontWeight: '500',
   },
   uploadProgressContainer: {
     marginBottom: SPACING.sm,
   },
   progressBar: {
-    height: 4,
-    backgroundColor: COLORS.background,
-    borderRadius: 2,
+    height: 3,
+    backgroundColor: COLORS.border,
+    borderRadius: 3,
     overflow: 'hidden',
     marginBottom: SPACING.xs,
   },
   progressFill: {
     height: '100%',
     backgroundColor: COLORS.primary,
-    borderRadius: 2,
+    borderRadius: 3,
   },
   uploadProgressText: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textSecondary,
     textAlign: 'center',
+    fontWeight: '600',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    paddingVertical: 6,
+    paddingBottom: 10,
   },
   attachButton: {
-    width: 40,
-    height: 48,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: SPACING.xs,
+    marginRight: SPACING.sm,
+    backgroundColor: COLORS.background,
+    borderRadius: 22,
   },
-  inputWrapper: {
+  inputWrapperInner: {
     flex: 1,
     backgroundColor: COLORS.background,
-    borderRadius: 24,
+    borderRadius: 22,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    paddingBottom: 10,
     marginRight: SPACING.sm,
-    maxHeight: 100,
+    maxHeight: 120,
+    minHeight: 44,
   },
   input: {
     fontSize: 15,
     color: COLORS.text,
-    maxHeight: 80,
+    maxHeight: 100,
+    lineHeight: 20,
   },
   sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   sendButtonDisabled: {
     backgroundColor: COLORS.textSecondary,
-    opacity: 0.5,
+    opacity: 0.4,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   // OPTIMISTIC UPDATE STYLES
   pendingMessageText: {
@@ -896,5 +1079,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.error,
+  },
+  loadingIndicator: {
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
   },
 });

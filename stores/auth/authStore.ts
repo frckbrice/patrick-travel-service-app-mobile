@@ -5,6 +5,7 @@ import { authApi, RegisterRequest } from '../../lib/api/auth.api';
 import { userApi } from '../../lib/api/user.api';
 import { apiClient } from '../../lib/api/axios';
 import { logger } from '../../lib/utils/logger';
+import { sanitizeErrorMessage } from '../../lib/utils/errorHandler';
 import { auth } from '../../lib/firebase/config';
 import {
   signInWithEmailAndPassword,
@@ -14,6 +15,7 @@ import { signInWithGoogle, signOutFromGoogle } from '../../lib/auth/googleAuth';
 import { registerForPushNotifications } from '../../lib/services/pushNotifications';
 import { biometricAuthService } from '../../lib/services/biometricAuth';
 import { Platform } from 'react-native';
+import * as Device from 'expo-device';
 
 interface AuthState {
   user: User | null;
@@ -130,8 +132,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return true;
     } catch (error: any) {
       logger.error('Google login error', error);
+      
+      // Sanitize error message - never expose backend details to user
+      const userFriendlyError = sanitizeErrorMessage(error);
+      
       set({
-        error: error.message || 'An error occurred during Google login',
+        error: userFriendlyError,
         isLoading: false,
       });
       return false;
@@ -194,8 +200,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return true;
     } catch (error: any) {
       logger.error('Login error', error);
+      
+      // Sanitize error message - never expose backend details to user
+      const userFriendlyError = sanitizeErrorMessage(error);
+      
       set({
-        error: error.message || 'An error occurred during login',
+        error: userFriendlyError,
         isLoading: false,
       });
       return false;
@@ -221,8 +231,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return true;
     } catch (error: any) {
       logger.error('Registration error', error);
+      
+      // Sanitize error message - never expose backend details to user
+      const userFriendlyError = sanitizeErrorMessage(error);
+      
       set({
-        error: error.message || 'An error occurred during registration',
+        error: userFriendlyError,
         isLoading: false,
       });
       return false;
@@ -376,6 +390,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   registerPushToken: async () => {
     try {
+      // Only register push tokens on physical devices
+      if (!Device.isDevice) {
+        logger.info('Skipping push token registration - not a physical device');
+        return;
+      }
+
       const tokenData = await registerForPushNotifications();
 
       if (tokenData) {
@@ -394,14 +414,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         await userApi.updatePushToken(pushTokenRequest);
 
-        logger.info('Push token registered', {
-          token: tokenData.token,
+        logger.info('Push token registered successfully', {
           platform: tokenData.platform,
-          deviceId: tokenData.deviceId,
         });
       }
-    } catch (error) {
-      logger.error('Error registering push token', error);
+    } catch (error: any) {
+      // Push notification registration is optional - don't fail the login
+      logger.error('Error registering push token (non-blocking)', {
+        message: error?.message,
+        code: error?.code,
+        note: 'Login continues normally - push notifications may not work',
+      });
     }
   },
 
@@ -424,8 +447,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return success;
     } catch (error: any) {
       logger.error('Biometric login error', error);
+      
+      // Sanitize error message - never expose backend details to user
+      const userFriendlyError = sanitizeErrorMessage(error);
+      
       set({
-        error: error.message || 'Biometric login failed',
+        error: userFriendlyError,
         isLoading: false,
       });
       return false;

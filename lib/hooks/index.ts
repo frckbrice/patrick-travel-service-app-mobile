@@ -6,3 +6,7 @@
 export { useDebounce } from './useDebounce';
 export { useThrottle } from './useThrottle';
 export { usePagination } from './usePagination';
+export { 
+  useSendEmail, 
+  useSendEmailToAdvisor 
+} from './useSendEmail';

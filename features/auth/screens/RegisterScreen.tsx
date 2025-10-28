@@ -43,8 +43,8 @@ export default function RegisterScreen() {
   const onSubmit = async (data: RegisterFormData) => {
     if (!acceptTerms || !acceptPrivacy) {
       Alert.alert(
-        'Consent Required',
-        'Please accept both the Terms & Conditions and Privacy Policy to continue'
+        t('auth.consentRequired'),
+        t('auth.acceptBothTerms')
       );
       return;
     }
@@ -176,25 +176,40 @@ export default function RegisterScreen() {
             control={control}
             name="phone"
             render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                label={t('auth.phoneOptional')}
-                mode="outlined"
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                keyboardType="phone-pad"
-                error={!!errors.phone}
-                style={styles.input}
-                outlineStyle={styles.inputOutline}
-                textColor={COLORS.text}
-                placeholderTextColor={COLORS.textSecondary}
-                theme={{
-                  colors: {
-                    onSurfaceVariant: COLORS.textSecondary,
-                    onSurface: COLORS.text,
-                  },
-                }}
-              />
+              <View>
+                <TextInput
+                  label={t('auth.phoneOptional')}
+                  mode="outlined"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  keyboardType="phone-pad"
+                  error={!!errors.phone}
+                  style={styles.input}
+                  outlineStyle={styles.inputOutline}
+                  textColor={COLORS.text}
+                  placeholderTextColor={COLORS.textSecondary}
+                  theme={{
+                    colors: {
+                      onSurfaceVariant: COLORS.textSecondary,
+                      onSurface: COLORS.text,
+                    },
+                  }}
+                />
+                {value && value.length > 5 && (
+                  <TouchableOpacity
+                    style={styles.verifyPhoneButton}
+                    onPress={() => router.push({
+                      pathname: '/(auth)/phone-verification',
+                      params: { phoneNumber: value }
+                    })}
+                  >
+                    <Text style={styles.verifyPhoneText}>
+                      {t('auth.verifyPhoneNumber')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
           />
 
@@ -286,10 +301,10 @@ export default function RegisterScreen() {
             />
             <View style={styles.termsTextContainer}>
               <Text style={styles.termsText}>
-                I accept the{' '}
+                {t('auth.iAcceptThe')}{' '}
                 <Link href="/(auth)/terms" asChild>
                   <TouchableOpacity>
-                    <Text style={styles.link}>Terms & Conditions</Text>
+                    <Text style={styles.link}>{t('auth.termsAndConditions')}</Text>
                   </TouchableOpacity>
                 </Link>
               </Text>
@@ -310,10 +325,10 @@ export default function RegisterScreen() {
             />
             <View style={styles.termsTextContainer}>
               <Text style={styles.termsText}>
-                I accept the{' '}
+                {t('auth.iAcceptThe')}{' '}
                 <Link href="/(auth)/privacy-policy" asChild>
                   <TouchableOpacity>
-                    <Text style={styles.link}>Privacy Policy</Text>
+                    <Text style={styles.link}>{t('auth.privacyPolicy')}</Text>
                   </TouchableOpacity>
                 </Link>
               </Text>
@@ -459,5 +474,18 @@ const styles = StyleSheet.create({
   footerText: {
     color: COLORS.textSecondary,
     fontSize: 14,
+  },
+  verifyPhoneButton: {
+    marginTop: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    backgroundColor: COLORS.primary + '10',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  verifyPhoneText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

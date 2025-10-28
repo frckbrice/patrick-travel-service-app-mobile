@@ -24,7 +24,10 @@ export interface ChangePasswordRequest {
 export const userApi = {
   async getProfile(): Promise<ApiResponse<User>> {
     try {
-      const response = await apiClient.get<ApiResponse<User>>('/users/profile');
+      // Use /auth/me which returns user directly
+      // Web returns: { success: true, data: {...user} }
+      const response = await apiClient.get<ApiResponse<User>>('/auth/me');
+      
       return response.data;
     } catch (error: any) {
       // Error already sanitized by interceptor - safe to use
@@ -38,12 +41,18 @@ export const userApi = {
   async updateProfile(data: UpdateProfileRequest): Promise<ApiResponse<User>> {
     try {
       logger.info('Updating profile');
-      // Web API uses PATCH for partial updates, mobile uses PUT
-      const response = await apiClient.patch<ApiResponse<User>>(
+      // Web API uses PATCH for partial updates
+      // Web returns: { success: true, data: { user: {...} } }
+      const response = await apiClient.patch<ApiResponse<{ user: User }>>(
         '/users/profile',
         data
       );
-      return response.data;
+      
+      return {
+        success: response.data.success,
+        data: response.data.data?.user,
+        error: response.data.error,
+      };
     } catch (error: any) {
       // Error already sanitized by interceptor - safe to use
       return {

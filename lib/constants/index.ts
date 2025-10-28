@@ -143,3 +143,6 @@ export const ROUTES = {
   },
   ONBOARDING: '/onboarding',
 };
+
+// Export business information
+export * from './business';

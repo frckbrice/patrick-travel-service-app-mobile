@@ -45,9 +45,11 @@ export const registerForPushNotifications =
     try {
       // Check if running on physical device
       if (!Device.isDevice) {
-        logger.warn('Push notifications require a physical device');
+        logger.info('Push notifications require physical device');
         return null;
       }
+
+      logger.info('Starting push notification registration...');
 
       // Check existing permissions
       const { status: existingStatus } =
@@ -56,77 +58,114 @@ export const registerForPushNotifications =
 
       // Request permission if not granted
       if (existingStatus !== 'granted') {
+        logger.info('Requesting notification permissions...');
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
 
       if (finalStatus !== 'granted') {
-        logger.warn('Push notification permission not granted');
+        logger.warn('Notification permission denied');
         return null;
       }
+
+      logger.info('Notification permission granted');
 
       // Get Expo push token
       const projectId = Constants.expoConfig?.extra?.eas?.projectId;
 
       if (!projectId) {
-        logger.error('EAS Project ID not found in app config');
+        logger.warn('EAS Project ID not found in app config');
         return null;
       }
+
+      logger.info('Getting Expo push token...', { projectId });
 
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId,
       });
 
-      logger.info('Push notification token obtained', {
-        token: tokenData.data,
+      logger.info('✅ Push notification token obtained successfully', {
+        token: tokenData.data.substring(0, 50) + '...',
         platform: Platform.OS,
       });
 
-      // Configure Android notification channel
+      // Configure Android notification channels AFTER getting token (avoids Firebase error)
       if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'Default',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#0066CC',
-          sound: 'default',
-          enableVibrate: true,
-          showBadge: true,
-        });
+        try {
+          logger.info('Setting up Android notification channels...');
+          
+          await Notifications.setNotificationChannelAsync('default', {
+            name: 'Default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#0066CC',
+            sound: 'default',
+            enableVibrate: true,
+            showBadge: true,
+          });
 
-        // Create additional channels for different notification types
-        await Notifications.setNotificationChannelAsync('case-updates', {
-          name: 'Case Updates',
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#0066CC',
-          sound: 'default',
-        });
+          await Notifications.setNotificationChannelAsync('case-updates', {
+            name: 'Case Updates',
+            importance: Notifications.AndroidImportance.HIGH,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#0066CC',
+            sound: 'default',
+          });
 
-        await Notifications.setNotificationChannelAsync('messages', {
-          name: 'Messages',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#0066CC',
-          sound: 'default',
-        });
+          await Notifications.setNotificationChannelAsync('messages', {
+            name: 'Messages',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#0066CC',
+            sound: 'default',
+          });
 
-        await Notifications.setNotificationChannelAsync('documents', {
-          name: 'Document Updates',
-          importance: Notifications.AndroidImportance.DEFAULT,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#0066CC',
-          sound: 'default',
-        });
+          await Notifications.setNotificationChannelAsync('documents', {
+            name: 'Document Updates',
+            importance: Notifications.AndroidImportance.DEFAULT,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#0066CC',
+            sound: 'default',
+          });
+
+          logger.info('Android notification channels created');
+        } catch (channelError) {
+          logger.warn('Could not create notification channels (non-critical)');
+        }
       }
+
+      logger.info('✅ Push notification setup complete');
 
       return {
         token: tokenData.data,
         platform: Platform.OS as 'ios' | 'android' | 'web',
-        deviceId: Constants.deviceId || Constants.sessionId, // Unique device identifier
+        deviceId: Constants.deviceId || Constants.sessionId,
       };
     } catch (error: any) {
-      logger.error('Error registering for push notifications', error);
+      const errorMessage = error?.message || '';
+      const errorCode = error?.code || '';
+      
+      // Firebase initialization errors are non-critical
+      if (
+        errorMessage.includes('FirebaseApp is not initialized') ||
+        errorMessage.includes('firebase') ||
+        errorMessage.includes('FCM') ||
+        errorCode === 'messaging/failed-to-get-fcm-token'
+      ) {
+        logger.warn('⚠️ Push notifications need FCM setup', {
+          status: 'Registration skipped',
+          reason: 'Firebase/FCM not fully configured',
+          impact: 'App works normally without push',
+          fix: 'Build with EAS credentials to test',
+        });
+        return null;
+      }
+      
+      logger.error('⚠️ Push notification registration failed', {
+        error: errorMessage,
+        code: errorCode,
+        status: 'Non-blocking - app continues normally',
+      });
       return null;
     }
   };

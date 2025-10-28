@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,33 +8,24 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { List, Avatar, Dialog, Portal } from 'react-native-paper';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Avatar, Dialog, Portal } from 'react-native-paper';
+// import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useFocusEffect } from '@react-navigation/native';
-import { useRequireAuth, useAuth } from '../../features/auth/hooks/useAuth';
+import { useAuth } from '../../features/auth/hooks/useAuth';
 import { Card, Button } from '../../components/ui';
-import { COLORS, SPACING } from '../../lib/constants';
-import { useAuthStore } from '../../stores/auth/authStore';
+import { SPACING } from '../../lib/constants';
 import { toast } from '../../lib/services/toast';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 
 export default function ProfileScreen() {
-  useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const refreshAuth = useAuthStore((state) => state.refreshAuth);
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
-
-  // Refresh user data when tab is focused
-  useFocusEffect(
-    useCallback(() => {
-      refreshAuth();
-    }, [refreshAuth])
-  );
+  const colors = useThemeColors();
 
   const handleLogout = useCallback(async () => {
     setLogoutDialogVisible(false);
@@ -64,48 +55,43 @@ export default function ProfileScreen() {
             <View
               style={[
                 styles.iconContainer,
-                danger && styles.iconContainerDanger,
+                { backgroundColor: danger ? colors.error + '15' : colors.primary + '15' },
               ]}
             >
               <MaterialCommunityIcons
                 name={icon}
                 size={24}
-                color={danger ? COLORS.error : COLORS.primary}
+                color={danger ? colors.error : colors.primary}
               />
             </View>
             <View style={styles.menuTextContainer}>
               <Text
-                style={[styles.menuTitle, danger && styles.menuTitleDanger]}
+                style={[styles.menuTitle, { color: danger ? colors.error : colors.text }]}
               >
                 {title}
               </Text>
               {description && (
-                <Text style={styles.menuDescription}>{description}</Text>
+                <Text style={[styles.menuDescription, { color: colors.textSecondary }]}>{description}</Text>
               )}
             </View>
             <MaterialCommunityIcons
               name="chevron-right"
               size={20}
-              color={COLORS.textSecondary}
+              color={colors.textSecondary}
             />
           </View>
         </Card>
       </TouchableOpacity>
     ),
-    []
+    [colors]
   );
 
   return (
-    <ScrollView 
-      style={styles.container}
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
     >
-      <LinearGradient
-        colors={[COLORS.primary, '#7A9BB8']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.headerGradient}
-      >
+          <View style={[styles.headerGradient, { backgroundColor: colors.primary }]}>
         <Animated.View
           entering={FadeInDown.delay(0).duration(400)}
           style={styles.header}
@@ -119,7 +105,7 @@ export default function ProfileScreen() {
                   : user?.email?.charAt(0)?.toUpperCase() || 'U'
               }
               style={styles.avatar}
-              labelStyle={styles.avatarLabel}
+              labelStyle={[styles.avatarLabel, { color: colors.primary }]}
             />
           </View>
           <Text style={styles.name}>
@@ -128,10 +114,10 @@ export default function ProfileScreen() {
           <Text style={styles.email}>{user?.email}</Text>
           {user?.phone && <Text style={styles.phone}>{user.phone}</Text>}
         </Animated.View>
-      </LinearGradient>
+          </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('profile.account')}</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('profile.account')}</Text>
         <Animated.View entering={FadeInDown.delay(100).duration(400)}>
           <MenuCard
             icon="account-edit"
@@ -167,7 +153,7 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('profile.helpAndSupport')}</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('profile.helpAndSupport')}</Text>
         <Animated.View entering={FadeInDown.delay(300).duration(400)}>
           <MenuCard
             icon="help-circle"
@@ -187,7 +173,7 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('profile.privacy')}</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('profile.privacy')}</Text>
         <Animated.View entering={FadeInDown.delay(400).duration(400)}>
           <MenuCard
             icon="shield-check"
@@ -239,7 +225,7 @@ export default function ProfileScreen() {
           variant="danger"
           fullWidth
         />
-        <Text style={styles.version}>{t('common.version')} 1.0.0</Text>
+        <Text style={[styles.version, { color: colors.textSecondary }]}>{t('common.version')} 1.0.0</Text>
       </Animated.View>
 
       <Portal>
@@ -272,7 +258,6 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   headerGradient: {
     paddingTop: Platform.OS === 'ios' ? 70 : 50,
@@ -300,7 +285,6 @@ const styles = StyleSheet.create({
   avatarLabel: {
     fontSize: 42,
     fontWeight: '700',
-    color: COLORS.primary,
   },
   name: {
     fontSize: 26,
@@ -327,7 +311,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: COLORS.textSecondary,
     textTransform: 'uppercase',
     marginBottom: SPACING.sm,
     marginLeft: SPACING.xs,
@@ -350,13 +333,9 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 14,
-    backgroundColor: COLORS.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
-  },
-  iconContainerDanger: {
-    backgroundColor: COLORS.error + '15',
   },
   menuTextContainer: {
     flex: 1,
@@ -364,15 +343,10 @@ const styles = StyleSheet.create({
   menuTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.text,
     marginBottom: 2,
-  },
-  menuTitleDanger: {
-    color: COLORS.error,
   },
   menuDescription: {
     fontSize: 13,
-    color: COLORS.textSecondary,
   },
   footer: {
     padding: SPACING.lg,
@@ -381,7 +355,6 @@ const styles = StyleSheet.create({
   },
   version: {
     fontSize: 12,
-    color: COLORS.textSecondary,
     marginTop: SPACING.md,
   },
 });

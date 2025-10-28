@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, Alert, TouchableOpacity } from 'react-native';
 import { Text, Button, Chip, ActivityIndicator } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { WebView } from 'react-native-webview';
-import { Image } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { documentsApi } from '../../lib/api/documents.api';
@@ -20,6 +18,7 @@ import {
 } from '../../lib/constants';
 import { format } from 'date-fns';
 import { toast } from '../../lib/services/toast';
+import { PDFViewer, ImageZoomViewer } from '../../components/ui';
 
 const { width } = Dimensions.get('window');
 
@@ -31,6 +30,8 @@ export default function DocumentDetailsScreen() {
   const [document, setDocument] = useState<Document | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [showPDFViewer, setShowPDFViewer] = useState(false);
+  const [showImageZoom, setShowImageZoom] = useState(false);
 
   useEffect(() => {
     fetchDocument();
@@ -114,22 +115,49 @@ export default function DocumentDetailsScreen() {
 
     if (isImage) {
       return (
-        <Image
-          source={{ uri: document.filePath }}
-          style={styles.imagePreview}
-          resizeMode="contain"
-        />
+        <TouchableOpacity
+          style={styles.imagePreviewContainer}
+          onPress={() => setShowImageZoom(true)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.imagePreview}>
+            <MaterialCommunityIcons
+              name="image"
+              size={80}
+              color={COLORS.primary}
+            />
+            <Text variant="bodyLarge" style={styles.previewText}>
+              {t('documents.tapToViewImage')}
+            </Text>
+            <Text variant="bodySmall" style={styles.previewSubtext}>
+              {document.originalName}
+            </Text>
+          </View>
+        </TouchableOpacity>
       );
     }
 
     if (isPDF) {
       return (
-        <WebView
-          source={{
-            uri: `https://docs.google.com/viewer?url=${encodeURIComponent(document.filePath)}&embedded=true`,
-          }}
-          style={styles.pdfPreview}
-        />
+        <TouchableOpacity
+          style={styles.pdfPreviewContainer}
+          onPress={() => setShowPDFViewer(true)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.pdfPreview}>
+            <MaterialCommunityIcons
+              name="file-pdf-box"
+              size={80}
+              color={COLORS.error}
+            />
+            <Text variant="bodyLarge" style={styles.previewText}>
+              {t('documents.tapToViewPDF')}
+            </Text>
+            <Text variant="bodySmall" style={styles.previewSubtext}>
+              {document.originalName}
+            </Text>
+          </View>
+        </TouchableOpacity>
       );
     }
 
@@ -250,6 +278,24 @@ export default function DocumentDetailsScreen() {
           </Button>
         )}
       </View>
+
+      {/* PDF Viewer Modal */}
+      {showPDFViewer && document && (
+        <PDFViewer
+          filePath={document.filePath}
+          fileName={document.originalName}
+          onClose={() => setShowPDFViewer(false)}
+        />
+      )}
+
+      {/* Image Zoom Viewer Modal */}
+      {showImageZoom && document && (
+        <ImageZoomViewer
+          imageUri={document.filePath}
+          visible={showImageZoom}
+          onClose={() => setShowImageZoom(false)}
+        />
+      )}
     </View>
   );
 }
@@ -322,13 +368,46 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 400,
   },
+  imagePreviewContainer: {
+    flex: 1,
+    minHeight: 400,
+  },
   imagePreview: {
-    width: '100%',
-    height: 400,
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    margin: SPACING.md,
+    borderWidth: 2,
+    borderColor: COLORS.primary + '20',
+    borderStyle: 'dashed',
+  },
+  pdfPreviewContainer: {
+    flex: 1,
+    minHeight: 400,
   },
   pdfPreview: {
     flex: 1,
-    height: 600,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    margin: SPACING.md,
+    borderWidth: 2,
+    borderColor: COLORS.error + '20',
+    borderStyle: 'dashed',
+  },
+  previewText: {
+    marginTop: SPACING.md,
+    color: COLORS.text,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  previewSubtext: {
+    marginTop: SPACING.xs,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   noPreview: {
     height: 400,

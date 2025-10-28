@@ -15,7 +15,6 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useCasesStore } from '../../stores/cases/casesStore';
 import { Case, CaseStatus, ServiceType, Priority } from '../../lib/types';
 import {
@@ -24,20 +23,20 @@ import {
   EmptyState,
 } from '../../components/ui';
 import {
-  COLORS,
   SPACING,
   CASE_STATUS_LABELS,
   SERVICE_TYPE_LABELS,
 } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format } from 'date-fns';
 
 type SortOption = 'date-desc' | 'date-asc' | 'status' | 'priority';
 
 export default function CasesScreen() {
-  useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
   const { cases, isLoading, fetchCases } = useCasesStore();
+  const colors = useThemeColors();
 
   // State management
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,7 +86,7 @@ export default function CasesScreen() {
       case 'HIGH': return '#F59E0B';
       case 'NORMAL': return '#3B82F6';
       case 'LOW': return '#6B7280';
-      default: return COLORS.textSecondary;
+      default: return colors.textSecondary;
     }
   };
 
@@ -114,7 +113,7 @@ export default function CasesScreen() {
                 <MaterialCommunityIcons
                   name="briefcase-outline"
                   size={20}
-                  color={COLORS.primary}
+                  color={colors.primary}
                   style={styles.icon}
                 />
                 <PaperText style={styles.reference}>{item.referenceNumber}</PaperText>
@@ -138,7 +137,7 @@ export default function CasesScreen() {
                 <MaterialCommunityIcons
                   name="airplane"
                   size={12}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                   style={styles.serviceIcon}
                 />
                 <PaperText style={styles.serviceTypeText}>
@@ -153,7 +152,7 @@ export default function CasesScreen() {
                 <MaterialCommunityIcons
                   name="calendar"
                   size={14}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                 />
                 <PaperText style={styles.infoText}>
                   {format(new Date(item.submissionDate), 'MMM dd, yyyy')}
@@ -165,7 +164,7 @@ export default function CasesScreen() {
                   <MaterialCommunityIcons
                     name="account"
                     size={14}
-                    color={COLORS.textSecondary}
+                    color={colors.textSecondary}
                   />
                   <PaperText style={styles.infoText} numberOfLines={1}>
                     {item.assignedAgent.firstName} {item.assignedAgent.lastName}
@@ -176,9 +175,9 @@ export default function CasesScreen() {
 
             {/* OPTIMISTIC: Show pending indicator */}
             {item.isPending && (
-              <View style={styles.pendingBadge}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
-                <PaperText style={styles.pendingText}>Submitting...</PaperText>
+              <View style={[styles.pendingBadge, { backgroundColor: colors.primary + '10' }]}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <PaperText style={[styles.pendingText, { color: colors.primary }]}>Submitting...</PaperText>
               </View>
             )}
           </View>
@@ -190,37 +189,37 @@ export default function CasesScreen() {
 
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Modern Search Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <View style={styles.headerContent}>
-          <View style={styles.searchContainer}>
+          <View style={[styles.searchContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
             <MaterialCommunityIcons
               name="magnify"
               size={22}
-              color={COLORS.textSecondary}
+              color={colors.textSecondary}
               style={styles.searchIcon}
             />
             <TextInput
               placeholder={t('cases.searchByReference')}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              style={styles.searchInput}
-              placeholderTextColor={COLORS.textSecondary}
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholderTextColor={colors.textSecondary}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
                 <MaterialCommunityIcons
                   name="close-circle"
                   size={20}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                 />
               </TouchableOpacity>
             )}
           </View>
 
           <TouchableOpacity
-            style={styles.addButton}
+            style={[styles.addButton, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/case/new')}
           >
             <MaterialCommunityIcons
@@ -233,7 +232,7 @@ export default function CasesScreen() {
       </View>
 
       {/* Filter Bar with Menus */}
-      <View style={styles.filtersBar}>
+      <View style={[styles.filtersBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -245,13 +244,17 @@ export default function CasesScreen() {
             onDismiss={() => setStatusMenuVisible(false)}
             anchor={
               <TouchableOpacity
-                style={[styles.filterButton, selectedStatus && styles.filterButtonActive]}
+                style={[
+                  styles.filterButton, 
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                  selectedStatus && { backgroundColor: colors.primary + '15', borderColor: colors.primary }
+                ]}
                 onPress={() => setStatusMenuVisible(!statusMenuVisible)}
               >
                 <MaterialCommunityIcons
                   name="filter-variant"
                   size={16}
-                  color={selectedStatus ? COLORS.primary : COLORS.textSecondary}
+                  color={selectedStatus ? colors.primary : colors.textSecondary}
                   style={{ marginRight: SPACING.xs }}
                 />
                 <PaperText style={[styles.filterButtonText, selectedStatus && styles.filterButtonTextActive]}>
@@ -260,7 +263,7 @@ export default function CasesScreen() {
                 <MaterialCommunityIcons
                   name="chevron-down"
                   size={16}
-                  color={selectedStatus ? COLORS.primary : COLORS.textSecondary}
+                  color={selectedStatus ? colors.primary : colors.textSecondary}
                   style={{ marginLeft: SPACING.xs }}
                 />
               </TouchableOpacity>
@@ -294,13 +297,17 @@ export default function CasesScreen() {
             onDismiss={() => setServiceTypeMenuVisible(false)}
             anchor={
               <TouchableOpacity
-                style={[styles.filterButton, selectedServiceType && styles.filterButtonActive]}
+                style={[
+                  styles.filterButton, 
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                  selectedServiceType && { backgroundColor: colors.primary + '15', borderColor: colors.primary }
+                ]}
                 onPress={() => setServiceTypeMenuVisible(!serviceTypeMenuVisible)}
               >
                 <MaterialCommunityIcons
                   name="briefcase"
                   size={16}
-                  color={selectedServiceType ? COLORS.primary : COLORS.textSecondary}
+                  color={selectedServiceType ? colors.primary : colors.textSecondary}
                   style={{ marginRight: SPACING.xs }}
                 />
                 <PaperText style={[styles.filterButtonText, selectedServiceType && styles.filterButtonTextActive]}>
@@ -309,7 +316,7 @@ export default function CasesScreen() {
                 <MaterialCommunityIcons
                   name="chevron-down"
                   size={16}
-                  color={selectedServiceType ? COLORS.primary : COLORS.textSecondary}
+                  color={selectedServiceType ? colors.primary : colors.textSecondary}
                   style={{ marginLeft: SPACING.xs }}
                 />
               </TouchableOpacity>
@@ -343,13 +350,13 @@ export default function CasesScreen() {
             onDismiss={() => setSortMenuVisible(false)}
             anchor={
               <TouchableOpacity
-                style={styles.filterButton}
+                style={[styles.filterButton, { backgroundColor: colors.background, borderColor: colors.border }]}
                 onPress={() => setSortMenuVisible(!sortMenuVisible)}
               >
                 <MaterialCommunityIcons
                   name="sort"
                   size={16}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                   style={{ marginRight: SPACING.xs }}
                 />
                 <PaperText style={styles.filterButtonText}>
@@ -361,7 +368,7 @@ export default function CasesScreen() {
                 <MaterialCommunityIcons
                   name="chevron-down"
                   size={16}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                   style={{ marginLeft: SPACING.xs }}
                 />
               </TouchableOpacity>
@@ -413,7 +420,7 @@ export default function CasesScreen() {
               <MaterialCommunityIcons
                 name="close"
                 size={16}
-                color={COLORS.error}
+                color={colors.error}
               />
               <PaperText style={styles.clearButtonText}>Clear</PaperText>
             </TouchableOpacity>
@@ -422,8 +429,8 @@ export default function CasesScreen() {
       </View>
 
       {/* Results Count */}
-      <View style={styles.resultsBar}>
-        <PaperText style={styles.resultsText}>
+      <View style={[styles.resultsBar, { backgroundColor: colors.surface }]}>
+        <PaperText style={[styles.resultsText, { color: colors.textSecondary }]}>
           {filteredAndSortedCases.length} {filteredAndSortedCases.length === 1 ? 'case' : 'cases'} found
         </PaperText>
       </View>
@@ -441,7 +448,7 @@ export default function CasesScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={() => fetchCases(selectedStatus, true)}
-            tintColor={COLORS.primary}
+            tintColor={colors.primary}
           />
         }
         ListEmptyComponent={
@@ -472,10 +479,9 @@ export default function CasesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent', // Will be set dynamically
   },
   header: {
-    backgroundColor: COLORS.surface,
     paddingTop: Platform.OS === 'ios' ? 60 : 20,
     paddingBottom: SPACING.md,
     paddingHorizontal: SPACING.md,
@@ -495,12 +501,10 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
     borderRadius: 16,
     paddingHorizontal: SPACING.md,
     height: 52,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   searchIcon: {
     marginRight: SPACING.sm,
@@ -508,26 +512,21 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: COLORS.text,
     fontWeight: '500',
   },
   addButton: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
   },
   filtersBar: {
-    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   filtersContent: {
     paddingLeft: SPACING.md,
@@ -537,25 +536,15 @@ const styles = StyleSheet.create({
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: COLORS.border,
     marginRight: SPACING.sm,
-  },
-  filterButtonActive: {
-    backgroundColor: COLORS.primary + '15',
-    borderColor: COLORS.primary,
   },
   filterButtonText: {
     fontSize: 14,
-    color: COLORS.textSecondary,
     fontWeight: '500',
-  },
-  filterButtonTextActive: {
-    color: COLORS.primary,
   },
   clearButton: {
     flexDirection: 'row',
@@ -566,18 +555,15 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     fontSize: 14,
-    color: COLORS.error,
     fontWeight: '500',
     marginLeft: SPACING.xs,
   },
   resultsBar: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.surface,
   },
   resultsText: {
     fontSize: 13,
-    color: COLORS.textSecondary,
     fontWeight: '500',
   },
   list: {
@@ -612,7 +598,6 @@ const styles = StyleSheet.create({
   reference: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.text,
     flex: 1,
   },
   metaRow: {
@@ -637,7 +622,6 @@ const styles = StyleSheet.create({
   serviceTypeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
     borderRadius: 12,
@@ -647,7 +631,6 @@ const styles = StyleSheet.create({
   },
   serviceTypeText: {
     fontSize: 12,
-    color: COLORS.textSecondary,
     fontWeight: '500',
   },
   infoContainer: {
@@ -663,13 +646,11 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    color: COLORS.textSecondary,
     marginLeft: 4,
   },
   pendingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary + '10',
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
     borderRadius: 12,
@@ -678,7 +659,6 @@ const styles = StyleSheet.create({
   pendingText: {
     fontSize: 11,
     fontWeight: '600',
-    color: COLORS.primary,
     marginLeft: 4,
   },
 });

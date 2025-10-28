@@ -2,9 +2,15 @@ import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Platform, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../../lib/constants';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  
+  // Calculate safe bottom padding to avoid device navigation buttons
+  const bottomPadding = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 20);
+  
   return (
     <Tabs
       screenOptions={{
@@ -21,30 +27,37 @@ export default function TabsLayout() {
           backgroundColor: Platform.OS === 'ios' ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255, 255, 255, 0.95)',
           borderTopColor: 'rgba(0, 0, 0, 0.1)',
           borderTopWidth: 0.5,
-          elevation: 0,
-          height: Platform.OS === 'ios' ? 85 : 65,
-          paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-          paddingTop: 10,
+          elevation: 8,
+          height: Platform.OS === 'ios' ? 90 + bottomPadding : 75 + bottomPadding,
+          paddingBottom: bottomPadding,
+          paddingTop: 8,
+          paddingHorizontal: 4,
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: -3 },
-          shadowOpacity: 0.1,
-          shadowRadius: 10,
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
         },
         tabBarBackground: () => 
           Platform.OS === 'ios' ? (
             <BlurView
-              intensity={80}
+              intensity={85}
               tint="light"
               style={StyleSheet.absoluteFill}
             />
           ) : null,
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-          letterSpacing: 0.2,
+          fontSize: 13,
+          fontWeight: '700',
+          letterSpacing: 0.3,
+          marginTop: 2,
+          marginBottom: 2,
         },
         tabBarIconStyle: {
-          marginTop: 2,
+          marginTop: 4,
+          marginBottom: 2,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 4,
         },
       }}
     >
@@ -53,7 +66,7 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="home" size={size} color={color} />
+            <MaterialCommunityIcons name="home" size={28} color={color} />
           ),
         }}
       />
@@ -64,7 +77,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
               name="briefcase"
-              size={size}
+              size={28}
               color={color}
             />
           ),
@@ -77,7 +90,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
               name="file-document"
-              size={size}
+              size={28}
               color={color}
             />
           ),
@@ -88,7 +101,7 @@ export default function TabsLayout() {
         options={{
           title: 'Messages',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="message" size={size} color={color} />
+            <MaterialCommunityIcons name="message" size={28} color={color} />
           ),
         }}
       />
@@ -97,7 +110,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="account" size={size} color={color} />
+            <MaterialCommunityIcons name="account" size={28} color={color} />
           ),
         }}
       />

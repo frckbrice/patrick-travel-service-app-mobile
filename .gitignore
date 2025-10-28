@@ -67,6 +67,8 @@ logs
 
 # Firebase
 patrick-travel-agency-firebase-adminsdk-*.json
+patrick-travel-service-apn.p8
+
 firebase-debug.log
 
 # TypeScript
@@ -96,3 +98,5 @@ firebase-debug.log
 expo-env.d.ts
 # @end expo-cli*.apk
 *.apk
+
+https://expo.dev/accounts/ubuntu-dev-group/projects/patrick-travel-services/builds/9e888c06-500e-40ab-971c-5199774b891a

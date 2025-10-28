@@ -1,5 +1,6 @@
 import { ExpoConfig, ConfigContext } from 'expo/config';
 
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Patrick Travel Services',
@@ -17,7 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   assetBundlePatterns: ['**/*'],
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.patricktravel.mobile',
+    bundleIdentifier: 'com.unidov.patricktravel',
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       UIViewControllerBasedStatusBarAppearance: true,
@@ -28,7 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#0066CC',
     },
-    package: 'com.patricktravel.mobile',
+    package: 'com.unidov.patricktravel',
     permissions: [
       'android.permission.CAMERA',
       'android.permission.READ_EXTERNAL_STORAGE',
@@ -76,11 +77,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       projectId: '2c78e03f-b77b-4a17-afde-9d7cd2171610',
     },
   },
-  runtimeVersion: {
-    policy: 'appVersion',
-  },
-  updates: {
-    enabled: false, // Disabled for development builds to prevent crashes
-    url: 'https://u.expo.dev/2c78e03f-b77b-4a17-afde-9d7cd2171610',
-  },
+  // Temporarily disabled for Expo Go compatibility
+  // runtimeVersion: {
+  //   policy: 'appVersion',
+  // },
+  // updates: {
+  //   enabled: false, // Disabled for development builds to prevent crashes
+  //   url: 'https://u.expo.dev/2c78e03f-b77b-4a17-afde-9d7cd2171610',
+  // },
 });

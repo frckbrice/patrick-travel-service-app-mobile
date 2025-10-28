@@ -13,18 +13,18 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { documentsApi } from '../../lib/api/documents.api';
 import { Document, DocumentType } from '../../lib/types';
 import { Card, StatusBadge, EmptyState } from '../../components/ui';
 import { useDebounce } from '../../lib/hooks';
-import { COLORS, SPACING, DOCUMENT_TYPE_LABELS } from '../../lib/constants';
+import { SPACING, DOCUMENT_TYPE_LABELS, COLORS } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format } from 'date-fns';
 
 export default function DocumentsScreen() {
-  useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const colors = useThemeColors();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,14 +84,14 @@ export default function DocumentsScreen() {
                   <MaterialCommunityIcons
                     name={getFileIcon(item.mimeType)}
                     size={32}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.fileDetails}>
-                  <Text style={styles.fileName} numberOfLines={1}>
+                  <Text style={[styles.fileName, { color: colors.text }]} numberOfLines={1}>
                     {item.originalName}
                   </Text>
-                  <Text style={styles.fileType}>
+                  <Text style={[styles.fileType, { color: colors.textSecondary }]}>
                     {DOCUMENT_TYPE_LABELS[item.documentType]}
                   </Text>
                 </View>
@@ -99,16 +99,16 @@ export default function DocumentsScreen() {
               <StatusBadge status={item.status} />
             </View>
 
-            <View style={styles.divider} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
             <View style={styles.footer}>
               <View style={styles.infoRow}>
                 <MaterialCommunityIcons
                   name="calendar"
                   size={14}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                 />
-                <Text style={styles.infoText}>
+                <Text style={[styles.infoText, { color: colors.textSecondary }]}>
                   {format(new Date(item.uploadDate), 'MMM dd, yyyy')}
                 </Text>
               </View>
@@ -116,9 +116,9 @@ export default function DocumentsScreen() {
                 <MaterialCommunityIcons
                   name="file"
                   size={14}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                 />
-                <Text style={styles.infoText}>
+                <Text style={[styles.infoText, { color: colors.textSecondary }]}>
                   {(item.fileSize / 1024).toFixed(2)} KB
                 </Text>
               </View>
@@ -134,21 +134,21 @@ export default function DocumentsScreen() {
   const keyExtractor = useCallback((item: Document) => item.id, []);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.searchContainer}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
+        <View style={[styles.searchContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <MaterialCommunityIcons
             name="magnify"
             size={22}
-            color={COLORS.textSecondary}
+            color={colors.textSecondary}
             style={styles.searchIcon}
           />
           <TextInput
             placeholder={t('documents.searchDocuments')}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            style={styles.searchInput}
-            placeholderTextColor={COLORS.textSecondary}
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholderTextColor={colors.textSecondary}
           />
         </View>
       </View>
@@ -207,7 +207,7 @@ export default function DocumentsScreen() {
 
       <FAB
         icon="plus"
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
         onPress={() => router.push('/document/upload')}
       />
     </View>
@@ -217,13 +217,12 @@ export default function DocumentsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent', // Will be set dynamically
   },
   header: {
     paddingTop: Platform.OS === 'ios' ? 60 : 20,
     paddingBottom: SPACING.md,
     paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.surface,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -233,12 +232,10 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
     borderRadius: 16,
     paddingHorizontal: SPACING.md,
     height: 52,
     borderWidth: 1,
-    borderColor: COLORS.border,
   },
   searchIcon: {
     marginRight: SPACING.sm,
@@ -246,7 +243,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: COLORS.text,
     fontWeight: '500',
   },
   filters: {
@@ -301,16 +297,13 @@ const styles = StyleSheet.create({
   fileName: {
     fontSize: 15,
     fontWeight: '600',
-    color: COLORS.text,
     marginBottom: 4,
   },
   fileType: {
     fontSize: 13,
-    color: COLORS.textSecondary,
   },
   divider: {
     height: 1,
-    backgroundColor: COLORS.border,
     marginBottom: SPACING.md,
   },
   footer: {
@@ -323,16 +316,13 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    color: COLORS.textSecondary,
     marginLeft: SPACING.xs,
   },
   fab: {
     position: 'absolute',
     right: SPACING.md,
     bottom: Platform.OS === 'ios' ? 100 : 80,
-    backgroundColor: COLORS.primary,
     borderRadius: 28,
-    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,

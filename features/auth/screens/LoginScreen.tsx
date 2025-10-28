@@ -25,6 +25,8 @@ import {
 } from '../../../lib/auth/googleAuth';
 import { useAuthStore } from '../../../stores/auth/authStore';
 import { logger } from '../../../lib/utils/logger';
+import i18n from 'i18next';
+
 
 export default function LoginScreen() {
   useGuestOnly();
@@ -286,17 +288,17 @@ export default function LoginScreen() {
               />
               <Text style={styles.biometricButtonText}>
                 {isBiometricLoading
-                  ? 'Authenticating...'
+                  ? t('auth.authenticating')
                   : Platform.OS === 'ios'
-                    ? 'Login with Face ID / Touch ID'
-                    : 'Login with Fingerprint'}
+                    ? t('auth.loginWithBiometric', { type: 'Face ID / Touch ID' })
+                    : t('auth.loginWithBiometric', { type: 'Fingerprint' })}
               </Text>
             </TouchableOpacity>
           )}
 
           <View style={styles.dividerContainer}>
             <Divider style={styles.divider} />
-            <Text style={styles.dividerText}>OR</Text>
+            <Text style={styles.dividerText}>{t('auth.or')}</Text>
             <Divider style={styles.divider} />
           </View>
 
@@ -307,7 +309,7 @@ export default function LoginScreen() {
           >
             <MaterialCommunityIcons name="google" size={24} color="#DB4437" />
             <Text style={styles.googleButtonText}>
-              {isGoogleLoading ? 'Signing in...' : 'Continue with Google'}
+              {isGoogleLoading ? t('auth.signingIn') : t('auth.continueWithGoogle')}
             </Text>
           </TouchableOpacity>
 

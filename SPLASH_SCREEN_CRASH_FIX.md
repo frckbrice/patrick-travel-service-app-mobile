@@ -161,6 +161,7 @@ npx expo start --dev-client --clear --android
 # Quick reinstall from EAS
 curl -L -o patrick-dev.apk "https://expo.dev/artifacts/eas/aa9e77f4-17ce-4ac4-84e1-8ee392302b65.apk"
 adb install -r patrick-dev.apk
+# to remove the artifact after installation from the root of the repos
 rm patrick-dev.apk
 npx expo start --dev-client --clear
 ```

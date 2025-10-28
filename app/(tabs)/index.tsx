@@ -14,7 +14,6 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { userApi } from '../../lib/api/user.api';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { DashboardStats } from '../../lib/types';
@@ -25,7 +24,6 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - SPACING.lg * 3) / 2;
 
 export default function HomeScreen() {
-  useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
@@ -309,6 +307,13 @@ export default function HomeScreen() {
           onPress={() => router.push('/help/faq')}
           color={COLORS.info}
           delay={550}
+        />
+        <QuickActionButton
+          title={t('dashboard.downloadTemplates') || 'Download Templates'}
+          icon="file-download-outline"
+          onPress={() => router.push('/templates')}
+          color="#8B7BC8"
+          delay={600}
         />
       </View>
 

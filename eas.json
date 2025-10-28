@@ -54,9 +54,9 @@
         "track": "internal"
       },
       "ios": {
-        "appleId": "your-apple-id@example.com",
+        "appleId": "developer@unidov.com",
         "ascAppId": "your-app-store-connect-app-id",
-        "appleTeamId": "your-apple-team-id"
+        "appleTeamId": "45BF48HLZ8"
       }
     }
   }

@@ -16,11 +16,13 @@ import { faqApi } from '../../lib/api/faq.api';
 import { FAQ } from '../../lib/types';
 import { useDebounce } from '../../lib/hooks';
 import { EmptyState, Card } from '../../components/ui';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 
 export default function FAQScreen() {
   useRequireAuth();
   const { t } = useTranslation();
+  const colors = useThemeColors();
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export default function FAQScreen() {
     ({ item: category, index }: { item: string; index: number }) => (
       <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
         <View style={styles.categoryContainer}>
-          <Text style={styles.categoryTitle}>{category}</Text>
+          <Text style={[styles.categoryTitle, { color: colors.text }]}>{category}</Text>
           {groupedFAQs[category].map((faq, faqIndex) => (
             <Animated.View
               key={faq.id}
@@ -85,11 +87,11 @@ export default function FAQScreen() {
                 onPress={() =>
                   setExpandedId(expandedId === faq.id ? null : faq.id)
                 }
-                style={styles.accordion}
-                titleStyle={styles.accordionTitle}
+                style={[styles.accordion, { backgroundColor: colors.surface }]}
+                titleStyle={[styles.accordionTitle, { color: colors.text }]}
               >
-                <View style={styles.answerContainer}>
-                  <Text style={styles.answer}>{faq.answer}</Text>
+                <View style={[styles.answerContainer, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.answer, { color: colors.textSecondary }]}>{faq.answer}</Text>
                 </View>
               </List.Accordion>
             </Animated.View>
@@ -104,20 +106,20 @@ export default function FAQScreen() {
   const keyExtractor = useCallback((item: string) => item, []);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.searchContainer}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
         <MaterialCommunityIcons
           name="magnify"
           size={20}
-          color={COLORS.textSecondary}
+          color={colors.textSecondary}
           style={styles.searchIcon}
         />
         <TextInput
           placeholder={t('help.searchFAQ')}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          style={styles.searchInput}
-          placeholderTextColor={COLORS.textSecondary}
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholderTextColor={colors.textSecondary}
         />
       </View>
 
@@ -149,12 +151,11 @@ export default function FAQScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent', // Will be set dynamically
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
     margin: SPACING.md,
     borderRadius: 12,
     paddingHorizontal: SPACING.md,
@@ -166,7 +167,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: COLORS.text,
   },
   list: {
     padding: SPACING.md,
@@ -177,27 +177,22 @@ const styles = StyleSheet.create({
   categoryTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: COLORS.text,
     marginBottom: SPACING.sm,
     marginLeft: SPACING.xs,
   },
   accordion: {
-    backgroundColor: COLORS.surface,
     marginBottom: SPACING.xs,
     borderRadius: 12,
   },
   accordionTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: COLORS.text,
   },
   answerContainer: {
     padding: SPACING.md,
-    backgroundColor: COLORS.background,
   },
   answer: {
     fontSize: 14,
     lineHeight: 20,
-    color: COLORS.textSecondary,
   },
 });

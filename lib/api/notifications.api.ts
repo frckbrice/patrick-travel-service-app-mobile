@@ -8,10 +8,16 @@ export const notificationsApi = {
     pageSize = 20
   ): Promise<ApiResponse<Notification[]>> {
     try {
-      const response = await apiClient.get<ApiResponse<Notification[]>>(
-        `/notifications?page=${page}&pageSize=${pageSize}`
+      // Web returns: { success: true, data: { notifications: [...], unreadCount, pagination, filters } }
+      const response = await apiClient.get<ApiResponse<{ notifications: Notification[], unreadCount: number, pagination: any }>>(
+        `/notifications?page=${page}&limit=${pageSize}`
       );
-      return response.data;
+      
+      return {
+        success: response.data.success,
+        data: response.data.data?.notifications || [],
+        error: response.data.error,
+      };
     } catch (error: any) {
       // Error already sanitized by interceptor - safe to use
       return {

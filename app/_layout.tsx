@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus, Platform, InteractionManager, View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -15,10 +15,17 @@ import {
 } from '../lib/services/pushNotifications';
 import { useCaseUpdates } from '../lib/hooks/useCaseUpdates';
 import { logger } from '../lib/utils/logger';
-import { COLORS } from '../lib/constants';
+import { SPACING, FONT_SIZES } from '../lib/constants';
 import '../lib/i18n';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+});
 
 function AppContent() {
   const refreshAuth = useAuthStore((state) => state.refreshAuth);
@@ -26,38 +33,75 @@ function AppContent() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { theme, isDark } = useTheme();
   const appState = useRef<AppStateStatus>(AppState.currentState);
+  const [isAppReady, setIsAppReady] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
   // Enable fallback case update monitoring (acts as backup if push notifications fail)
   useCaseUpdates();
 
   useEffect(() => {
-    // Check auth status on app load
-    refreshAuth();
-  }, []);
+    let isMounted = true;
 
-  useEffect(() => {
-    // Setup push notification listeners
-    const cleanup = setupNotificationListeners();
+    const initializeApp = async () => {
+      try {
+        console.log('🚀 App initialization started');
 
-    // Check if app was opened from a notification (cold start)
-    getLastNotificationResponse().then((data) => {
-      if (data) {
-        logger.info('App opened from notification', data);
-        handleNotificationNavigation(data);
+        // Set app ready immediately to prevent blank page
+        if (isMounted) {
+          setIsAppReady(true);
+        }
+
+        // Try auth refresh in background (non-blocking)
+        refreshAuth().catch((error) => {
+          console.warn('⚠️ Auth refresh failed (non-blocking):', error);
+          logger.warn('Auth refresh failed during init', error);
+        });
+
+        console.log('✅ App initialization complete');
+      } catch (error) {
+        console.error('❌ App initialization error:', error);
+        logger.error('App initialization failed', error);
+        if (isMounted) {
+          setInitError('Failed to initialize app. Please restart.');
+        }
       }
-    });
+    };
 
-    return cleanup;
+    // Initialize immediately
+    initializeApp();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshAuth]);
+
+  useEffect(() => {
+    // Defer notification listeners setup to avoid blocking UI thread at launch
+    let cleanup: (() => void) | undefined;
+    const task = InteractionManager.runAfterInteractions(() => {
+      cleanup = setupNotificationListeners();
+      getLastNotificationResponse().then((data) => {
+        if (data) {
+          logger.info('App opened from notification', data);
+          handleNotificationNavigation(data);
+        }
+      });
+    });
+    return () => {
+      task.cancel();
+      if (cleanup)
+        cleanup();
+    };
   }, []);
 
   useEffect(() => {
-    // Register push token when user is authenticated
+    // Register push token when user is authenticated (deferred)
     if (isAuthenticated) {
-      registerPushToken();
+      const task = InteractionManager.runAfterInteractions(() => {
+        registerPushToken();
+      });
+      return () => task.cancel();
     }
-  }, [isAuthenticated]);
-
-  useEffect(() => {
     // Handle app state changes (background/foreground)
     const subscription = AppState.addEventListener(
       'change',
@@ -79,12 +123,30 @@ function AppContent() {
         logger.info('AppState changed to:', nextAppState);
       }
     );
-
     return () => {
       subscription.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]); // refreshAuth is stable, don't include in deps
+  }, [isAuthenticated]);
+
+
+  // Show loading screen while app initializes
+  if (!isAppReady) {
+    return (
+      <SafeAreaProvider>
+        <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.onSurface }]}>
+            Loading...
+          </Text>
+          {initError && (
+            <Text style={[styles.errorText, { color: theme.colors.error }]}>
+              {initError}
+            </Text>
+          )}
+        </View>
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -92,19 +154,19 @@ function AppContent() {
         <StatusBar
           style={isDark ? 'light' : 'dark'}
           backgroundColor={
-            Platform.OS === 'android' ? COLORS.primary : undefined
+            Platform.OS === 'android' ? theme.colors.primary : undefined
           }
         />
         <Stack
           screenOptions={{
             headerShown: false,
             contentStyle: {
-              backgroundColor: COLORS.background,
+              backgroundColor: theme.colors.background,
             },
             headerStyle: {
-              backgroundColor: COLORS.surface,
+              backgroundColor: theme.colors.surface,
             },
-            headerTintColor: COLORS.text,
+            headerTintColor: theme.colors.onSurface,
             headerTitleStyle: {
               fontWeight: '700',
               fontSize: 18,
@@ -217,6 +279,15 @@ function AppContent() {
               headerLargeTitle: false,
             }}
           />
+          <Stack.Screen
+            name="templates"
+            options={{
+              headerShown: true,
+              title: 'Document Templates',
+              presentation: 'card',
+              headerLargeTitle: false,
+            }}
+          />
         </Stack>
         <Toast />
       </PaperProvider>
@@ -233,3 +304,21 @@ export default function RootLayout() {
     </QueryClientProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: SPACING.md,
+    fontSize: FONT_SIZES.md,
+  },
+  errorText: {
+    marginTop: SPACING.sm,
+    fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.lg,
+  },
+});

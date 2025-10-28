@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     StyleSheet,
@@ -19,8 +19,11 @@ import { destinationsApi, Destination } from '../../lib/api/destinations.api';
 import { ServiceType, CaseStatus, Priority } from '../../lib/types';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
 import { CalendarDatePicker } from '../../components/ui/CalendarDatePicker';
-import { COLORS, SPACING, SERVICE_TYPE_LABELS } from '../../lib/constants';
+import { SPACING, SERVICE_TYPE_LABELS, COLORS } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { toast } from '../../lib/services/toast';
+import { secureStorage } from '../../lib/storage/secureStorage';
+import { useDebounce } from '../../lib/hooks/useDebounce';
 
 interface CaseFormData {
   serviceType: ServiceType;
@@ -33,12 +36,16 @@ export default function NewCaseScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
-    const user = useAuthStore((state) => state.user);
-    const { addOptimisticCase, updateCaseById, removeOptimisticCase } = useCasesStore();
+  const colors = useThemeColors();
+  const user = useAuthStore((state) => state.user);
+  const { addOptimisticCase, updateCaseById, removeOptimisticCase } = useCasesStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
     const [destinations, setDestinations] = useState<Destination[]>([]);
     const [loadingDestinations, setLoadingDestinations] = useState(true);
     const [destinationMenuVisible, setDestinationMenuVisible] = useState(false);
+    const [isDraftSaving, setIsDraftSaving] = useState(false);
+    const [draftSaved, setDraftSaved] = useState(false);
+    const [formProgress, setFormProgress] = useState(0);
 
   const {
     control,
@@ -46,6 +53,7 @@ export default function NewCaseScreen() {
     formState: { errors },
     watch,
       setValue,
+      getValues,
   } = useForm<CaseFormData>({
     defaultValues: {
       serviceType: ServiceType.TOURIST_VISA,
@@ -55,12 +63,92 @@ export default function NewCaseScreen() {
   const serviceType = watch('serviceType');
     const selectedDestinationId = watch('destinationId');
     const selectedDate = watch('travelDate');
+    const details = watch('details');
   const insets = useSafeAreaInsets();
 
-    // Fetch destinations on mount
+    // Calculate form progress
+    const calculateProgress = useCallback(() => {
+        let progress = 0;
+        const values = getValues();
+
+        if (values.serviceType) progress += 25;
+        if (values.destinationId) progress += 25;
+        if (values.travelDate) progress += 25;
+        if (values.details && values.details.trim().length > 10) progress += 25;
+
+        setFormProgress(progress);
+        return progress;
+    }, [getValues]);
+
+    // Debounced form data for auto-save
+    const debouncedFormData = useDebounce({
+        serviceType,
+        destinationId: selectedDestinationId,
+        travelDate: selectedDate,
+        details,
+    }, 2000);
+
+    // Auto-save draft functionality
+    const saveDraft = useCallback(async (formData: Partial<CaseFormData>) => {
+        if (!user || !formData.serviceType) return;
+
+        setIsDraftSaving(true);
+        try {
+            const draftData = {
+                ...formData,
+                userId: user.id,
+                lastSaved: new Date().toISOString(),
+            };
+
+            await secureStorage.set('case_draft', draftData);
+            setDraftSaved(true);
+
+            // Show brief confirmation
+            setTimeout(() => setDraftSaved(false), 2000);
+        } catch (error) {
+            console.error('Failed to save draft:', error);
+        } finally {
+            setIsDraftSaving(false);
+        }
+    }, [user]);
+
+    // Load draft on mount
+    const loadDraft = useCallback(async () => {
+        try {
+            const draft = await secureStorage.get<CaseFormData & { userId: string; lastSaved: string }>('case_draft');
+            if (draft && draft.userId === user?.id) {
+                setValue('serviceType', draft.serviceType);
+                setValue('destinationId', draft.destinationId);
+                setValue('travelDate', draft.travelDate ? new Date(draft.travelDate) : undefined);
+                setValue('details', draft.details || '');
+
+                toast.success({
+                    title: t('cases.draftRestored'),
+                    message: t('cases.draftRestoredMessage'),
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load draft:', error);
+        }
+    }, [user, setValue, t]);
+
+    // Auto-save when form data changes
+    useEffect(() => {
+        if (debouncedFormData.serviceType) {
+            saveDraft(debouncedFormData);
+        }
+    }, [debouncedFormData, saveDraft]);
+
+    // Update progress when form changes
+    useEffect(() => {
+        calculateProgress();
+    }, [serviceType, selectedDestinationId, selectedDate, details, calculateProgress]);
+
+    // Fetch destinations and load draft on mount
     useEffect(() => {
         fetchDestinations();
-    }, []);
+        loadDraft();
+    }, [loadDraft]);
 
     const fetchDestinations = async () => {
         try {
@@ -138,6 +226,9 @@ export default function NewCaseScreen() {
                 ...response.data,
                 isPending: false,
             });
+
+            // Clear draft after successful submission
+            await secureStorage.delete('case_draft');
       } else {
         throw new Error(response.error || t('errors.somethingWrong'));
       }
@@ -155,23 +246,63 @@ export default function NewCaseScreen() {
 
     return (
         <KeyboardAvoidingScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{
         ...styles.scrollContent,
         paddingBottom: insets.bottom + SPACING.lg,
       }}
     >
             <View style={styles.header}>
-                <Text variant="headlineMedium" style={styles.title}>
+                <Text variant="headlineMedium" style={[styles.title, { color: colors.primary }]}>
           {t('dashboard.submitNewCase')}
         </Text>
-                <Text variant="bodyLarge" style={styles.subtitle}>
+                <Text variant="bodyLarge" style={[styles.subtitle, { color: colors.textSecondary }]}>
           {t('cases.selectServiceType')}
         </Text>
+
+                {/* Progress Indicator */}
+                <View style={styles.progressContainer}>
+                    <View style={styles.progressBar}>
+                        <View
+                            style={[
+                                styles.progressFill,
+                                { width: `${formProgress}%`, backgroundColor: colors.primary }
+                            ]}
+                        />
+                    </View>
+                    <Text variant="bodySmall" style={[styles.progressText, { color: colors.textSecondary }]}>
+                        {formProgress}% {t('cases.complete')}
+                    </Text>
+                </View>
+
+                {/* Draft Status */}
+                {(isDraftSaving || draftSaved) && (
+                    <View style={styles.draftStatus}>
+                        {isDraftSaving ? (
+                            <>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                                <Text variant="bodySmall" style={[styles.draftText, { color: colors.textSecondary }]}>
+                                    {t('cases.savingDraft')}
+                                </Text>
+                            </>
+                        ) : (
+                            <>
+                                <MaterialCommunityIcons
+                                    name="check-circle"
+                                    size={16}
+                                    color={colors.success}
+                                />
+                                <Text variant="bodySmall" style={[styles.draftText, { color: colors.textSecondary }]}>
+                                    {t('cases.draftSaved')}
+                                </Text>
+                            </>
+                        )}
+                    </View>
+                )}
             </View>
 
             <View style={styles.form}>
-        <Text variant="titleMedium" style={styles.label}>
+        <Text variant="titleMedium" style={[styles.label, { color: colors.text }]}>
           {t('cases.serviceType')}
         </Text>
         <Controller
@@ -206,7 +337,7 @@ export default function NewCaseScreen() {
                 />
 
                 {/* Modern Destination Dropdown */}
-                <Text variant="titleMedium" style={styles.label}>
+                <Text variant="titleMedium" style={[styles.label, { color: colors.text }]}>
                     {t('cases.destination')} *
                 </Text>
                 <Controller
@@ -223,21 +354,22 @@ export default function NewCaseScreen() {
                                         onPress={() => setDestinationMenuVisible(true)}
                                         style={[
                                             styles.dropdownButton,
-                                            !!errors.destinationId && styles.dropdownButtonError,
+                                            { backgroundColor: colors.surface, borderColor: colors.border },
+                                            !!errors.destinationId && { borderColor: colors.error },
                                         ]}
                                     >
                                         <View style={styles.dropdownContent}>
                                             {loadingDestinations ? (
                                                 <>
-                                                    <ActivityIndicator size="small" color={COLORS.primary} />
-                                                    <Text style={styles.dropdownText}>Loading...</Text>
+                                                    <ActivityIndicator size="small" color={colors.primary} />
+                                                    <Text style={[styles.dropdownText, { color: colors.textSecondary }]}>Loading...</Text>
                                                 </>
                                             ) : getSelectedDestination() ? (
                                                 <>
                                                     <Text style={styles.flagEmoji}>
                                                         {getSelectedDestination()?.flagEmoji}
                                                     </Text>
-                                                    <Text style={styles.dropdownTextSelected}>
+                                                    <Text style={[styles.dropdownTextSelected, { color: colors.text }]}>
                                                         {getSelectedDestination()?.name}
                                                     </Text>
                                                 </>
@@ -246,9 +378,9 @@ export default function NewCaseScreen() {
                                                     <MaterialCommunityIcons
                                                         name="earth"
                                                         size={20}
-                                                        color={COLORS.textSecondary}
+                                                        color={colors.textSecondary}
                                                     />
-                                                    <Text style={styles.dropdownPlaceholder}>
+                                                    <Text style={[styles.dropdownPlaceholder, { color: colors.textSecondary }]}>
                                                         Select destination
                                                     </Text>
                                                 </>
@@ -257,7 +389,7 @@ export default function NewCaseScreen() {
                                         <MaterialCommunityIcons
                                             name={destinationMenuVisible ? 'chevron-up' : 'chevron-down'}
                                             size={24}
-                                            color={COLORS.textSecondary}
+                                            color={colors.textSecondary}
                                         />
                                     </TouchableOpacity>
                                 }
@@ -289,11 +421,11 @@ export default function NewCaseScreen() {
                     )}
                 />
                 {errors.destinationId && (
-                    <Text style={styles.fieldError}>{errors.destinationId.message}</Text>
+                    <Text style={[styles.fieldError, { color: colors.error }]}>{errors.destinationId.message}</Text>
         )}
 
                 {/* Beautiful Calendar Date Picker */}
-                <Text variant="titleMedium" style={styles.label}>
+                <Text variant="titleMedium" style={[styles.label, { color: colors.text }]}>
                     {t('cases.expectedTravelDate')}
                 </Text>
         <Controller
@@ -324,20 +456,20 @@ export default function NewCaseScreen() {
                   error={!!errors.details}
                   style={styles.input}
                   outlineStyle={styles.inputOutline}
-                  textColor={COLORS.text}
-                  placeholderTextColor={COLORS.textSecondary}
+                  textColor={colors.text}
+                  placeholderTextColor={colors.textSecondary}
                   placeholder={t('cases.provideDetails')}
                   theme={{
                       colors: {
-                          onSurfaceVariant: COLORS.textSecondary,
-                          onSurface: COLORS.text,
+                          onSurfaceVariant: colors.textSecondary,
+                          onSurface: colors.text,
                       },
                   }}
                         />
                     )}
                 />
                 {errors.details && (
-                    <Text style={styles.fieldError}>{errors.details.message}</Text>
+                    <Text style={[styles.fieldError, { color: colors.error }]}>{errors.details.message}</Text>
                 )}
 
                 <TouchableOpacity
@@ -345,16 +477,16 @@ export default function NewCaseScreen() {
                         if (isSubmitting) return;
                         handleSubmit(onSubmit)();
                     }}
-                    style={styles.button}
+                    style={[styles.button, { backgroundColor: colors.primary }]}
                     activeOpacity={0.8}
                 >
                     {isSubmitting ? (
                         <View style={styles.buttonLoading}>
-                            <ActivityIndicator color={COLORS.surface} size="small" />
-                            <Text style={styles.buttonLabel}>{t('cases.submitCase')}</Text>
+                            <ActivityIndicator color={colors.surface} size="small" />
+                            <Text style={[styles.buttonLabel, { color: colors.surface }]}>{t('cases.submitCase')}</Text>
                         </View>
                     ) : (
-                        <Text style={styles.buttonLabel}>{t('cases.submitCase')}</Text>
+                        <Text style={[styles.buttonLabel, { color: colors.surface }]}>{t('cases.submitCase')}</Text>
                     )}
                 </TouchableOpacity>
 
@@ -369,7 +501,7 @@ export default function NewCaseScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
+        backgroundColor: 'transparent', // Will be set dynamically
   },
   scrollContent: {
       flexGrow: 1,
@@ -382,10 +514,8 @@ const styles = StyleSheet.create({
     title: {
         fontWeight: 'bold',
     marginBottom: SPACING.sm,
-        color: COLORS.primary,
   },
     subtitle: {
-    color: COLORS.textSecondary,
         textAlign: 'center',
     },
     form: {
@@ -394,7 +524,6 @@ const styles = StyleSheet.create({
     label: {
         marginBottom: SPACING.sm,
         marginTop: SPACING.md,
-        color: COLORS.text,
         fontSize: 16,
         fontWeight: '600',
     },
@@ -406,14 +535,12 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: SPACING.sm,
-      backgroundColor: COLORS.surface,
   },
     inputOutline: {
         borderRadius: 12,
         borderWidth: 1.5,
     },
     fieldError: {
-    color: COLORS.error,
     fontSize: 12,
     marginBottom: SPACING.sm,
         marginTop: -4,
@@ -422,7 +549,6 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
     marginBottom: SPACING.md,
         borderRadius: 12,
-        backgroundColor: COLORS.primary,
         paddingVertical: 14,
         alignItems: 'center',
         justifyContent: 'center',
@@ -435,7 +561,6 @@ const styles = StyleSheet.create({
     buttonLabel: {
         fontSize: 16,
         fontWeight: '600',
-        color: COLORS.surface,
     },
     buttonLoading: {
         flexDirection: 'row',
@@ -443,8 +568,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 8,
   },
-  note: {
-    color: COLORS.textSecondary,
+    note: {
     textAlign: 'center',
     fontStyle: 'italic',
         fontSize: 12,
@@ -454,10 +578,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         borderWidth: 1.5,
-        borderColor: COLORS.border,
         paddingHorizontal: SPACING.md,
         paddingVertical: SPACING.md + 2,
         marginBottom: SPACING.sm,
@@ -518,5 +640,43 @@ const styles = StyleSheet.create({
     },
     menuItemFlag: {
         fontSize: 22,
+    },
+    // Progress Indicator Styles
+    progressContainer: {
+        marginTop: SPACING.md,
+        alignItems: 'center',
+    },
+    progressBar: {
+        width: '100%',
+        height: 6,
+        backgroundColor: COLORS.border,
+        borderRadius: 3,
+        overflow: 'hidden',
+        marginBottom: SPACING.xs,
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: COLORS.primary,
+        borderRadius: 3,
+    },
+    progressText: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
+    },
+    // Draft Status Styles
+    draftStatus: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.xs,
+        marginTop: SPACING.sm,
+        paddingHorizontal: SPACING.sm,
+        paddingVertical: SPACING.xs,
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        alignSelf: 'center',
+    },
+    draftText: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
     },
 });

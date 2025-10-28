@@ -2,183 +2,142 @@ import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/ui';
 import { COLORS, SPACING } from '../../lib/constants';
 
 export default function TermsAndConditionsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
         <Text variant="headlineMedium" style={styles.title}>
-          Terms and Conditions
+          {t('legal.terms.title')}
         </Text>
         <Text variant="bodySmall" style={styles.lastUpdated}>
-          Last updated: October 19, 2025
+          {t('legal.terms.lastUpdated')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          1. Acceptance of Terms
+          {t('legal.terms.acceptance.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          By accessing and using the Patrick Travel Services mobile application,
-          you accept and agree to be bound by these Terms and Conditions. If you
-          disagree with any part of these terms, you must not use our
-          application.
+          {t('legal.terms.acceptance.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          2. Service Description
+          {t('legal.terms.serviceDescription.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          Patrick Travel Services provides immigration consultation services
-          through our mobile application, including:{'\n\n'}• Case management
-          and tracking{'\n'}• Document upload and verification{'\n'}• Real-time
-          communication with advisors{'\n'}• Push notifications for updates
-          {'\n'}• Access to immigration resources and FAQs
+          {t('legal.terms.serviceDescription.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          3. User Accounts
+          {t('legal.terms.userAccounts.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          <Text style={styles.bold}>Account Creation:</Text>
-          {'\n'}• You must provide accurate and complete information{'\n'}• You
-          are responsible for maintaining account security{'\n'}• You must be at
-          least 18 years old{'\n'}• One account per person{'\n\n'}
-          <Text style={styles.bold}>Account Security:</Text>
-          {'\n'}• Keep your password confidential{'\n'}• Notify us immediately
-          of unauthorized access{'\n'}• You are responsible for all activities
-          under your account
+          <Text style={styles.bold}>{t('legal.terms.userAccounts.accountCreation')}</Text>
+          {'\n'}{t('legal.terms.userAccounts.accountCreationList')}{'\n\n'}
+          <Text style={styles.bold}>{t('legal.terms.userAccounts.accountSecurity')}</Text>
+          {'\n'}{t('legal.terms.userAccounts.accountSecurityList')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          4. Acceptable Use
+          {t('legal.terms.acceptableUse.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          You agree NOT to:{'\n\n'}• Violate any laws or regulations{'\n'}•
-          Upload false or misleading documents{'\n'}• Impersonate another person
-          {'\n'}• Interfere with the app's operation{'\n'}• Use the service for
-          unauthorized purposes{'\n'}• Share your account with others{'\n'}•
-          Attempt to access unauthorized areas{'\n'}• Upload malicious content
-          or viruses
+          {t('legal.terms.acceptableUse.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          5. Intellectual Property
+          {t('legal.terms.intellectualProperty.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          All content, features, and functionality of the app are owned by
-          Patrick Travel Services and protected by international copyright,
-          trademark, and other intellectual property laws.
+          {t('legal.terms.intellectualProperty.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          6. Document Upload and Storage
+          {t('legal.terms.documentUpload.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          • You grant us permission to store and process your uploaded documents
-          {'\n'}• You are responsible for the accuracy of uploaded documents
-          {'\n'}• We use secure third-party storage (UploadThing){'\n'}•
-          Documents are retained as long as your account is active or as
-          required by law{'\n'}• You can delete documents at any time
+          {t('legal.terms.documentUpload.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          7. Service Limitations
+          {t('legal.terms.serviceLimitations.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          <Text style={styles.bold}>We do NOT guarantee:</Text>
-          {'\n'}• Visa or immigration approval{'\n'}• Uninterrupted service
-          availability{'\n'}• Error-free operation{'\n'}• Specific processing
-          times{'\n\n'}
-          Immigration outcomes depend on government authorities, not our
-          service. We provide consultation and support but cannot control final
-          decisions.
+          <Text style={styles.bold}>{t('legal.terms.serviceLimitations.weDoNotGuarantee')}</Text>
+          {'\n'}{t('legal.terms.serviceLimitations.limitationsList')}{'\n\n'}
+          {t('legal.terms.serviceLimitations.note')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          8. Fees and Payment
+          {t('legal.terms.feesAndPayment.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          • Service fees are communicated before case submission{'\n'}• Payment
-          terms are specified in your service agreement{'\n'}• Fees are
-          non-refundable except as required by law{'\n'}• We reserve the right
-          to modify fees with notice
+          {t('legal.terms.feesAndPayment.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          9. Termination
+          {t('legal.terms.termination.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          <Text style={styles.bold}>You may:</Text>
-          {'\n'}• Delete your account at any time from app settings{'\n'}• Data
-          will be permanently deleted within 30 days{'\n\n'}
-          <Text style={styles.bold}>We may:</Text>
-          {'\n'}• Suspend or terminate accounts for Terms violations{'\n'}•
-          Terminate service with 30 days notice{'\n'}• Retain data as required
-          by law after termination
+          <Text style={styles.bold}>{t('legal.terms.termination.youMay')}</Text>
+          {'\n'}{t('legal.terms.termination.youMayList')}{'\n\n'}
+          <Text style={styles.bold}>{t('legal.terms.termination.weMay')}</Text>
+          {'\n'}{t('legal.terms.termination.weMayList')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          10. Limitation of Liability
+          {t('legal.terms.limitationOfLiability.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          Patrick Travel Services shall not be liable for:{'\n\n'}• Immigration
-          application rejections{'\n'}• Delays in processing by government
-          authorities{'\n'}• Loss of data due to circumstances beyond our
-          control{'\n'}• Indirect, incidental, or consequential damages{'\n\n'}
-          Our total liability is limited to the fees paid for services.
+          {t('legal.terms.limitationOfLiability.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          11. Indemnification
+          {t('legal.terms.indemnification.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          You agree to indemnify and hold Patrick Travel Services harmless from
-          any claims, damages, or expenses arising from your use of the app or
-          violation of these Terms.
+          {t('legal.terms.indemnification.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          12. Dispute Resolution
+          {t('legal.terms.disputeResolution.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          • Disputes will be resolved through good-faith negotiation{'\n'}• If
-          unresolved, binding arbitration will be used{'\n'}• Governing law:
-          [Specify your jurisdiction]{'\n'}• Venue: [Specify location]
+          {t('legal.terms.disputeResolution.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          13. Changes to Terms
+          {t('legal.terms.changesToTerms.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          We reserve the right to modify these Terms at any time. Changes will
-          be effective immediately upon posting in the app. Your continued use
-          constitutes acceptance of modified Terms.
+          {t('legal.terms.changesToTerms.content')}
         </Text>
 
         <Text variant="titleMedium" style={styles.sectionTitle}>
-          14. Contact Information
+          {t('legal.terms.contactInformation.title')}
         </Text>
         <Text variant="bodyMedium" style={styles.paragraph}>
-          For questions about these Terms:{'\n\n'}
-          Email: legal@patricktravel.com{'\n'}
-          Phone: [Your Phone Number]{'\n'}
-          Address: [Your Business Address]
+          {t('legal.terms.contactInformation.content')}
+          {t('legal.terms.contactInformation.email')}
+          {t('legal.terms.contactInformation.phone')}
+          {t('legal.terms.contactInformation.address')}
+          {t('legal.terms.contactInformation.supportHours')}
         </Text>
 
         <View style={styles.disclaimer}>
           <Text variant="bodySmall" style={styles.disclaimerText}>
-            By using Patrick Travel Services, you acknowledge that you have
-            read, understood, and agree to be bound by these Terms and
-            Conditions and our Privacy Policy.
+            {t('legal.terms.disclaimer')}
           </Text>
         </View>
 
         <Button
-          title="Close"
+          title={t('legal.close')}
           onPress={() => router.back()}
           style={styles.closeButton}
         />

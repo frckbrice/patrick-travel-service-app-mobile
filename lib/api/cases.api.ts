@@ -35,10 +35,16 @@ export const casesApi = {
         params.append('status', status);
       }
 
-      const response = await apiClient.get<PaginatedResponse<Case>>(
+      // Web returns: { success: true, data: { cases: [...], pagination } }
+      const response = await apiClient.get<ApiResponse<{ cases: Case[], pagination: any }>>(
         `/cases?${params.toString()}`
       );
-      return response.data;
+      
+      return {
+        success: response.data.success,
+        data: response.data.data?.cases || [],
+        pagination: response.data.data?.pagination || { page, limit, total: 0, totalPages: 0 },
+      };
     } catch (error: any) {
       logger.error('Get cases failed', error);
       return {
@@ -70,8 +76,14 @@ export const casesApi = {
   async createCase(data: CreateCaseRequest): Promise<ApiResponse<Case>> {
     try {
       logger.info('Creating new case', { serviceType: data.serviceType });
-      const response = await apiClient.post<ApiResponse<Case>>('/cases', data);
-      return response.data;
+      // Web returns: { success: true, data: { case: {...} } }
+      const response = await apiClient.post<ApiResponse<{ case: Case }>>('/cases', data);
+      
+      return {
+        success: response.data.success,
+        data: response.data.data?.case,
+        error: response.data.error,
+      };
     } catch (error: any) {
       // Error already sanitized by interceptor - safe to use
       return {

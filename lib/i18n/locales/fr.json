@@ -63,7 +63,39 @@
     "passwordMin8": "Au moins 8 caractères",
     "passwordUppercase": "Au moins une lettre majuscule",
     "passwordLowercase": "Au moins une lettre minuscule",
-    "passwordNumber": "Au moins un chiffre"
+    "passwordNumber": "Au moins un chiffre",
+    "enterEmailToReset": "Entrez votre email pour réinitialiser votre mot de passe",
+    "or": "OU",
+    "signingIn": "Connexion...",
+    "continueWithGoogle": "Continuer avec Google",
+    "authenticating": "Authentification...",
+    "loginWithBiometric": "Connectez-vous avec {{type}}",
+    "consentRequired": "Consentement requis",
+    "acceptBothTerms": "Veuillez accepter les Conditions Générales et la Politique de Confidentialité pour continuer",
+    "iAcceptThe": "J'accepte",
+    "termsAndConditions": "Conditions Générales",
+    "privacyPolicy": "Politique de Confidentialité",
+    "phoneNumber": "Numéro de téléphone",
+    "enterPhone": "Entrez le numéro de téléphone",
+    "phoneVerificationDescription": "Nous vous enverrons un code de vérification par SMS",
+    "sendOTP": "Envoyer le code",
+    "otpSent": "Code envoyé",
+    "otpSentMessage": "Code de vérification envoyé à {{phone}}",
+    "verifyPhone": "Vérifier le téléphone",
+    "enterOTPCode": "Entrez le code à 6 chiffres envoyé à {{phone}}",
+    "enterOTP": "Entrez le code",
+    "verifying": "Vérification...",
+    "sendingOTP": "Envoi du code...",
+    "verifyOTP": "Vérifier le code",
+    "didntReceiveOTP": "Vous n'avez pas reçu le code?",
+    "resendOTP": "Renvoyer le code",
+    "resendIn": "Renvoyer dans {{seconds}}s",
+    "phoneVerified": "Téléphone vérifié",
+    "phoneVerifiedMessage": "Votre numéro de téléphone a été vérifié avec succès",
+    "invalidOTP": "Code de vérification invalide",
+    "failedToSendOTP": "Échec de l'envoi du code",
+    "failedToVerifyOTP": "Échec de la vérification du code",
+    "verifyPhoneNumber": "Vérifier le numéro de téléphone"
   },
   "dashboard": {
     "welcomeUser": "Bon retour, {{name}}!",
@@ -83,7 +115,8 @@
     "newCase": "Nouveau cas",
     "uploadDocument": "Téléverser document",
     "contactSupport": "Contacter support",
-    "viewFAQs": "Voir les FAQ"
+    "viewFAQs": "Voir les FAQ",
+    "downloadTemplates": "Télécharger des modèles"
   },
   "cases": {
     "myCases": "Mes cas",
@@ -125,7 +158,13 @@
     "chatNotAvailable": "Chat pas encore disponible",
     "chatNotAvailableDesc": "Le chat sera disponible une fois qu'un conseiller sera assigné à votre cas. Vous recevrez une notification lorsque cela se produira.",
     "awaitingAssignment": "En attente d'assignation du conseiller",
-    "assignmentHelper": "Votre cas est en cours de révision. Un conseiller sera assigné dans les 24-48 heures et vous recevrez une notification."
+    "assignmentHelper": "Votre cas est en cours de révision. Un conseiller sera assigné dans les 24-48 heures et vous recevrez une notification.",
+    "draftRestored": "Brouillon restauré",
+    "draftRestoredMessage": "Votre brouillon précédent a été restauré",
+    "savingDraft": "Sauvegarde du brouillon...",
+    "draftSaved": "Brouillon sauvegardé",
+    "processingInBackground": "Traitement en arrière-plan",
+    "submissionFailed": "Échec de la soumission"
   },
   "documents": {
     "myDocuments": "Mes documents",
@@ -158,7 +197,9 @@
     "fileTooLarge": "La taille du fichier dépasse la limite de 16MB",
     "uploading": "Téléversement...",
     "selectFileFirst": "Veuillez sélectionner un cas et un fichier",
-    "selectCaseFirst": "Veuillez d'abord sélectionner un cas"
+    "selectCaseFirst": "Veuillez d'abord sélectionner un cas",
+    "tapToViewImage": "Appuyez pour voir l'image",
+    "tapToViewPDF": "Appuyez pour voir le PDF"
   },
   "messages": {
     "conversations": "Conversations",
@@ -316,5 +357,188 @@
     "somethingWrong": "Quelque chose s'est mal passé. Veuillez réessayer.",
     "failedToLoadDestinations": "Échec du chargement des destinations. Veuillez réessayer.",
     "minLength": "Doit contenir au moins {{min}} caractères"
+  },
+  "offline": {
+    "offlineMode": "Mode hors ligne",
+    "connectionRestored": "Connexion restaurée",
+    "youAreOffline": "Vous êtes hors ligne",
+    "changesWillSync": "Les modifications seront synchronisées lorsque la connexion sera rétablie",
+    "youAreBackOnline": "Vous êtes de nouveau en ligne. Synchronisation des données...",
+    "syncFailed": "Échec de la synchronisation",
+    "failedToSync": "Échec de la synchronisation {{operation}} {{url}} après {{attempts}} tentatives",
+    "syncingData": "Synchronisation des données...",
+    "cacheCleared": "Cache vidé avec succès",
+    "noCachedData": "Aucune donnée en cache disponible et hors ligne"
+  },
+  "templates": {
+    "templates": "Modèles de documents",
+    "searchTemplates": "Rechercher des modèles...",
+    "allServices": "Tous les services",
+    "allCategories": "Toutes les catégories",
+    "required": "Obligatoire",
+    "downloads": "téléchargements",
+    "download": "Télécharger",
+    "noTemplates": "Aucun modèle trouvé",
+    "noTemplatesDescription": "Il n'y a pas de modèles disponibles pour le moment.",
+    "downloading": "Téléchargement...",
+    "downloaded": "Téléchargé",
+    "downloadError": "Échec du téléchargement du modèle"
+  },
+  "legal": {
+    "privacyPolicy": "Politique de Confidentialité",
+    "termsAndConditions": "Conditions Générales",
+    "lastUpdated": "Dernière mise à jour: 26 octobre 2025",
+    "close": "Fermer",
+    "privacy": {
+      "title": "Politique de Confidentialité",
+      "lastUpdated": "Dernière mise à jour: 26 octobre 2025",
+      "introduction": {
+        "title": "1. Introduction",
+        "content": "Patrick Travel Services (\"nous\", \"notre\" ou \"nos\") s'engage à protéger votre vie privée. Cette Politique de Confidentialité explique comment nous collectons, utilisons, divulguons et protégeons vos informations lorsque vous utilisez notre application mobile."
+      },
+      "informationWeCollect": {
+        "title": "2. Informations que nous collectons",
+        "personalInfo": "Informations personnelles:",
+        "personalInfoList": "• Nom (prénom et nom de famille)\n• Adresse e-mail\n• Numéro de téléphone\n• Détails des cas d'immigration\n• Documents téléchargés (passeports, pièces d'identité, documents de voyage)\n• Messages de chat avec les conseillers",
+        "technicalInfo": "Informations techniques:",
+        "technicalInfoList": "• Informations sur l'appareil (modèle, version du système d'exploitation)\n• Jetons de notification push\n• Adresse IP\n• Données d'utilisation de l'application\n• Rapports de plantage et diagnostics"
+      },
+      "howWeUseInfo": {
+        "title": "3. Comment nous utilisons vos informations",
+        "content": "Nous utilisons vos informations pour:\n\n• Fournir des services de consultation en immigration\n• Traiter et gérer vos cas\n• Communiquer avec vous concernant vos cas\n• Envoyer des notifications push pour les mises à jour\n• Stocker et gérer vos documents en toute sécurité\n• Améliorer nos services\n• Respecter les obligations légales\n• Prévenir la fraude et assurer la sécurité"
+      },
+      "thirdPartyServices": {
+        "title": "4. Services tiers",
+        "content": "Nous utilisons les services tiers suivants:\n\n",
+        "firebase": "Firebase (Google):",
+        "firebaseList": "• Authentification\n• Base de données en temps réel\n• Messagerie cloud\n• Analytiques",
+        "uploadThing": "UploadThing:",
+        "uploadThingList": "• Stockage et gestion de documents",
+        "expo": "Expo:",
+        "expoList": "• Livraison de notifications push",
+        "note": "Ces services peuvent collecter des informations comme décrit dans leurs politiques de confidentialité respectives."
+      },
+      "dataSecurity": {
+        "title": "5. Sécurité des données",
+        "content": "Nous mettons en œuvre des mesures de sécurité conformes aux normes de l'industrie:\n\n• Chiffrement de bout en bout pour la transmission de données (HTTPS/TLS)\n• Stockage chiffré dans le trousseau de l'appareil\n• Authentification sécurisée avec Firebase\n• Audits de sécurité réguliers\n• Contrôles d'accès et authentification\n• Option d'authentification biométrique (Face ID/Touch ID)"
+      },
+      "yourRights": {
+        "title": "6. Vos droits (RGPD)",
+        "content": "Vous avez le droit de:\n\n• ",
+        "access": "Accès:",
+        "accessDesc": " Voir toutes vos données personnelles\n• ",
+        "rectification": "Rectification:",
+        "rectificationDesc": " Mettre à jour les informations incorrectes\n• ",
+        "erasure": "Effacement:",
+        "erasureDesc": " Supprimer votre compte et vos données\n• ",
+        "dataPortability": "Portabilité des données:",
+        "dataPortabilityDesc": " Exporter vos données au format JSON\n• ",
+        "object": "Opposition:",
+        "objectDesc": " Vous opposer à certains traitements de données\n• ",
+        "withdrawConsent": "Retirer le consentement:",
+        "withdrawConsentDesc": " À tout moment",
+        "contactNote": "Pour exercer ces droits, contactez-nous à: privacy@patricktravel.com"
+      },
+      "dataRetention": {
+        "title": "7. Conservation des données",
+        "content": "Nous conservons vos données aussi longtemps que:\n\n• Votre compte est actif\n• Nécessaire pour fournir les services\n• Exigé par la loi (généralement 7 ans pour les documents d'immigration)\n\nLorsque vous supprimez votre compte, nous effaçons définitivement vos données personnelles dans les 30 jours, sauf lorsque les obligations légales exigent la conservation."
+      },
+      "childrensPrivacy": {
+        "title": "8. Confidentialité des enfants",
+        "content": "Notre service n'est pas destiné aux utilisateurs de moins de 18 ans. Nous ne collectons pas sciemment d'informations personnelles auprès d'enfants."
+      },
+      "internationalTransfers": {
+        "title": "9. Transferts internationaux de données",
+        "content": "Vos informations peuvent être transférées et traitées dans des pays en dehors de votre pays de résidence. Nous nous assurons que des garanties appropriées sont en place pour protéger vos données conformément au RGPD."
+      },
+      "changesToPolicy": {
+        "title": "10. Modifications de cette politique",
+        "content": "Nous pouvons mettre à jour cette Politique de Confidentialité de temps à autre. Nous vous informerons de tout changement en publiant la nouvelle politique dans l'application et en mettant à jour la date de \"Dernière mise à jour\"."
+      },
+      "contactUs": {
+        "title": "11. Nous contacter",
+        "content": "Pour des questions sur cette Politique de Confidentialité ou pour exercer vos droits:\n\n",
+        "email": "E-mail: privacy@patricktravel.com\n",
+        "phone": "Téléphone: +1 (555) 123-4567\n",
+        "address": "Adresse: 123 Immigration Plaza, Suite 200\nToronto, ON M5H 2N2, Canada\n\n",
+        "dpo": "Délégué à la protection des données:\n",
+        "dpoEmail": "E-mail: dpo@patricktravel.com\n",
+        "dpoPhone": "Téléphone: +1 (555) 123-4568\n\n",
+        "supportHours": "Heures de support: Lundi-Vendredi, 9h00 - 18h00 EST"
+      }
+    },
+    "terms": {
+      "title": "Conditions Générales",
+      "lastUpdated": "Dernière mise à jour: 26 octobre 2025",
+      "acceptance": {
+        "title": "1. Acceptation des conditions",
+        "content": "En accédant et en utilisant l'application mobile Patrick Travel Services, vous acceptez et convenez d'être lié par ces Conditions Générales. Si vous n'êtes pas d'accord avec une partie de ces conditions, vous ne devez pas utiliser notre application."
+      },
+      "serviceDescription": {
+        "title": "2. Description du service",
+        "content": "Patrick Travel Services fournit des services de consultation en immigration par le biais de notre application mobile, notamment:\n\n• Gestion et suivi des cas\n• Téléchargement et vérification de documents\n• Communication en temps réel avec les conseillers\n• Notifications push pour les mises à jour\n• Accès aux ressources d'immigration et FAQ"
+      },
+      "userAccounts": {
+        "title": "3. Comptes utilisateur",
+        "accountCreation": "Création de compte:",
+        "accountCreationList": "• Vous devez fournir des informations exactes et complètes\n• Vous êtes responsable de la sécurité de votre compte\n• Vous devez avoir au moins 18 ans\n• Un compte par personne",
+        "accountSecurity": "Sécurité du compte:",
+        "accountSecurityList": "• Gardez votre mot de passe confidentiel\n• Informez-nous immédiatement de tout accès non autorisé\n• Vous êtes responsable de toutes les activités sous votre compte"
+      },
+      "acceptableUse": {
+        "title": "4. Utilisation acceptable",
+        "content": "Vous acceptez de NE PAS:\n\n• Violer toute loi ou réglementation\n• Télécharger des documents faux ou trompeurs\n• Se faire passer pour une autre personne\n• Interférer avec le fonctionnement de l'application\n• Utiliser le service à des fins non autorisées\n• Partager votre compte avec d'autres\n• Tenter d'accéder à des zones non autorisées\n• Télécharger du contenu malveillant ou des virus"
+      },
+      "intellectualProperty": {
+        "title": "5. Propriété intellectuelle",
+        "content": "Tout le contenu, les fonctionnalités et la fonctionnalité de l'application appartiennent à Patrick Travel Services et sont protégés par les lois internationales sur le droit d'auteur, les marques de commerce et autres propriétés intellectuelles."
+      },
+      "documentUpload": {
+        "title": "6. Téléchargement et stockage de documents",
+        "content": "• Vous nous accordez la permission de stocker et traiter vos documents téléchargés\n• Vous êtes responsable de l'exactitude des documents téléchargés\n• Nous utilisons un stockage tiers sécurisé (UploadThing)\n• Les documents sont conservés aussi longtemps que votre compte est actif ou comme exigé par la loi\n• Vous pouvez supprimer les documents à tout moment"
+      },
+      "serviceLimitations": {
+        "title": "7. Limitations du service",
+        "weDoNotGuarantee": "Nous ne garantissons PAS:",
+        "limitationsList": "• L'approbation de visa ou d'immigration\n• La disponibilité ininterrompue du service\n• Un fonctionnement sans erreur\n• Des délais de traitement spécifiques",
+        "note": "Les résultats d'immigration dépendent des autorités gouvernementales, pas de notre service. Nous fournissons consultation et support mais ne pouvons pas contrôler les décisions finales."
+      },
+      "feesAndPayment": {
+        "title": "8. Frais et paiement",
+        "content": "• Les frais de service sont communiqués avant la soumission du cas\n• Les conditions de paiement sont spécifiées dans votre accord de service\n• Les frais ne sont pas remboursables sauf si requis par la loi\n• Nous nous réservons le droit de modifier les frais avec préavis"
+      },
+      "termination": {
+        "title": "9. Résiliation",
+        "youMay": "Vous pouvez:",
+        "youMayList": "• Supprimer votre compte à tout moment depuis les paramètres de l'application\n• Les données seront définitivement supprimées dans les 30 jours",
+        "weMay": "Nous pouvons:",
+        "weMayList": "• Suspendre ou résilier les comptes pour violation des Conditions\n• Résilier le service avec un préavis de 30 jours\n• Conserver les données comme exigé par la loi après résiliation"
+      },
+      "limitationOfLiability": {
+        "title": "10. Limitation de responsabilité",
+        "content": "Patrick Travel Services ne sera pas responsable de:\n\n• Les rejets de demandes d'immigration\n• Les retards dans le traitement par les autorités gouvernementales\n• La perte de données due à des circonstances hors de notre contrôle\n• Les dommages indirects, accessoires ou consécutifs\n\nNotre responsabilité totale est limitée aux frais payés pour les services."
+      },
+      "indemnification": {
+        "title": "11. Indemnisation",
+        "content": "Vous acceptez d'indemniser et de dégager Patrick Travel Services de toute réclamation, dommage ou dépense découlant de votre utilisation de l'application ou de la violation de ces Conditions."
+      },
+      "disputeResolution": {
+        "title": "12. Résolution des différends",
+        "content": "• Les différends seront résolus par négociation de bonne foi\n• Si non résolus, l'arbitrage contraignant sera utilisé\n• Droit applicable: Ontario, Canada\n• Lieu: Toronto, Ontario, Canada"
+      },
+      "changesToTerms": {
+        "title": "13. Modifications des conditions",
+        "content": "Nous nous réservons le droit de modifier ces Conditions à tout moment. Les modifications prendront effet immédiatement lors de leur publication dans l'application. Votre utilisation continue constitue une acceptation des Conditions modifiées."
+      },
+      "contactInformation": {
+        "title": "14. Informations de contact",
+        "content": "Pour des questions sur ces Conditions:\n\n",
+        "email": "E-mail: legal@patricktravel.com\n",
+        "phone": "Téléphone: +1 (555) 123-4567\n",
+        "address": "Adresse: 123 Immigration Plaza, Suite 200\nToronto, ON M5H 2N2, Canada\n\n",
+        "supportHours": "Heures de support: Lundi-Vendredi, 9h00 - 18h00 EST"
+      },
+      "disclaimer": "En utilisant Patrick Travel Services, vous reconnaissez avoir lu, compris et accepté d'être lié par ces Conditions Générales et notre Politique de Confidentialité."
+    }
   }
 }

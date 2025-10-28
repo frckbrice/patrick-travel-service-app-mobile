@@ -14,13 +14,15 @@ import { useRequireAuth, useAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { userApi, UpdateProfileRequest } from '../../lib/api/user.api';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
 import { toast } from '../../lib/services/toast';
 
 export default function EditProfileScreen() {
   useRequireAuth();
   const { t } = useTranslation();
+  const colors = useThemeColors();
   const { user, updateUser } = useAuth();
   const { updateUserOptimistic, revertUserUpdate } = useAuthStore();
   const router = useRouter();
@@ -82,17 +84,17 @@ export default function EditProfileScreen() {
 
   return (
     <KeyboardAvoidingScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{
         ...styles.scrollContent,
         paddingBottom: insets.bottom + SPACING.lg,
       }}
     >
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>
+        <Text variant="headlineMedium" style={[styles.title, { color: colors.primary }]}>
           {t('profile.editProfile')}
         </Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>
+        <Text variant="bodyLarge" style={[styles.subtitle, { color: colors.textSecondary }]}>
           {t('profile.updateInfo')}
         </Text>
       </View>
@@ -118,19 +120,19 @@ export default function EditProfileScreen() {
               error={!!errors.firstName}
               style={styles.input}
               outlineStyle={styles.inputOutline}
-              textColor={COLORS.text}
-              placeholderTextColor={COLORS.textSecondary}
+              textColor={colors.text}
+              placeholderTextColor={colors.textSecondary}
               theme={{
                 colors: {
-                  onSurfaceVariant: COLORS.textSecondary,
-                  onSurface: COLORS.text,
+                  onSurfaceVariant: colors.textSecondary,
+                  onSurface: colors.text,
                 },
               }}
             />
           )}
         />
         {errors.firstName && (
-          <Text style={styles.fieldError}>{errors.firstName.message}</Text>
+          <Text style={[styles.fieldError, { color: colors.error }]}>{errors.firstName.message}</Text>
         )}
 
         <Controller
@@ -153,19 +155,19 @@ export default function EditProfileScreen() {
               error={!!errors.lastName}
               style={styles.input}
               outlineStyle={styles.inputOutline}
-              textColor={COLORS.text}
-              placeholderTextColor={COLORS.textSecondary}
+              textColor={colors.text}
+              placeholderTextColor={colors.textSecondary}
               theme={{
                 colors: {
-                  onSurfaceVariant: COLORS.textSecondary,
-                  onSurface: COLORS.text,
+                  onSurfaceVariant: colors.textSecondary,
+                  onSurface: colors.text,
                 },
               }}
             />
           )}
         />
         {errors.lastName && (
-          <Text style={styles.fieldError}>{errors.lastName.message}</Text>
+          <Text style={[styles.fieldError, { color: colors.error }]}>{errors.lastName.message}</Text>
         )}
 
         <Controller
@@ -181,12 +183,12 @@ export default function EditProfileScreen() {
               keyboardType="phone-pad"
               style={styles.input}
               outlineStyle={styles.inputOutline}
-              textColor={COLORS.text}
-              placeholderTextColor={COLORS.textSecondary}
+              textColor={colors.text}
+              placeholderTextColor={colors.textSecondary}
               theme={{
                 colors: {
-                  onSurfaceVariant: COLORS.textSecondary,
-                  onSurface: COLORS.text,
+                  onSurfaceVariant: colors.textSecondary,
+                  onSurface: colors.text,
                 },
               }}
             />
@@ -200,8 +202,8 @@ export default function EditProfileScreen() {
           disabled
           style={styles.input}
           outlineStyle={styles.inputOutline}
-          textColor={COLORS.textSecondary}
-          right={<TextInput.Icon icon="lock" color={COLORS.textSecondary} />}
+          textColor={colors.textSecondary}
+          right={<TextInput.Icon icon="lock" color={colors.textSecondary} />}
         />
         <Text variant="bodySmall" style={styles.note}>
           {t('profile.emailCannotChange')}
@@ -212,16 +214,16 @@ export default function EditProfileScreen() {
             if (isSubmitting) return;
             handleSubmit(onSubmit)();
           }}
-          style={styles.button}
+          style={[styles.button, { backgroundColor: colors.primary }]}
           activeOpacity={0.8}
         >
           {isSubmitting ? (
             <View style={styles.buttonLoading}>
-              <ActivityIndicator color={COLORS.surface} size="small" />
-              <Text style={styles.buttonLabel}>{t('common.saveChanges')}</Text>
+              <ActivityIndicator color={colors.surface} size="small" />
+              <Text style={[styles.buttonLabel, { color: colors.surface }]}>{t('common.saveChanges')}</Text>
             </View>
           ) : (
-            <Text style={styles.buttonLabel}>{t('common.saveChanges')}</Text>
+            <Text style={[styles.buttonLabel, { color: colors.surface }]}>{t('common.saveChanges')}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -232,7 +234,7 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent', // Will be set dynamically
   },
   scrollContent: {
     flexGrow: 1,
@@ -245,10 +247,8 @@ const styles = StyleSheet.create({
   title: {
     fontWeight: 'bold',
     marginBottom: SPACING.sm,
-    color: COLORS.primary,
   },
   subtitle: {
-    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   form: {
@@ -256,20 +256,17 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: SPACING.sm,
-    backgroundColor: COLORS.surface,
   },
   inputOutline: {
     borderRadius: 12,
     borderWidth: 1.5,
   },
   fieldError: {
-    color: COLORS.error,
     fontSize: 12,
     marginBottom: SPACING.sm,
     marginTop: -4,
   },
   note: {
-    color: COLORS.textSecondary,
     fontSize: 12,
     marginBottom: SPACING.lg,
     marginTop: -4,
@@ -277,7 +274,6 @@ const styles = StyleSheet.create({
   button: {
     marginTop: SPACING.md,
     borderRadius: 12,
-    backgroundColor: COLORS.primary,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -290,7 +286,6 @@ const styles = StyleSheet.create({
   buttonLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.surface,
   },
   buttonLoading: {
     flexDirection: 'row',

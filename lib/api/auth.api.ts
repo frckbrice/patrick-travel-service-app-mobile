@@ -39,12 +39,27 @@ export const authApi = {
   async login(_data: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     try {
       logger.info('Logging in user using Firebase ID token');
+      
+      // Log the API endpoint being called
+      const baseURL = apiClient.defaults.baseURL;
+      logger.info('API Base URL:', { baseURL, endpoint: '/auth/login' });
+      
       const response = await apiClient.post<ApiResponse<LoginResponse>>(
         '/auth/login',
         {}
       );
+      
+      logger.info('Login API response successful');
       return response.data;
     } catch (error: any) {
+      logger.error('Login API error details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        baseURL: apiClient.defaults.baseURL,
+      });
+      
       // Error already sanitized by interceptor - safe to use
       return {
         success: false,

@@ -85,10 +85,16 @@ export const documentsApi = {
     pageSize = 20
   ): Promise<ApiResponse<Document[]>> {
     try {
-      const response = await apiClient.get<ApiResponse<Document[]>>(
-        `/documents?page=${page}&pageSize=${pageSize}`
+      // Web returns: { success: true, data: { documents: [...], pagination } }
+      const response = await apiClient.get<ApiResponse<{ documents: Document[], pagination: any }>>(
+        `/documents?page=${page}&limit=${pageSize}`
       );
-      return response.data;
+      
+      return {
+        success: response.data.success,
+        data: response.data.data?.documents || [],
+        error: response.data.error,
+      };
     } catch (error: any) {
       // Error already sanitized by interceptor - safe to use
       return {

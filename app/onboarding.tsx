@@ -56,17 +56,17 @@ const getOnboardingSlides = (t: any): OnboardingSlide[] => [
   },
   {
     id: '3',
-    title: t('onboarding.slide4Title'),
-    description: t('onboarding.slide4Description'),
-    icon: 'cloud-upload',
-    color: '#FFC107',
-  },
-  {
-    id: '4',
     title: t('onboarding.slide3Title'),
     description: t('onboarding.slide3Description'),
     icon: 'message-text',
     color: '#DC3545',
+  },
+  {
+    id: '4',
+    title: t('onboarding.slide4Title'),
+    description: t('onboarding.slide4Description'),
+    icon: 'cloud-upload',
+    color: '#FFC107',
   },
 ];
 

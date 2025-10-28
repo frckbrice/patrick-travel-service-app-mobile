@@ -2,12 +2,21 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import { auth } from '../firebase/config';
 import { logger } from '../utils/logger';
+import { Platform } from 'react-native';
 
-const API_BASE_URL =
-  Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+// Get the configured API URL from expo config (set in app.config.ts)
+// This value comes from the .env file's EXPO_PUBLIC_API_URL
+const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+
+// Debug logging
+console.log('🔍 API Configuration Debug:', {
+  'Constants.expoConfig.extra.apiUrl': Constants.expoConfig?.extra?.apiUrl,
+  'Final baseURL': API_BASE_URL,
+  'Platform': Platform.OS,
+});
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: process.env.EXPO_PUBLIC_API_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -22,11 +31,20 @@ apiClient.interceptors.request.use(
       if (user) {
         const token = await user.getIdToken();
         config.headers.Authorization = `Bearer ${token}`;
-        console.log(`🔑 API Request to ${config.url} with auth token`);
+        if (__DEV__) {
+          console.log(`🔑 API Request to ${config.url} with auth token`);
+        }
       } else {
-        console.warn(
-          `⚠️ API Request to ${config.url} WITHOUT auth token - no Firebase user`
-        );
+        // Only log warnings for API calls that require auth (not public endpoints)
+        // Suppress warnings for auth-related endpoints and dashboard during initial load
+        const isAuthEndpoint = config.url?.includes('/auth/') || 
+                               config.url?.includes('/login') ||
+                               config.url?.includes('/register');
+        if (!isAuthEndpoint && __DEV__) {
+          console.warn(
+            `⚠️ API Request to ${config.url} WITHOUT auth token`
+          );
+        }
       }
     } catch (error) {
       logger.error('Error getting auth token', error);
@@ -62,6 +80,16 @@ apiClient.interceptors.response.use(
         // Sign out user if token refresh fails
         await auth.signOut();
       }
+    }
+
+    // Don't log errors for network errors when user is not authenticated
+    // This is expected behavior when the app starts without a user session
+    const isNetworkError = !error.response && error.message === 'Network Error';
+    const hasNoAuth = !error.config?.headers?.Authorization;
+    
+    if (isNetworkError && hasNoAuth) {
+      // Silently handle network errors for unauthenticated requests
+      return Promise.reject(error);
     }
 
     // Sanitize error for logging

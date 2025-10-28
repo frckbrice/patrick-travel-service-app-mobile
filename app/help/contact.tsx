@@ -17,7 +17,8 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useRequireAuth, useAuth } from '../../features/auth/hooks/useAuth';
 import { emailService, ContactFormData } from '../../lib/services/email';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING, BUSINESS_INFO, formatFullContact, COLORS } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { toast } from '../../lib/services/toast';
 
 const MAX_MESSAGE_LENGTH = 1000;
@@ -33,6 +34,7 @@ const getQuickTopics = (t: any) => [
 export default function ContactSupportScreen() {
   useRequireAuth();
   const { t } = useTranslation();
+  const colors = useThemeColors();
     const { user } = useAuth();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -136,7 +138,7 @@ export default function ContactSupportScreen() {
 
   return (
     <KeyboardAvoidingScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{
         ...styles.scrollContent,
           paddingBottom: insets.bottom + SPACING.lg + 100,
@@ -146,13 +148,13 @@ export default function ContactSupportScreen() {
               <MaterialCommunityIcons
                   name="headset"
                   size={48}
-                  color={COLORS.primary}
+                  color={colors.primary}
                   style={styles.headerIcon}
               />
-              <Text variant="headlineMedium" style={styles.title}>
+              <Text variant="headlineMedium" style={[styles.title, { color: colors.primary }]}>
                   {t('profile.contactSupport')}
         </Text>
-              <Text variant="bodyLarge" style={styles.subtitle}>
+              <Text variant="bodyLarge" style={[styles.subtitle, { color: colors.textSecondary }]}>
                   {t('help.contactDescription')}
               </Text>
           </View>
@@ -162,7 +164,7 @@ export default function ContactSupportScreen() {
               entering={FadeInDown.delay(100).duration(400)}
               style={styles.quickTopicsContainer}
           >
-              <Text style={styles.sectionLabel}>{t('help.quickTopics')}</Text>
+              <Text style={[styles.sectionLabel, { color: colors.text }]}>{t('help.quickTopics')}</Text>
               <View style={styles.topicsGrid}>
                   {getQuickTopics(t).map((topic, index) => (
                       <Chip
@@ -202,13 +204,13 @@ export default function ContactSupportScreen() {
                               error={!!errors.name}
                               style={styles.input}
                               outlineStyle={styles.inputOutline}
-                              textColor={COLORS.text}
-                              placeholderTextColor={COLORS.textSecondary}
-                              left={<TextInput.Icon icon="account" color={COLORS.primary} />}
+                              textColor={colors.text}
+                              placeholderTextColor={colors.textSecondary}
+                              left={<TextInput.Icon icon="account" color={colors.primary} />}
                               theme={{
                                   colors: {
-                                      onSurfaceVariant: COLORS.textSecondary,
-                                      onSurface: COLORS.text,
+                                      onSurfaceVariant: colors.textSecondary,
+                                      onSurface: colors.text,
                                   },
                               }}
                               returnKeyType="next"
@@ -216,7 +218,7 @@ export default function ContactSupportScreen() {
                       )}
                   />
                   {errors.name && (
-                      <Text style={styles.fieldError}>{errors.name.message}</Text>
+                      <Text style={[styles.fieldError, { color: colors.error }]}>{errors.name.message}</Text>
                   )}
               </Animated.View>
 
@@ -243,13 +245,13 @@ export default function ContactSupportScreen() {
                               error={!!errors.email}
                               style={styles.input}
                               outlineStyle={styles.inputOutline}
-                              textColor={COLORS.text}
-                              placeholderTextColor={COLORS.textSecondary}
-                              left={<TextInput.Icon icon="email" color={COLORS.primary} />}
+                              textColor={colors.text}
+                              placeholderTextColor={colors.textSecondary}
+                              left={<TextInput.Icon icon="email" color={colors.primary} />}
                               theme={{
                                   colors: {
-                                      onSurfaceVariant: COLORS.textSecondary,
-                                      onSurface: COLORS.text,
+                                      onSurfaceVariant: colors.textSecondary,
+                                      onSurface: colors.text,
                                   },
                               }}
                               returnKeyType="next"
@@ -257,7 +259,7 @@ export default function ContactSupportScreen() {
                       )}
                   />
                   {errors.email && (
-                      <Text style={styles.fieldError}>{errors.email.message}</Text>
+                      <Text style={[styles.fieldError, { color: colors.error }]}>{errors.email.message}</Text>
                   )}
               </Animated.View>
 
@@ -275,13 +277,13 @@ export default function ContactSupportScreen() {
                               keyboardType="phone-pad"
                               style={styles.input}
                               outlineStyle={styles.inputOutline}
-                              textColor={COLORS.text}
-                              placeholderTextColor={COLORS.textSecondary}
-                              left={<TextInput.Icon icon="phone" color={COLORS.primary} />}
+                              textColor={colors.text}
+                              placeholderTextColor={colors.textSecondary}
+                              left={<TextInput.Icon icon="phone" color={colors.primary} />}
                               theme={{
                                   colors: {
-                                      onSurfaceVariant: COLORS.textSecondary,
-                                      onSurface: COLORS.text,
+                                      onSurfaceVariant: colors.textSecondary,
+                                      onSurface: colors.text,
                                   },
                               }}
                               returnKeyType="next"
@@ -305,13 +307,13 @@ export default function ContactSupportScreen() {
                               error={!!errors.subject}
                               style={styles.input}
                               outlineStyle={styles.inputOutline}
-                              textColor={COLORS.text}
-                              placeholderTextColor={COLORS.textSecondary}
-                              left={<TextInput.Icon icon="text-box" color={COLORS.primary} />}
+                              textColor={colors.text}
+                              placeholderTextColor={colors.textSecondary}
+                              left={<TextInput.Icon icon="text-box" color={colors.primary} />}
                               theme={{
                                   colors: {
-                                      onSurfaceVariant: COLORS.textSecondary,
-                                      onSurface: COLORS.text,
+                                      onSurfaceVariant: colors.textSecondary,
+                                      onSurface: colors.text,
                                   },
                               }}
                               returnKeyType="next"
@@ -319,13 +321,13 @@ export default function ContactSupportScreen() {
                       )}
                   />
                   {errors.subject && (
-                      <Text style={styles.fieldError}>{errors.subject.message}</Text>
+                      <Text style={[styles.fieldError, { color: colors.error }]}>{errors.subject.message}</Text>
                   )}
               </Animated.View>
 
               {/* Enhanced Message Input with Character Counter */}
               <Animated.View entering={FadeInDown.delay(400).duration(400)}>
-                  <Text style={styles.sectionLabel}>{t('help.yourMessage')}</Text>
+                  <Text style={[styles.sectionLabel, { color: colors.text }]}>{t('help.yourMessage')}</Text>
                   <Controller
                       control={control}
                       name="message"
@@ -358,13 +360,13 @@ export default function ContactSupportScreen() {
                                   error={!!errors.message}
                                   style={[styles.input, styles.messageInput]}
                                   outlineStyle={styles.inputOutline}
-                                  textColor={COLORS.text}
-                                  placeholderTextColor={COLORS.textSecondary}
+                                  textColor={colors.text}
+                                  placeholderTextColor={colors.textSecondary}
                                   placeholder={t('help.messagePlaceholder')}
                                   theme={{
                                       colors: {
-                                          onSurfaceVariant: COLORS.textSecondary,
-                                          onSurface: COLORS.text,
+                                          onSurfaceVariant: colors.textSecondary,
+                                          onSurface: colors.text,
                                       },
                                   }}
                                   textAlignVertical="top"
@@ -376,17 +378,18 @@ export default function ContactSupportScreen() {
                                       <MaterialCommunityIcons
                                           name="information"
                                           size={14}
-                                          color={COLORS.textSecondary}
+                                          color={colors.textSecondary}
                                       />
-                                      <Text style={styles.helperText}>
+                                      <Text style={[styles.helperText, { color: colors.textSecondary }]}>
                                           {t('help.messageHelper')}
                                       </Text>
                                   </View>
                                   <Text
                                       style={[
                                           styles.characterCount,
+                                          { color: colors.textSecondary },
                                           messageLength > MAX_MESSAGE_LENGTH * 0.9 &&
-                                          styles.characterCountWarning,
+                                          { color: colors.warning, fontWeight: '600' },
                                       ]}
                                   >
                                       {messageLength}/{MAX_MESSAGE_LENGTH}
@@ -396,7 +399,7 @@ export default function ContactSupportScreen() {
                       )}
                   />
                   {errors.message && (
-                      <Text style={styles.fieldError}>{errors.message.message}</Text>
+                      <Text style={[styles.fieldError, { color: colors.error }]}>{errors.message.message}</Text>
                   )}
               </Animated.View>
 
@@ -406,23 +409,23 @@ export default function ContactSupportScreen() {
                           if (isSubmitting) return;
                           handleSubmit(onSubmit)();
                       }}
-                      style={[styles.button, isSubmitting && styles.buttonDisabled]}
+                      style={[styles.button, { backgroundColor: colors.primary }, isSubmitting && styles.buttonDisabled]}
                       activeOpacity={0.8}
                       disabled={isSubmitting}
                   >
                       {isSubmitting ? (
                           <View style={styles.buttonLoading}>
-                              <ActivityIndicator color={COLORS.surface} size="small" />
-                              <Text style={styles.buttonLabel}>{t('help.sending')}</Text>
+                              <ActivityIndicator color={colors.surface} size="small" />
+                              <Text style={[styles.buttonLabel, { color: colors.surface }]}>{t('help.sending')}</Text>
                           </View>
                       ) : (
                           <View style={styles.buttonContent}>
                               <MaterialCommunityIcons
                                   name="send"
                                   size={20}
-                                  color={COLORS.surface}
+                                  color={colors.surface}
                               />
-                              <Text style={styles.buttonLabel}>{t('help.sendMessage')}</Text>
+                              <Text style={[styles.buttonLabel, { color: colors.surface }]}>{t('help.sendMessage')}</Text>
                           </View>
                       )}
                   </TouchableOpacity>
@@ -442,6 +445,68 @@ export default function ContactSupportScreen() {
                       </Text>
                   </View>
               </Animated.View>
+
+              {/* Contact Information */}
+              <Animated.View entering={FadeInDown.delay(550).duration(400)}>
+                  <View style={styles.contactInfoCard}>
+                      <View style={styles.contactInfoHeader}>
+                          <MaterialCommunityIcons
+                              name="information"
+                              size={20}
+                              color={COLORS.primary}
+                          />
+                          <Text style={styles.contactInfoTitle}>
+                              {t('help.contactInfo')}
+                          </Text>
+                      </View>
+
+                      <View style={styles.contactInfoContent}>
+                          <View style={styles.contactInfoItem}>
+                              <MaterialCommunityIcons
+                                  name="email"
+                                  size={16}
+                                  color={COLORS.textSecondary}
+                              />
+                              <Text style={styles.contactInfoText}>
+                                  {formatFullContact().email}
+                              </Text>
+                          </View>
+
+                          <View style={styles.contactInfoItem}>
+                              <MaterialCommunityIcons
+                                  name="phone"
+                                  size={16}
+                                  color={COLORS.textSecondary}
+                              />
+                              <Text style={styles.contactInfoText}>
+                                  {formatFullContact().phone}
+                              </Text>
+                          </View>
+
+                          <View style={styles.contactInfoItem}>
+                              <MaterialCommunityIcons
+                                  name="map-marker"
+                                  size={16}
+                                  color={COLORS.textSecondary}
+                              />
+                              <Text style={styles.contactInfoText}>
+                                  {formatFullContact().address}
+                              </Text>
+                          </View>
+
+                          <View style={styles.contactInfoItem}>
+                              <MaterialCommunityIcons
+                                  name="clock-outline"
+                                  size={16}
+                                  color={COLORS.textSecondary}
+                              />
+                              <Text style={styles.contactInfoText}>
+                                  {formatFullContact().supportHours}
+                              </Text>
+                          </View>
+                      </View>
+                  </View>
+              </Animated.View>
       </View>
     </KeyboardAvoidingScrollView>
   );
@@ -450,7 +515,7 @@ export default function ContactSupportScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent', // Will be set dynamically
   },
   scrollContent: {
       flexGrow: 1,
@@ -467,11 +532,9 @@ const styles = StyleSheet.create({
     title: {
         fontWeight: 'bold',
         marginBottom: SPACING.sm,
-        color: COLORS.primary,
         textAlign: 'center',
     },
     subtitle: {
-    color: COLORS.textSecondary,
         textAlign: 'center',
         paddingHorizontal: SPACING.md,
         lineHeight: 22,
@@ -482,7 +545,6 @@ const styles = StyleSheet.create({
     sectionLabel: {
         fontSize: 15,
         fontWeight: '600',
-        color: COLORS.text,
         marginBottom: SPACING.md,
     },
     topicsGrid: {
@@ -512,7 +574,6 @@ const styles = StyleSheet.create({
   },
   input: {
         marginBottom: SPACING.sm,
-        backgroundColor: COLORS.surface,
     },
     inputOutline: {
         borderRadius: 12,
@@ -538,12 +599,10 @@ const styles = StyleSheet.create({
     },
     helperText: {
         fontSize: 11,
-        color: COLORS.textSecondary,
         fontStyle: 'italic',
     },
     characterCount: {
         fontSize: 12,
-        color: COLORS.textSecondary,
         fontWeight: '500',
     },
     characterCountWarning: {
@@ -551,7 +610,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     fieldError: {
-        color: COLORS.error,
         fontSize: 12,
         marginBottom: SPACING.sm,
         marginTop: -4,
@@ -559,7 +617,6 @@ const styles = StyleSheet.create({
     button: {
         marginTop: SPACING.xl,
         borderRadius: 12,
-        backgroundColor: COLORS.primary,
         paddingVertical: 16,
         alignItems: 'center',
         justifyContent: 'center',
@@ -581,7 +638,6 @@ const styles = StyleSheet.create({
     buttonLabel: {
         fontSize: 16,
         fontWeight: '600',
-        color: COLORS.surface,
     },
     buttonLoading: {
         flexDirection: 'row',
@@ -653,4 +709,36 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
   },
+    contactInfoCard: {
+        backgroundColor: COLORS.surface,
+        padding: SPACING.md,
+        borderRadius: 12,
+        marginTop: SPACING.lg,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    contactInfoHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: SPACING.md,
+        gap: SPACING.sm,
+    },
+    contactInfoTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: COLORS.text,
+    },
+    contactInfoContent: {
+        gap: SPACING.sm,
+    },
+    contactInfoItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.sm,
+    },
+    contactInfoText: {
+        fontSize: 13,
+        color: COLORS.textSecondary,
+        flex: 1,
+    },
 });
