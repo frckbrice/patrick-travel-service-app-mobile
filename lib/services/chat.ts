@@ -39,23 +39,23 @@ export interface ChatMessage {
   error?: string; // Error message if failed
 }
 
-export interface Conversation {
-  id: string;
-  caseId: string;
+export interface ChatParticipants {
+  clientId: string;
+  clientName: string;
+  agentId: string;
+  agentName: string;
+}
+
+export interface ChatMetadata {
   caseReference: string;
-  lastMessage?: string;
-  lastMessageTime?: number;
-  unreadCount: number;
-  participants: {
-    clientId: string;
-    clientName: string;
-    agentId?: string;
-    agentName?: string;
-  };
+  participants: ChatParticipants;
+  createdAt: number;
+  lastMessage: string | null;
+  lastMessageTime: number | null;
 }
 
 class ChatService {
-  // Send a message
+  // Send a message (aligned with web app)
   async sendMessage(
     caseId: string,
     senderId: string,
@@ -67,43 +67,63 @@ class ChatService {
     try {
       const messagesRef = ref(database, `chats/${caseId}/messages`);
       const newMessageRef = push(messagesRef);
+      const messageId = newMessageRef.key!;
 
-      const chatMessage: Omit<ChatMessage, 'id'> = {
-        caseId,
+      const timestamp = Date.now();
+      const messageData = {
+        id: messageId,
         senderId,
         senderName,
-        senderRole,
-        message,
-        timestamp: Date.now(), // Save timestamp
+        content: message,
+        sentAt: timestamp,
         isRead: false,
-        attachments,
-      };
-
-      // Save with Firebase-compatible field names
-      const firebaseMessage = {
         caseId,
-        senderId,
-        senderName,
-        senderRole,
-        content: message, // Firebase uses 'content'
-        message, // Also keep 'message' for backward compatibility
-        sentAt: Date.now(), // Firebase uses 'sentAt'
-        timestamp: Date.now(), // Also keep 'timestamp' for backward compatibility
-        isRead: false,
-        attachments,
+        attachments: attachments || [],
       };
 
-      await set(newMessageRef, firebaseMessage);
+      // Ensure metadata exists before writing message
+      const metadataRef = ref(database, `chats/${caseId}/metadata`);
+      const existingMetadata = await get(metadataRef);
+
+      if (!existingMetadata.exists()) {
+        logger.warn('Chat metadata not found, message may fail due to Firebase rules', { caseId });
+      } else {
+        // Update metadata with new last message
+        const currentData = existingMetadata.val();
+        await update(metadataRef, {
+          participants: currentData.participants,
+          lastMessage: message.substring(0, 100),
+          lastMessageTime: timestamp,
+        });
+
+        // Update userChats index for both participants
+        const { agentId, clientId } = currentData.participants;
+        if (agentId && clientId) {
+          await Promise.all([
+            update(ref(database, `userChats/${agentId}/${caseId}`), {
+              lastMessage: message.substring(0, 100),
+              lastMessageTime: timestamp,
+            }),
+            update(ref(database, `userChats/${clientId}/${caseId}`), {
+              lastMessage: message.substring(0, 100),
+              lastMessageTime: timestamp,
+            }),
+          ]);
+        }
+      }
+
+      // Write the message
+      await set(newMessageRef, messageData);
 
       // Update cache with the new message
       const newMessage: ChatMessage = {
-        id: newMessageRef.key!,
+        id: messageId,
         caseId,
         senderId,
         senderName,
         senderRole,
         message,
-        timestamp: Date.now(),
+        timestamp,
         isRead: false,
         attachments,
         status: 'sent',
@@ -111,10 +131,7 @@ class ChatService {
       
       await chatCacheService.addMessageToCache(caseId, newMessage);
 
-      // Update conversation metadata
-      await this.updateConversationMetadata(caseId, message);
-
-      logger.info('Message sent successfully', { caseId });
+      logger.info('Message sent successfully', { caseId, messageId });
       return true;
     } catch (error) {
       logger.error('Failed to send message', error);
@@ -195,18 +212,6 @@ class ChatService {
     });
 
     return () => off(q, 'child_added', listener);
-  }
-
-  // Update conversation metadata
-  private async updateConversationMetadata(
-    caseId: string,
-    lastMessage: string
-  ): Promise<void> {
-    const conversationRef = ref(database, `chats/${caseId}/metadata`);
-    await update(conversationRef, {
-      lastMessage: lastMessage.substring(0, 100),
-      lastMessageTime: Date.now(),
-    });
   }
 
   // Load initial messages (last 20) with caching
@@ -462,38 +467,49 @@ class ChatService {
     return () => off(messagesRef, 'value', listener);
   }
 
-  // Mark messages as read
+  // Mark messages as read (aligned with web app)
   async markMessagesAsRead(caseId: string, userId: string): Promise<void> {
     try {
       const messagesRef = ref(database, `chats/${caseId}/messages`);
       const snapshot = await get(messagesRef);
 
-      const updates: Record<string, any> = {};
-      snapshot.forEach((childSnapshot) => {
-        const message = childSnapshot.val();
-        if (message.senderId !== userId && !message.isRead) {
-          updates[`${childSnapshot.key}/isRead`] = true;
+      if (!snapshot.exists()) {
+        logger.info('No messages found to mark as read', { caseId });
+        return;
+      }
+
+      const updatePromises: Promise<void>[] = [];
+
+      snapshot.forEach((msgSnap) => {
+        const msg = msgSnap.val();
+        // Only mark messages as read if they weren't sent by the current user and aren't already read
+        if (msg.senderId !== userId && !msg.isRead) {
+          const messageRef = ref(database, `chats/${caseId}/messages/${msgSnap.key}`);
+          updatePromises.push(
+            update(messageRef, { isRead: true }).catch((err) => {
+              if (err.code !== 'PERMISSION_DENIED') {
+                logger.error('Failed to mark message as read', err, {
+                  caseId,
+                  messageId: msgSnap.key,
+                  userId,
+                });
+              }
+            })
+          );
         }
       });
 
-      if (Object.keys(updates).length > 0) {
-        try {
-          await update(messagesRef, updates);
-        } catch (updateError: any) {
-          // Handle permission denied gracefully
-          if (updateError.code === 'PERMISSION_DENIED') {
-            logger.warn('Permission denied when marking messages as read - this is normal for some users', {
-              caseId,
-              userId
-            });
-            return;
-          }
-          throw updateError;
-        }
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+        logger.info('Messages marked as read', {
+          caseId,
+          userId,
+          count: updatePromises.length,
+        });
       }
     } catch (error) {
-      // Don't throw error - just log it, as permission issues are expected for some users
-      logger.error('Failed to mark messages as read', error);
+      logger.error('Failed to mark messages as read', error, { caseId, userId });
+      // Don't throw - this is non-critical
     }
   }
 
@@ -570,31 +586,82 @@ class ChatService {
     return () => off(chatsRef, 'value', listener);
   }
 
-  // Initialize a conversation for a case
+  // Initialize a conversation for a case (aligned with web app)
   async initializeConversation(
     caseId: string,
     caseReference: string,
     clientId: string,
     clientName: string,
-    agentId?: string,
-    agentName?: string
+    agentId: string,
+    agentName: string
   ): Promise<void> {
     try {
       const conversationRef = ref(database, `chats/${caseId}/metadata`);
-      await set(conversationRef, {
-        caseReference,
-        participants: {
-          clientId,
-          clientName,
-          agentId: agentId || null,
-          agentName: agentName || null,
-        },
-        createdAt: Date.now(),
-      });
+      
+      // Check if conversation already exists
+      const snapshot = await get(conversationRef);
 
-      logger.info('Conversation initialized', { caseId });
+      if (snapshot.exists()) {
+        // Update existing conversation with new agent info
+        await update(conversationRef, {
+          participants: {
+            clientId,
+            clientName,
+            agentId,
+            agentName,
+          },
+          updatedAt: Date.now(),
+        });
+
+        logger.info('Firebase chat updated with new agent', {
+          caseId,
+          clientId,
+          agentId,
+          action: 'update',
+        });
+      } else {
+        // Create new conversation
+        const chatMetadata: ChatMetadata = {
+          caseReference,
+          participants: {
+            clientId,
+            clientName,
+            agentId,
+            agentName,
+          },
+          createdAt: Date.now(),
+          lastMessage: null,
+          lastMessageTime: null,
+        };
+
+        await set(conversationRef, chatMetadata);
+
+        // Create userChats index entries
+        await Promise.all([
+          set(ref(database, `userChats/${agentId}/${caseId}`), {
+            chatId: caseId,
+            participantName: clientName,
+            lastMessage: null,
+            lastMessageTime: null,
+          }),
+          set(ref(database, `userChats/${clientId}/${caseId}`), {
+            chatId: caseId,
+            participantName: agentName,
+            lastMessage: null,
+            lastMessageTime: null,
+          }),
+        ]);
+
+        logger.info('Firebase chat initialized', {
+          caseId,
+          clientId,
+          agentId,
+          action: 'create',
+        });
+      }
     } catch (error) {
       logger.error('Failed to initialize conversation', error);
+      // Don't throw - chat initialization failure shouldn't block case assignment
     }
   }
 
@@ -750,6 +817,64 @@ class ChatService {
     });
 
     return () => off(chatsRef, 'value', listener);
+  }
+
+  // Send initial welcome message from agent to client (aligned with web app)
+  async sendWelcomeMessage(
+    caseId: string,
+    agentId: string,
+    agentName: string,
+    clientName: string,
+    caseReference: string
+  ): Promise<void> {
+    try {
+      const messagesRef = ref(database, `chats/${caseId}/messages`);
+      const welcomeMessageRef = ref(database, `chats/${caseId}/messages/${Date.now()}`);
+
+      const welcomeMessage = {
+        caseId,
+        senderId: agentId,
+        senderName: agentName,
+        content: `Hello ${clientName.split(' ')[0]}, I'm ${agentName}, your advisor for case ${caseReference}. I've reviewed your case and I'm here to help. Feel free to ask any questions!`,
+        sentAt: Date.now(),
+        isRead: false,
+      };
+
+      await set(welcomeMessageRef, welcomeMessage);
+
+      // Update conversation metadata
+      const metadataRef = ref(database, `chats/${caseId}/metadata`);
+      await update(metadataRef, {
+        lastMessage: welcomeMessage.content.substring(0, 100),
+        lastMessageTime: Date.now(),
+      });
+
+      logger.info('Welcome message sent', { caseId, agentId });
+    } catch (error) {
+      logger.error('Failed to send welcome message', error);
+      // Don't throw - welcome message is optional
+    }
+  }
+
+  // Update agent information in existing conversation (aligned with web app)
+  async updateChatAgent(
+    caseId: string,
+    newAgentId: string,
+    newAgentName: string
+  ): Promise<void> {
+    try {
+      const participantsRef = ref(database, `chats/${caseId}/metadata/participants`);
+
+      await update(participantsRef, {
+        agentId: newAgentId,
+        agentName: newAgentName,
+      });
+
+      logger.info('Chat agent updated', { caseId, newAgentId });
+    } catch (error) {
+      logger.error('Failed to update chat agent', error);
+      throw error;
+    }
   }
 }
 
