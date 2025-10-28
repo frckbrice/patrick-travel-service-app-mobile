@@ -85,6 +85,8 @@ export default function ChatScreen() {
   const scrollToEndTimeoutRef = useRef<number | null>(null);
   const [unsubscribeMessages, setUnsubscribeMessages] = useState<(() => void) | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const processedMessagesRef = useRef<Set<string>>(new Set());
+  const latestTimestampRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const onShow = (e: KeyboardEvent) => {
@@ -135,12 +137,15 @@ export default function ChatScreen() {
 
     logger.info('Chat screen mounted', { caseId });
 
+    // Clear processed messages ref for new chat
+    processedMessagesRef.current.clear();
+
     // Load initial messages using pagination hook
     const initializeChat = async () => {
       try {
         logger.info('Starting chat initialization', { caseId });
         await loadInitial();
-        logger.info('Chat initialization completed', { caseId });
+        logger.info('Chat initialization completed', { caseId, messageCount: messages.length });
       } catch (error) {
         logger.error('Failed to initialize chat', error);
       }
@@ -174,53 +179,138 @@ export default function ChatScreen() {
   }, [caseId, user]);
 
   // Set up real-time listener for new messages
-  useEffect(() => {
-    if (!caseId) return;
+  // useEffect(() => {
+  //   if (!caseId) return;
 
-    // Clean up existing listener
-    if (unsubscribeMessages) {
-      unsubscribeMessages();
-    }
+  //   // Clean up existing listener
+  //   if (unsubscribeMessages) {
+  //     unsubscribeMessages();
+  //   }
 
-    // Only set up listener if we have messages loaded
-    if (messages.length > 0) {
-      logger.info('Setting up real-time listener', { caseId, messageCount: messages.length });
+  //   // Only set up listener if we have messages loaded
+  //   if (messages.length > 0) {
+  //     logger.info('Setting up real-time listener', { caseId, messageCount: messages.length });
       
-      // Get the latest timestamp from current messages
-      const latestTimestamp = messages[messages.length - 1].timestamp;
-      logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
+  //     // Get the latest timestamp from current messages
+  //     const latestTimestamp = messages[messages.length - 1].timestamp;
+  //     logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
       
-      const unsubscribe = chatService.onNewMessagesChange(
-        caseId,
-        (newMessages) => {
-          logger.info('Received new messages via real-time listener', { 
-            count: newMessages.length,
-            messageIds: newMessages.map(m => m.id),
-            senderIds: newMessages.map(m => m.senderId)
-          });
-          appendMessages(newMessages);
+  //     const unsubscribe = chatService.onNewMessagesChange(
+  //       caseId,
+  //       (newMessages) => {
+  //         logger.info('Received new messages via real-time listener', { 
+  //           count: newMessages.length,
+  //           messageIds: newMessages.map(m => m.id),
+  //           senderIds: newMessages.map(m => m.senderId)
+  //         });
           
-          // Throttle scroll to end to avoid performance issues
-          if (scrollToEndTimeoutRef.current) {
-            clearTimeout(scrollToEndTimeoutRef.current);
-          }
-          scrollToEndTimeoutRef.current = setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        },
-        latestTimestamp
-      );
+  //         // Filter out messages we've already processed
+  //         const unprocessedMessages = newMessages.filter(msg => {
+  //           if (processedMessagesRef.current.has(msg.id)) {
+  //             logger.debug('Skipping already processed message', { messageId: msg.id });
+  //             return false;
+  //           }
+  //           processedMessagesRef.current.add(msg.id);
+  //           return true;
+  //         });
+          
+  //         if (unprocessedMessages.length > 0) {
+  //           logger.info('Adding unprocessed messages to UI', { 
+  //             newCount: unprocessedMessages.length,
+  //             totalCount: messages.length + unprocessedMessages.length 
+  //           });
+            
+  //           // Display immediately in UI
+  //           setMessages(prev => [...prev, ...unprocessedMessages]);
+  //         } else {
+  //           logger.info('No unprocessed messages to add', { receivedCount: newMessages.length });
+  //         }
+          
+  //         // Throttle scroll to end to avoid performance issues
+  //         if (scrollToEndTimeoutRef.current) {
+  //           clearTimeout(scrollToEndTimeoutRef.current);
+  //         }
+  //         scrollToEndTimeoutRef.current = setTimeout(() => {
+  //           flatListRef.current?.scrollToEnd({ animated: true });
+  //         }, 100);
+  //       },
+  //       latestTimestamp
+  //     );
       
-      setUnsubscribeMessages(unsubscribe);
+  //     setUnsubscribeMessages(unsubscribe);
 
-      return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-      };
+  //     return () => {
+  //       if (unsubscribe) {
+  //         unsubscribe();
+  //       }
+  //     };
+  //   }
+  // }, [caseId, messages.length]);
+
+  useEffect(() => {
+  if (!caseId) return;
+
+  // Ensure only one listener at a time
+  if (unsubscribeMessages) {
+    unsubscribeMessages();
+    setUnsubscribeMessages(null);
+  }
+
+   logger.info('Setting up real-time listener for case', { caseId });
+
+   // Get the latest timestamp from ref to avoid recreating listener
+   const latestTimestamp = latestTimestampRef.current;
+   logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
+
+   const unsubscribe = chatService.onNewMessagesChange(
+     caseId,
+     (newMessages) => {
+       logger.info('Real-time update received', { count: newMessages.length });
+
+       // Filter out messages sent by current user (already handled optimistically)
+       const messagesFromOthers = newMessages.filter(msg => msg.senderId !== user?.id);
+       
+       if (messagesFromOthers.length > 0) {
+         logger.info('Adding messages from others', { count: messagesFromOthers.length });
+         appendMessages(messagesFromOthers);
+       } else {
+         logger.info('No messages from others to add', { totalReceived: newMessages.length });
+       }
+
+       // Scroll to bottom
+       if (scrollToEndTimeoutRef.current) {
+         clearTimeout(scrollToEndTimeoutRef.current);
+       }
+       scrollToEndTimeoutRef.current = setTimeout(() => {
+         flatListRef.current?.scrollToEnd({ animated: true });
+       }, 100);
+     },
+     latestTimestamp
+   );
+
+  setUnsubscribeMessages(() => unsubscribe);
+
+  return () => {
+    if (unsubscribe) unsubscribe();
+  };
+}, [caseId]);
+
+  // Update latest timestamp ref when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      latestTimestampRef.current = messages[messages.length - 1].timestamp;
     }
-  }, [caseId, messages.length]);
+  }, [messages]);
 
+  // Debug: Monitor when messages are loaded
+  useEffect(() => {
+    logger.info('Messages array updated', { 
+      caseId, 
+      count: messages.length,
+      messageIds: messages.map(m => m.id),
+      timestamps: messages.map(m => m.timestamp)
+    });
+  }, [messages, caseId]);
 
   const handleSendMessage = useCallback(async () => {
     if (
@@ -272,7 +362,7 @@ export default function ChatScreen() {
         attachments.length > 0 ? attachments : undefined
       );
 
-      // 5. PERFORMANCE: Update message status efficiently (avoid full map)
+      // 5. Update message status to sent
       setMessages((prev) => {
         const index = prev.findIndex((m) => m.tempId === tempId);
         if (index === -1) return prev;
