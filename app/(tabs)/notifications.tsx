@@ -590,9 +590,9 @@ export default function NotificationsScreen() {
             {combinedNotifications.length > 0 ? (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>
+                  {/* <Text style={styles.sectionTitle}>
                     {t('notifications.emailNotifications') || 'Notifications'}
-                  </Text>
+                  </Text> */}
                   {unreadCount > 0 && (
                     <TouchableOpacity
                       style={styles.markAllButton}

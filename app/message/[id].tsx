@@ -280,7 +280,14 @@ export default function ChatScreen() {
     };
 
     // 1. Add message to UI immediately
-    appendMessages([optimisticMessage]);
+    setMessages((prev) => {
+      // Check for duplicates
+      const exists = prev.some(m => m.tempId === tempId || (m.id === tempId));
+      if (exists) return prev;
+      
+      // Add to end of array
+      return [...prev, optimisticMessage];
+    });
 
     // 2. Clear input immediately for better UX
     setNewMessage('');
