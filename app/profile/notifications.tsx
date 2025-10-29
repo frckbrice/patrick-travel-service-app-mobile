@@ -9,6 +9,7 @@ import {
 import { Text, Switch, List, Divider } from 'react-native-paper';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { notificationService } from '../../lib/services/notifications';
 import { secureStorage } from '../../lib/storage/secureStorage';
@@ -27,6 +28,7 @@ interface NotificationPreferences {
 export default function NotificationPreferencesScreen() {
   useRequireAuth();
   const { t } = useTranslation();
+  const router = useRouter();
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     pushEnabled: false,
     emailEnabled: true,
@@ -93,12 +95,26 @@ export default function NotificationPreferencesScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>
-          {t('profile.notificationPreferences')}
-        </Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>
-          {t('profile.manageNotifications')}
-        </Text>
+        <View style={styles.headerTop}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <MaterialCommunityIcons
+              name="arrow-left"
+              size={24}
+              color={COLORS.text}
+            />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text variant="headlineMedium" style={styles.title}>
+              {t('profile.notificationPreferences')}
+            </Text>
+            <Text variant="bodyLarge" style={styles.subtitle}>
+              {t('profile.manageNotifications')}
+            </Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -335,6 +351,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.lg,
     backgroundColor: COLORS.surface,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.md,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+    marginTop: SPACING.xs,
+  },
+  headerContent: {
+    flex: 1,
     alignItems: 'center',
   },
   title: {

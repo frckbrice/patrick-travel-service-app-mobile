@@ -33,6 +33,12 @@ export const useCasesStore = create<CasesState>((set, get) => ({
   hasMore: true,
 
   fetchCases: async (status?: CaseStatus, refresh = false) => {
+    // Prevent concurrent requests
+    if (get().isLoading) {
+      logger.info('Cases fetch already in progress - skipping duplicate request');
+      return;
+    }
+
     try {
       const currentPage = refresh ? 1 : get().page;
       set({ isLoading: true, error: null });

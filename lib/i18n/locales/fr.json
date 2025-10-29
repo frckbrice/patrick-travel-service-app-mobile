@@ -99,9 +99,32 @@
   },
   "dashboard": {
     "welcomeUser": "Bon retour, {{name}}!",
+    "welcomeBack": "Bon retour, {{name}}",
     "goodMorning": "Bonjour",
     "goodAfternoon": "Bon après-midi",
     "goodEvening": "Bonsoir",
+    "greetings": {
+      "morning": "Bonjour",
+      "afternoon": "Bon après-midi",
+      "evening": "Bonsoir"
+    },
+    "stats": {
+      "totalCases": "Cas totaux",
+      "activeCases": "Actifs",
+      "documents": "Documents",
+      "messages": "Messages",
+      "notifications": "Notifications"
+    },
+    "actions": {
+      "title": "Actions rapides",
+      "caseManagement": "Gestion des cas",
+      "supportResources": "Support et ressources",
+      "newCase": "Nouveau cas",
+      "uploadDocument": "Téléverser document",
+      "contactSupport": "Contacter support",
+      "viewFAQs": "Voir les FAQ",
+      "downloadTemplates": "Télécharger des modèles"
+    },
     "overview": "Aperçu",
     "totalCases": "Cas totaux",
     "activeCases": "Actifs",
@@ -168,8 +191,10 @@
   },
   "documents": {
     "myDocuments": "Mes documents",
+    "searchDocuments": "Rechercher des documents",
     "uploadDocument": "Téléverser un document",
     "documentDetails": "Détails du document",
+    "noDocumentsDescription": "Vous n'avez pas encore téléversé de documents. Téléversez votre premier document pour commencer.",
     "selectCase": "Sélectionner un cas",
     "selectCaseAndFile": "Sélectionnez un cas et choisissez un fichier à téléverser",
     "documentType": "Type de document",
@@ -179,7 +204,6 @@
     "takePhoto": "Prendre une photo",
     "gallery": "Galerie",
     "document": "Document",
-    "noDocuments": "Pas encore de documents",
     "noCasesAvailable": "Aucun cas disponible. Veuillez d'abord créer un cas.",
     "createCaseFirst": "Créez d'abord un cas",
     "uploaded": "Téléversé:",
@@ -214,7 +238,10 @@
     "deleteFailedMessage": "Êtes-vous sûr de vouloir supprimer ce message échoué?",
     "messageSending": "Envoi...",
     "messageSent": "Envoyé",
-    "messageFailed": "Échec de l'envoi"
+    "messageFailed": "Échec de l'envoi",
+    "tab": "Messages",
+    "noMessages": "Aucun message",
+    "noMessagesDesc": "Commencer une conversation avec votre conseiller."
   },
   "profile": {
     "profile": "Profil",
@@ -262,7 +289,40 @@
     "marketingDesc": "Actualités et contenu promotionnel",
     "testNotification": "Envoyer une notification de test",
     "pushToken": "Jeton push (pour le débogage):",
-    "notificationsSaved": "Préférences de notification enregistrées"
+    "notificationsSaved": "Préférences de notification enregistrées",
+    "markAllRead": "Tout marquer comme lu",
+    "subtitle": "Gérez comment vous recevez les notifications",
+    "title": "Notifications",
+    "tab": "Notifications",
+    "noNotifications": "Aucune notification",
+    "noNotificationsDesc": "Vous êtes à jour ! De nouvelles notifications apparaîtront ici.",
+    "chatMessages": "Messages de chat"
+  },
+  "email": {
+    "reader": "Email",
+    "noInboxEmails": "Aucun email dans la boîte de réception",
+    "noInboxEmailsDesc": "Vous n'avez encore reçu aucun email.",
+    "noSentEmails": "Aucun email envoyé",
+    "noSentEmailsDesc": "Vous n'avez encore envoyé aucun email.",
+    "noSubject": "Aucun objet",
+    "loading": "Chargement de l'email...",
+    "notFound": "Email introuvable",
+    "notFoundDesc": "Le message email n'a pas pu être trouvé ou a peut-être été supprimé.",
+    "goBack": "Retour",
+    "actions": "Actions Email",
+    "actionsDesc": "Répondre, transférer et autres actions seront bientôt disponibles.",
+    "yesterday": "Hier",
+    "unread": "Non lu",
+    "attachments": "Pièces jointes",
+    "downloadAttachment": "Télécharger la pièce jointe",
+    "downloadStarted": "Téléchargement démarré",
+    "downloadFailed": "Échec du téléchargement de la pièce jointe",
+    "noAttachments": "Aucune pièce jointe pour cet email",
+    "relatedCase": "Dossier lié",
+    "failedToLoad": "Échec du chargement du message email",
+    "markReadFailed": "Échec du marquage de l'email comme lu",
+    "inbox": "Boîte de réception",
+    "sent": "Envoyés"
   },
   "settings": {
     "customize": "Personnalisez votre expérience de l'application",

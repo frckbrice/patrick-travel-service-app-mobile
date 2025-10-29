@@ -148,19 +148,63 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
+      logger.info('Starting login flow', { email: data.email });
+
       // Sign in with Firebase first to obtain ID token
+      logger.info('Signing in with Firebase...');
       const userCredential = await signInWithEmailAndPassword(
         auth,
         data.email,
         data.password
       );
 
+      logger.info('Firebase sign-in successful', {
+        userId: userCredential.user.uid,
+        email: userCredential.user.email,
+      });
+
+      // Wait for auth.currentUser to be set to avoid race condition
+      // Firebase updates currentUser asynchronously via onAuthStateChanged
+      // This ensures the axios interceptor can reliably access currentUser
+      logger.info('Waiting for auth.currentUser to be set...');
+      await new Promise<void>((resolve) => {
+        if (auth.currentUser) {
+          logger.info('auth.currentUser is already set');
+          resolve();
+        } else {
+          const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (user) {
+              logger.info('auth.currentUser set via onAuthStateChanged', {
+                userId: user.uid,
+              });
+              unsubscribe();
+              resolve();
+            }
+          });
+        }
+      });
+
       // Get Firebase tokens (these are what we'll use throughout the app)
-      const firebaseToken = await userCredential.user.getIdToken();
-      const firebaseRefreshToken = userCredential.user.refreshToken;
+      // Use auth.currentUser now that it's guaranteed to be set
+      logger.info('Getting Firebase ID token...');
+      const firebaseToken = await auth.currentUser!.getIdToken();
+      const firebaseRefreshToken = auth.currentUser!.refreshToken;
+
+      logger.info('Firebase token obtained', {
+        tokenLength: firebaseToken.length,
+        hasRefreshToken: !!firebaseRefreshToken,
+        userId: auth.currentUser!.uid,
+      });
+
+      // Verify auth.currentUser is still set before making API call
+      if (!auth.currentUser) {
+        logger.error('auth.currentUser is null before API call - this should not happen');
+        throw new Error('Authentication state lost before API call');
+      }
 
       // With Firebase user signed in, axios interceptor will attach ID token
       // Backend verifies token, syncs user in DB, and sets custom claims
+      logger.info('Calling backend login API...');
       const response = await authApi.login({});
 
       if (!response.success || !response.data) {
@@ -247,25 +291,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true });
 
-      // Remove push token from backend
+      // Remove push token from backend (non-blocking)
       try {
         await userApi.removePushToken();
       } catch (error) {
         logger.warn('Failed to remove push token', error);
+        // Continue with logout even if push token removal fails
       }
 
-      // Logout from API
-      await authApi.logout();
+      // Logout from API - this revokes refresh tokens on server side
+      // This is important for security and aligns with web API behavior
+      try {
+        await authApi.logout();
+        logger.info('API logout successful - refresh tokens revoked');
+      } catch (error) {
+        // Log but continue with logout - local logout should proceed even if API fails
+        logger.warn('API logout failed, continuing with local logout', error);
+      }
 
-      // Logout from Firebase
+      // Logout from Firebase (always execute, even if API logout failed)
       try {
         await firebaseSignOut(auth);
         await signOutFromGoogle();
+        logger.info('Firebase logout successful');
       } catch (firebaseError) {
         logger.warn('Firebase logout failed', firebaseError);
+        // Continue with clearing local data even if Firebase signout fails
       }
 
-      // Clear stored data
+      // Clear stored data (always execute)
       await secureStorage.clearAuthData();
 
       set({
@@ -280,7 +334,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       logger.info('User logged out successfully');
     } catch (error: any) {
       logger.error('Logout error', error);
-      set({ isLoading: false });
+      
+      // Even if logout fails, clear local state to ensure security
+      await secureStorage.clearAuthData().catch(() => {
+        // Ignore clear errors
+      });
+      
+      set({
+        user: null,
+        token: null,
+        pushToken: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+      });
     }
   },
 

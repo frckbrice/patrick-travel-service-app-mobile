@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { chatService, ChatMessage, Conversation } from '../../lib/services/chat';
+import { auth } from '../../lib/firebase/config';
 import { useChatPagination } from '../../lib/hooks/usePagination';
 import { useThrottle } from '../../lib/hooks';
 import {
@@ -33,6 +34,8 @@ import { COLORS, SPACING } from '../../lib/constants';
 import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
 import { SafeAreaView } from 'react-native-safe-area-context'; // Make sure this import exists
+
+import { ModernHeader } from '../../components/ui/ModernHeader';
 
 
  // Standalone memoized chat input prevents parent re-renders on keystrokes
@@ -113,6 +116,7 @@ export default function ChatScreen() {
       subs.forEach(sub => sub.remove());
     };
   }, []);
+
   // Use pagination hook for messages
   const {
     data: messages,
@@ -131,6 +135,7 @@ export default function ChatScreen() {
     chatService.loadInitialMessages,
     (beforeTimestamp: number) => chatService.loadOlderMessages(caseId || '', beforeTimestamp)
   );
+
 
   useEffect(() => {
     if (!caseId) return;
@@ -178,122 +183,55 @@ export default function ChatScreen() {
     };
   }, [caseId, user]);
 
-  // Set up real-time listener for new messages
-  // useEffect(() => {
-  //   if (!caseId) return;
-
-  //   // Clean up existing listener
-  //   if (unsubscribeMessages) {
-  //     unsubscribeMessages();
-  //   }
-
-  //   // Only set up listener if we have messages loaded
-  //   if (messages.length > 0) {
-  //     logger.info('Setting up real-time listener', { caseId, messageCount: messages.length });
-      
-  //     // Get the latest timestamp from current messages
-  //     const latestTimestamp = messages[messages.length - 1].timestamp;
-  //     logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
-      
-  //     const unsubscribe = chatService.onNewMessagesChange(
-  //       caseId,
-  //       (newMessages) => {
-  //         logger.info('Received new messages via real-time listener', { 
-  //           count: newMessages.length,
-  //           messageIds: newMessages.map(m => m.id),
-  //           senderIds: newMessages.map(m => m.senderId)
-  //         });
-          
-  //         // Filter out messages we've already processed
-  //         const unprocessedMessages = newMessages.filter(msg => {
-  //           if (processedMessagesRef.current.has(msg.id)) {
-  //             logger.debug('Skipping already processed message', { messageId: msg.id });
-  //             return false;
-  //           }
-  //           processedMessagesRef.current.add(msg.id);
-  //           return true;
-  //         });
-          
-  //         if (unprocessedMessages.length > 0) {
-  //           logger.info('Adding unprocessed messages to UI', { 
-  //             newCount: unprocessedMessages.length,
-  //             totalCount: messages.length + unprocessedMessages.length 
-  //           });
-            
-  //           // Display immediately in UI
-  //           setMessages(prev => [...prev, ...unprocessedMessages]);
-  //         } else {
-  //           logger.info('No unprocessed messages to add', { receivedCount: newMessages.length });
-  //         }
-          
-  //         // Throttle scroll to end to avoid performance issues
-  //         if (scrollToEndTimeoutRef.current) {
-  //           clearTimeout(scrollToEndTimeoutRef.current);
-  //         }
-  //         scrollToEndTimeoutRef.current = setTimeout(() => {
-  //           flatListRef.current?.scrollToEnd({ animated: true });
-  //         }, 100);
-  //       },
-  //       latestTimestamp
-  //     );
-      
-  //     setUnsubscribeMessages(unsubscribe);
-
-  //     return () => {
-  //       if (unsubscribe) {
-  //         unsubscribe();
-  //       }
-  //     };
-  //   }
-  // }, [caseId, messages.length]);
+  
 
   useEffect(() => {
-  if (!caseId) return;
-
-  // Ensure only one listener at a time
-  if (unsubscribeMessages) {
-    unsubscribeMessages();
-    setUnsubscribeMessages(null);
-  }
-
-   logger.info('Setting up real-time listener for case', { caseId });
-
-   // Get the latest timestamp from ref to avoid recreating listener
-   const latestTimestamp = latestTimestampRef.current;
-   logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
-
-   const unsubscribe = chatService.onNewMessagesChange(
-     caseId,
-     (newMessages) => {
-       logger.info('Real-time update received', { count: newMessages.length });
-
-       // Filter out messages sent by current user (already handled optimistically)
-       const messagesFromOthers = newMessages.filter(msg => msg.senderId !== user?.id);
-       
-       if (messagesFromOthers.length > 0) {
-         logger.info('Adding messages from others', { count: messagesFromOthers.length });
-         appendMessages(messagesFromOthers);
-       } else {
-         logger.info('No messages from others to add', { totalReceived: newMessages.length });
-       }
-
-       // Scroll to bottom
-       if (scrollToEndTimeoutRef.current) {
-         clearTimeout(scrollToEndTimeoutRef.current);
-       }
-       scrollToEndTimeoutRef.current = setTimeout(() => {
-         flatListRef.current?.scrollToEnd({ animated: true });
-       }, 100);
-     },
-     latestTimestamp
-   );
-
-  setUnsubscribeMessages(() => unsubscribe);
-
-  return () => {
-    if (unsubscribe) unsubscribe();
-  };
-}, [caseId]);
+    if (!caseId) return;
+  
+    // Ensure only one listener at a time
+    if (unsubscribeMessages) {
+      unsubscribeMessages();
+      setUnsubscribeMessages(null);
+    }
+  
+     logger.info('Setting up real-time listener for case', { caseId });
+  
+     // Get the latest timestamp from ref to avoid recreating listener
+     const latestTimestamp = latestTimestampRef.current;
+     logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
+  
+     const unsubscribe = chatService.onNewMessagesChange(
+       caseId,
+       (newMessages) => {
+         logger.info('Real-time update received', { count: newMessages.length });
+  
+         // Filter out messages sent by current user (already handled optimistically)
+         const messagesFromOthers = newMessages.filter(msg => msg.senderId !== user?.id);
+         
+         if (messagesFromOthers.length > 0) {
+           logger.info('Adding messages from others', { count: messagesFromOthers.length });
+           appendMessages(messagesFromOthers);
+         } else {
+           logger.info('No messages from others to add', { totalReceived: newMessages.length });
+         }
+  
+         // Scroll to bottom
+         if (scrollToEndTimeoutRef.current) {
+           clearTimeout(scrollToEndTimeoutRef.current);
+         }
+         scrollToEndTimeoutRef.current = setTimeout(() => {
+           flatListRef.current?.scrollToEnd({ animated: true });
+         }, 100);
+       },
+       latestTimestamp
+     );
+  
+    setUnsubscribeMessages(() => unsubscribe);
+  
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [caseId]);
 
   // Update latest timestamp ref when messages change
   useEffect(() => {
@@ -312,6 +250,8 @@ export default function ChatScreen() {
     });
   }, [messages, caseId]);
 
+  
+
   const handleSendMessage = useCallback(async () => {
     if (
       (!newMessage.trim() && selectedAttachments.length === 0) ||
@@ -329,9 +269,9 @@ export default function ChatScreen() {
       id: tempId,
       tempId,
       caseId,
-      senderId: user.id,
+      senderId: auth.currentUser?.uid || user.id,
       senderName: `${user.firstName} ${user.lastName}`,
-      senderRole: user.role as 'CLIENT',
+      senderRole: (user.role === 'CLIENT' ? 'CLIENT' : 'AGENT'),
       message: messageText || '📎 Attachment',
       timestamp: Date.now(),
       isRead: false,
@@ -355,9 +295,9 @@ export default function ChatScreen() {
       // 4. Send to server in background
       await chatService.sendMessage(
         caseId,
-        user.id,
+        auth.currentUser?.uid || user.id,
         `${user.firstName} ${user.lastName}`,
-        user.role as 'CLIENT',
+        (user.role === 'CLIENT' ? 'CLIENT' : 'AGENT'),
         messageText || '📎 Attachment',
         attachments.length > 0 ? attachments : undefined
       );
@@ -406,170 +346,196 @@ export default function ChatScreen() {
     }
   }, [newMessage, selectedAttachments, user, caseId]);
 
-  // RETRY: Retry sending a failed message
-  const handleRetryMessage = useCallback(
-    async (failedMessage: ChatMessage) => {
-      if (!user || !caseId) return;
+// Ensure Firebase conversation exists (metadata + userChats) before messaging
+useEffect(() => {
+  const ensureConversation = async () => {
+    if (chatInitializedRef.current) return;
+    if (!user || !caseId) return;
+    try {
+      const resp = await casesApi.getCaseById(caseId);
+      const c: any = resp?.data;
+      if (resp?.success && c?.assignedAgent) {
+        await chatService.initializeConversation(
+          caseId,
+          c.referenceNumber || caseId,
+          user.id,
+          `${user.firstName} ${user.lastName}`,
+          c.assignedAgent.id,
+          `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim()
+        );
+        chatInitializedRef.current = true;
+      }
+    } catch {}
+  };
+  ensureConversation();
+}, [user, caseId]);
 
-      // PERFORMANCE: Mark as pending efficiently
+ // RETRY: Retry sending a failed message
+ const handleRetryMessage = useCallback(
+  async (failedMessage: ChatMessage) => {
+    if (!user || !caseId) return;
+
+    // PERFORMANCE: Mark as pending efficiently
+    setMessages((prev) => {
+      const index = prev.findIndex((m) => m.id === failedMessage.id);
+      if (index === -1) return prev;
+
+      const updated = [...prev];
+      updated[index] = { ...prev[index], status: 'pending', error: undefined };
+      return updated;
+    });
+
+    try {
+        await chatService.sendMessage(
+        caseId,
+          auth.currentUser?.uid || user.id,
+        `${user.firstName} ${user.lastName}`,
+          (user.role === 'CLIENT' ? 'CLIENT' : 'AGENT'),
+        failedMessage.message,
+        failedMessage.attachments
+      );
+
+      // PERFORMANCE: Mark as sent efficiently
       setMessages((prev) => {
         const index = prev.findIndex((m) => m.id === failedMessage.id);
         if (index === -1) return prev;
 
         const updated = [...prev];
-        updated[index] = { ...prev[index], status: 'pending', error: undefined };
+        updated[index] = { ...prev[index], status: 'sent' };
         return updated;
       });
 
-      try {
-        await chatService.sendMessage(
-          caseId,
-          user.id,
-          `${user.firstName} ${user.lastName}`,
-          user.role as 'CLIENT',
-          failedMessage.message,
-          failedMessage.attachments
-        );
+      logger.info('Message retry successful', { messageId: failedMessage.id });
+    } catch (error: any) {
+      logger.error('Message retry failed', error);
 
-        // PERFORMANCE: Mark as sent efficiently
-        setMessages((prev) => {
-          const index = prev.findIndex((m) => m.id === failedMessage.id);
-          if (index === -1) return prev;
+      // PERFORMANCE: Mark as failed efficiently
+      setMessages((prev) => {
+        const index = prev.findIndex((m) => m.id === failedMessage.id);
+        if (index === -1) return prev;
 
-          const updated = [...prev];
-          updated[index] = { ...prev[index], status: 'sent' };
-          return updated;
-        });
-
-        logger.info('Message retry successful', { messageId: failedMessage.id });
-      } catch (error: any) {
-        logger.error('Message retry failed', error);
-
-        // PERFORMANCE: Mark as failed efficiently
-        setMessages((prev) => {
-          const index = prev.findIndex((m) => m.id === failedMessage.id);
-          if (index === -1) return prev;
-
-          const updated = [...prev];
-          updated[index] = {
-            ...prev[index],
-            status: 'failed',
-            error: error.message || 'Failed to send'
-          };
-          return updated;
-        });
-      }
-    },
-    [user, caseId]
-  );
-
-  // DELETE: Remove a failed message
-  const handleDeleteFailedMessage = useCallback(
-    (messageId: string) => {
-      Alert.alert(
-        t('common.confirm'),
-        t('messages.deleteFailedMessage'),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('common.delete'),
-            style: 'destructive',
-            onPress: () => {
-              setMessages((prev) => prev.filter((m) => m.id !== messageId));
-              logger.info('Failed message deleted', { messageId });
-            },
-          },
-        ]
-      );
-    },
-    [t]
-  );
-
-  const handlePickFile = useCallback(async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
-        quality: 0.8,
-        allowsMultipleSelection: false,
+        const updated = [...prev];
+        updated[index] = {
+          ...prev[index],
+          status: 'failed',
+          error: error.message || 'Failed to send'
+        };
+        return updated;
       });
+    }
+  },
+  [user, caseId]
+);
 
-      if (!result.canceled && result.assets[0]) {
-        const file = result.assets[0];
-
-        // Get file info
-        const fileName =
-          file.fileName ||
-          `file_${Date.now()}.${file.type === 'image' ? 'jpg' : 'mp4'}`;
-        const mimeType =
-          file.mimeType || (file.type === 'image' ? 'image/jpeg' : 'video/mp4');
-        const fileSize = file.fileSize || 0;
-
-        // Validate file before uploading
-        const validation = validateFile(fileSize, mimeType);
-        if (!validation.valid) {
-          Alert.alert(
-            t('common.error'),
-            validation.error || t('errors.invalidFile')
-          );
-          return;
-        }
-
-        // Show uploading state
-        setIsUploading(true);
-        setUploadProgress(0);
-
-        logger.info('Starting file upload', { fileName, fileSize, mimeType });
-
-        // Upload file with progress tracking
-        const uploadResult = await uploadThingService.uploadFile(
-          file.uri,
-          fileName,
-          mimeType,
-          {
-            onProgress: (progress) => {
-              setUploadProgress(progress);
-            },
-            metadata: {
-              caseId: caseId || '',
-              userId: user?.id || '',
-            },
-          }
-        );
-
-        setIsUploading(false);
-        setUploadProgress(0);
-
-        if (!uploadResult.success || !uploadResult.url) {
-          Alert.alert(
-            t('common.error'),
-            uploadResult.error || t('errors.uploadFailed')
-          );
-          return;
-        }
-
-        // Add to selected attachments (optimized - avoid array spread for performance)
-        setSelectedAttachments((prev) => [
-          ...prev,
-          {
-            name: uploadResult.name || fileName,
-            url: uploadResult.url!,
-            type: mimeType,
-            size: uploadResult.size || fileSize,
+ // DELETE: Remove a failed message
+ const handleDeleteFailedMessage = useCallback(
+  (messageId: string) => {
+    Alert.alert(
+      t('common.confirm'),
+      t('messages.deleteFailedMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: () => {
+            setMessages((prev) => prev.filter((m) => m.id !== messageId));
+            logger.info('Failed message deleted', { messageId });
           },
-        ]);
+        },
+      ]
+    );
+  },
+  [t]
+);
 
-        logger.info('File uploaded successfully', {
-          fileName: uploadResult.name,
-          url: uploadResult.url,
-        });
+
+const handlePickFile = useCallback(async () => {
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 0.8,
+      allowsMultipleSelection: false,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const file = result.assets[0];
+
+      // Get file info
+      const fileName =
+        file.fileName ||
+        `file_${Date.now()}.${file.type === 'image' ? 'jpg' : 'mp4'}`;
+      const mimeType =
+        file.mimeType || (file.type === 'image' ? 'image/jpeg' : 'video/mp4');
+      const fileSize = file.fileSize || 0;
+
+      // Validate file before uploading
+      const validation = validateFile(fileSize, mimeType);
+      if (!validation.valid) {
+        Alert.alert(
+          t('common.error'),
+          validation.error || t('errors.invalidFile')
+        );
+        return;
       }
-    } catch (error) {
-      logger.error('File picker error', error);
+
+      // Show uploading state
+      setIsUploading(true);
+      setUploadProgress(0);
+
+      logger.info('Starting file upload', { fileName, fileSize, mimeType });
+
+      // Upload file with progress tracking
+      const uploadResult = await uploadThingService.uploadFile(
+        file.uri,
+        fileName,
+        mimeType,
+        {
+          onProgress: (progress) => {
+            setUploadProgress(progress);
+          },
+          metadata: {
+            caseId: caseId || '',
+            userId: user?.id || '',
+          },
+        }
+      );
+
       setIsUploading(false);
       setUploadProgress(0);
-      Alert.alert(t('common.error'), t('errors.somethingWrong'));
+
+      if (!uploadResult.success || !uploadResult.url) {
+        Alert.alert(
+          t('common.error'),
+          uploadResult.error || t('errors.uploadFailed')
+        );
+        return;
+      }
+
+      // Add to selected attachments (optimized - avoid array spread for performance)
+      setSelectedAttachments((prev) => [
+        ...prev,
+        {
+          name: uploadResult.name || fileName,
+          url: uploadResult.url!,
+          type: mimeType,
+          size: uploadResult.size || fileSize,
+        },
+      ]);
+
+      logger.info('File uploaded successfully', {
+        fileName: uploadResult.name,
+        url: uploadResult.url,
+      });
     }
-  }, [caseId, user, t]);
+  } catch (error) {
+    logger.error('File picker error', error);
+    setIsUploading(false);
+    setUploadProgress(0);
+    Alert.alert(t('common.error'), t('errors.somethingWrong'));
+  }
+}, [caseId, user, t]);
+
 
   const handleDownloadAttachment = useCallback(
     async (attachment: {
@@ -626,180 +592,180 @@ export default function ChatScreen() {
     }
   }, []);
 
-  // Memoize render function for performance
-  const renderMessage = useCallback(
-    ({ item, index }: { item: ChatMessage; index: number }) => {
-      const isMyMessage = item.senderId === user?.id;
-      const AnimatedView = isMyMessage
-        ? Animated.createAnimatedComponent(View)
-        : Animated.createAnimatedComponent(View);
+ // Memoize render function for performance
+ const renderMessage = useCallback(
+  ({ item, index }: { item: ChatMessage; index: number }) => {
+    const isMyMessage = item.senderId === user?.id;
+    const AnimatedView = isMyMessage
+      ? Animated.createAnimatedComponent(View)
+      : Animated.createAnimatedComponent(View);
 
-      return (
-        <AnimatedView
-          entering={Platform.OS === 'android' ? undefined : (isMyMessage ? FadeInRight.delay(index * 20) : FadeInLeft.delay(index * 20))}
+    return (
+      <AnimatedView
+        entering={Platform.OS === 'android' ? undefined : (isMyMessage ? FadeInRight.delay(index * 20) : FadeInLeft.delay(index * 20))}
+        style={[
+          styles.messageContainer,
+          isMyMessage && styles.myMessageContainer,
+        ]}
+      >
+        {!isMyMessage && (
+          <Avatar.Text
+            size={36}
+            label={item.senderName.charAt(0)}
+            style={styles.avatar}
+            color={COLORS.primary}
+            labelStyle={styles.avatarLabel}
+          />
+        )}
+        <View
           style={[
-            styles.messageContainer,
-            isMyMessage && styles.myMessageContainer,
+            styles.messageBubble,
+            isMyMessage && styles.myMessageBubble,
           ]}
         >
           {!isMyMessage && (
-            <Avatar.Text
-              size={36}
-              label={item.senderName.charAt(0)}
-              style={styles.avatar}
-              color={COLORS.primary}
-              labelStyle={styles.avatarLabel}
-            />
+            <Text style={styles.senderName}>{item.senderName}</Text>
           )}
-          <View
-            style={[
-              styles.messageBubble,
-              isMyMessage && styles.myMessageBubble,
-            ]}
-          >
-            {!isMyMessage && (
-              <Text style={styles.senderName}>{item.senderName}</Text>
-            )}
-            {(item.message && item.message.trim() !== '') && (
-              <Text
-                style={[
-                  styles.messageText,
-                  isMyMessage && styles.myMessageText,
-                  item.status === 'pending' && styles.pendingMessageText,
-                  item.status === 'failed' && styles.failedMessageText,
-                ]}
-                numberOfLines={100}
-              >
-                {item.message}
-              </Text>
-            )}
+          {(item.message && item.message.trim() !== '') && (
+            <Text
+              style={[
+                styles.messageText,
+                isMyMessage && styles.myMessageText,
+                item.status === 'pending' && styles.pendingMessageText,
+                item.status === 'failed' && styles.failedMessageText,
+              ]}
+              numberOfLines={100}
+            >
+              {item.message}
+            </Text>
+          )}
 
-            {/* Render attachments */}
-            {item.attachments && item.attachments.length > 0 && (
-              <View style={styles.attachmentsContainer}>
-                {item.attachments.map((attachment, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[
-                      styles.attachmentCard,
-                      isMyMessage && styles.myAttachmentCard,
-                    ]}
-                    onPress={() => handleDownloadAttachment(attachment)}
-                  >
-                    <MaterialCommunityIcons
-                      name={getFileIconForMimeType(attachment.type) as any}
-                      size={32}
-                      color={isMyMessage ? COLORS.surface : COLORS.primary}
-                    />
-                    <View style={styles.attachmentInfo}>
-                      <Text
-                        style={[
-                          styles.attachmentName,
-                          isMyMessage && styles.myAttachmentName,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {attachment.name}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.attachmentSize,
-                          isMyMessage && styles.myAttachmentSize,
-                        ]}
-                      >
-                        {formatFileSize(attachment.size)}
-                      </Text>
-                    </View>
-                    <MaterialCommunityIcons
-                      name="download"
-                      size={20}
-                      color={isMyMessage ? COLORS.surface : COLORS.primary}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Timestamp and Status Indicators */}
-            <View style={styles.messageFooter}>
-              <Text style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
-                {formatMessageTime(item.timestamp)}
-              </Text>
-
-              {/* Status Indicator for My Messages */}
-              {isMyMessage && (
-                <View style={styles.statusIndicator}>
-                  {item.status === 'pending' && (
-                    <MaterialCommunityIcons
-                      name="clock-outline"
-                      size={14}
-                      color={COLORS.textSecondary}
-                    />
-                  )}
-                  {item.status === 'sent' && (
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={14}
-                      color={COLORS.success}
-                    />
-                  )}
-                  {item.status === 'failed' && (
-                    <MaterialCommunityIcons
-                      name="alert-circle"
-                      size={14}
-                      color={COLORS.error}
-                    />
-                  )}
-                </View>
-              )}
-            </View>
-
-            {/* Failed Message Actions */}
-            {item.status === 'failed' && isMyMessage && (
-              <View style={styles.failedActions}>
+          {/* Render attachments */}
+          {item.attachments && item.attachments.length > 0 && (
+            <View style={styles.attachmentsContainer}>
+              {item.attachments.map((attachment, idx) => (
                 <TouchableOpacity
-                  style={styles.retryButton}
-                  onPress={() => handleRetryMessage(item)}
-                  activeOpacity={0.7}
+                  key={idx}
+                  style={[
+                    styles.attachmentCard,
+                    isMyMessage && styles.myAttachmentCard,
+                  ]}
+                  onPress={() => handleDownloadAttachment(attachment)}
                 >
                   <MaterialCommunityIcons
-                    name="refresh"
-                    size={16}
-                    color={COLORS.primary}
+                    name={getFileIconForMimeType(attachment.type) as any}
+                    size={32}
+                    color={isMyMessage ? COLORS.surface : COLORS.primary}
                   />
-                  <Text style={styles.retryButtonText}>Retry</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleDeleteFailedMessage(item.id)}
-                  activeOpacity={0.7}
-                >
+                  <View style={styles.attachmentInfo}>
+                    <Text
+                      style={[
+                        styles.attachmentName,
+                        isMyMessage && styles.myAttachmentName,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {attachment.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.attachmentSize,
+                        isMyMessage && styles.myAttachmentSize,
+                      ]}
+                    >
+                      {formatFileSize(attachment.size)}
+                    </Text>
+                  </View>
                   <MaterialCommunityIcons
-                    name="delete"
-                    size={16}
+                    name="download"
+                    size={20}
+                    color={isMyMessage ? COLORS.surface : COLORS.primary}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Timestamp and Status Indicators */}
+          <View style={styles.messageFooter}>
+            <Text style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
+              {formatMessageTime(item.timestamp)}
+            </Text>
+
+            {/* Status Indicator for My Messages */}
+            {isMyMessage && (
+              <View style={styles.statusIndicator}>
+                {item.status === 'pending' && (
+                  <MaterialCommunityIcons
+                    name="clock-outline"
+                    size={14}
+                    color={COLORS.textSecondary}
+                  />
+                )}
+                {item.status === 'sent' && (
+                  <MaterialCommunityIcons
+                    name="check"
+                    size={14}
+                    color={COLORS.success}
+                  />
+                )}
+                {item.status === 'failed' && (
+                  <MaterialCommunityIcons
+                    name="alert-circle"
+                    size={14}
                     color={COLORS.error}
                   />
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
+                )}
               </View>
             )}
           </View>
-        </AnimatedView>
-      );
-    },
-    [user, formatMessageTime, handleDownloadAttachment, handleRetryMessage, handleDeleteFailedMessage]
-  );
 
+          {/* Failed Message Actions */}
+          {item.status === 'failed' && isMyMessage && (
+            <View style={styles.failedActions}>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={() => handleRetryMessage(item)}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="refresh"
+                  size={16}
+                  color={COLORS.primary}
+                />
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteFailedMessage(item.id)}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="delete"
+                  size={16}
+                  color={COLORS.error}
+                />
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </AnimatedView>
+    );
+  },
+  [user, formatMessageTime, handleDownloadAttachment, handleRetryMessage, handleDeleteFailedMessage]
+);
   // Memoize key extractor with unique key generation
-  const keyExtractor = useCallback((item: ChatMessage, index: number) => {
-    // Use tempId for optimistic messages, otherwise use id with index for uniqueness
-    return item.tempId || `${item.id}-${index}`;
-  }, []);
+ // Memoize key extractor with unique key generation
+ const keyExtractor = useCallback((item: ChatMessage, index: number) => {
+  // Use tempId for optimistic messages, otherwise use id with index for uniqueness
+  return item.tempId || `${item.id}-${index}`;
+}, []);
 
-  // Throttled scroll to end for performance
-  const scrollToEnd = useThrottle(() => {
-    flatListRef.current?.scrollToEnd({ animated: true });
-  }, 200);
+ // Throttled scroll to end for performance
+ const scrollToEnd = useThrottle(() => {
+  flatListRef.current?.scrollToEnd({ animated: true });
+}, 200);
 
   // Handle load more (pull to refresh for older messages)
   const handleLoadMore = useCallback(() => {
@@ -811,65 +777,67 @@ export default function ChatScreen() {
     }
   }, [hasMore, isLoadingMore, messages.length, loadMore]);
 
-  // Handle pull to refresh
-  const handleRefresh = useCallback(() => {
-    refresh();
-  }, [refresh]);
+// Handle pull to refresh
+const handleRefresh = useCallback(() => {
+  refresh();
+}, [refresh]);
 
-  // Dynamically measure input container height (includes safe area) to avoid overlap
-  const [inputHeight, setInputHeight] = useState(0);
+ // Dynamically measure input container height (includes safe area) to avoid overlap
+ const [inputHeight, setInputHeight] = useState(0);
 
-  // Memoize all styles to prevent re-renders
-  const inputContainerStyle = useMemo(() => [
-    styles.inputContainer,
-    {
-      paddingBottom: keyboardHeight === 0 || inputHeight === 0 ? insets.bottom + 10 : insets.bottom + 40,
-    },
-  ], [keyboardHeight, inputHeight, insets.bottom]);
+  const inputContainerStyle = useMemo(
+    () => [
+      styles.inputContainer,
+      { paddingBottom: keyboardHeight > 0 ? keyboardHeight + insets.bottom : insets.bottom }
+    ],
+    [keyboardHeight, insets.bottom]
+  );
 
   const flatListContentStyle = useMemo(() => ({
-    paddingBottom: inputHeight + keyboardHeight + insets.bottom + 12,
+    paddingBottom: inputHeight + (keyboardHeight > 0 ? 12 : insets.bottom) + 12,
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
   }), [inputHeight, keyboardHeight, insets.bottom]);
 
-  // Memoize ListHeaderComponent to prevent re-renders
-  const ListHeaderComponent = useMemo(() => {
-    if (!isLoadingMore) return null;
-    return (
-      <View style={styles.loadingIndicator}>
-        <Text style={styles.loadingText}>{t('common.loading')}...</Text>
-      </View>
-    );
-  }, [isLoadingMore, t]);
+// Memoize ListHeaderComponent to prevent re-renders
+const ListHeaderComponent = useMemo(() => {
+  if (!isLoadingMore) return null;
+  return (
+    <View style={styles.loadingIndicator}>
+      <Text style={styles.loadingText}>{t('common.loading')}...</Text>
+    </View>
+  );
+}, [isLoadingMore, t]);
 
-  // Memoize FlatList props
-  const flatListProps = useMemo(() => ({
-    removeClippedSubviews: true,
-    maxToRenderPerBatch: 15,
-    initialNumToRender: 15,
-    windowSize: 10,
-    inverted: false,
-    showsVerticalScrollIndicator: false,
-    keyboardShouldPersistTaps: 'handled' as const,
-    onEndReachedThreshold: 0.1,
-  }), []);
+// Memoize FlatList props
+const flatListProps = useMemo(() => ({
+  removeClippedSubviews: true,
+  maxToRenderPerBatch: 15,
+  initialNumToRender: 15,
+  windowSize: 10,
+  inverted: false,
+  showsVerticalScrollIndicator: false,
+  keyboardShouldPersistTaps: 'handled' as const,
+  onEndReachedThreshold: 0.1,
+}), []);
 
   // Memoize attachment removal callback
   const removeAttachment = useCallback((index: number) => {
     setSelectedAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-
   console.log('keyboardHeight', keyboardHeight);
 
-  return (
+
+
+return (
+  // <TouchDetector>
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom : 0}
+      style={[styles.container, ]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}
     >
-        <FlatList
+      <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
@@ -881,543 +849,397 @@ export default function ChatScreen() {
         onRefresh={handleRefresh}
         ListHeaderComponent={ListHeaderComponent}
         {...flatListProps}
-        removeClippedSubviews={Platform.OS === 'android' ? false : flatListProps.removeClippedSubviews}
+        removeClippedSubviews={
+          Platform.OS === 'android' ? false : flatListProps.removeClippedSubviews
+        }
       />
-  
-      {/* WhatsApp-like input above nav bar */}
-      <View
-        style={[
-          inputContainerStyle,
-          { paddingBottom: keyboardHeight > 0 ? insets.bottom + 40 : insets.bottom + 10 }
-        ]}
-        onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
-      >
-          {selectedAttachments.length > 0 && (
-            <View style={styles.selectedAttachmentsContainer}>
-              {selectedAttachments.map((attachment, index) => (
-                <View key={index} style={styles.selectedAttachment}>
-                  <MaterialCommunityIcons
-                    name={getFileIconForMimeType(attachment.type) as any}
-                    size={20}
-                    color={COLORS.primary}
-                  />
-                  <Text style={styles.selectedAttachmentName} numberOfLines={1}>
-                    {attachment.name}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => removeAttachment(index)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <MaterialCommunityIcons
-                      name="close-circle"
-                      size={18}
-                      color={COLORS.error}
-                    />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-  
-          {isUploading && (
-            <View style={styles.uploadProgressContainer}>
-              <View style={styles.progressBar}>
-                <View
-                  style={[styles.progressFill, { width: `${uploadProgress}%` }]}
+
+<View
+  style={inputContainerStyle}
+  onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
+>
+        {selectedAttachments.length > 0 && (
+          <View style={styles.selectedAttachmentsContainer}>
+            {selectedAttachments.map((attachment, index) => (
+              <View key={index} style={styles.selectedAttachment}>
+                <MaterialCommunityIcons
+                  name={getFileIconForMimeType(attachment.type) as any}
+                  size={18}
+                  color="#1F7CE6"
                 />
+                <Text style={styles.selectedAttachmentName} numberOfLines={1}>
+                  {attachment.name}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => removeAttachment(index)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons name="close-circle" size={18} color="#FF3B30" />
+                </TouchableOpacity>
               </View>
-              <Text style={styles.uploadProgressText}>
-                {t('common.uploading')} {Math.round(uploadProgress)}%
-              </Text>
+            ))}
+          </View>
+        )}
+
+        {isUploading && (
+          <View style={styles.uploadProgressContainer}>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
             </View>
-          )}
-  
-          <View style={styles.inputRow}>
-            <TouchableOpacity
-              style={styles.attachButton}
-              onPress={handlePickFile}
-              disabled={isUploading}
-            >
-              <MaterialCommunityIcons
-                name="paperclip"
-                size={24}
-                color={isUploading ? COLORS.textSecondary : COLORS.primary}
-              />
-            </TouchableOpacity>
-  
+            <Text style={styles.uploadProgressText}>
+              {t('common.uploading')} {Math.round(uploadProgress)}%
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.inputRow}>
+          <TouchableOpacity
+            style={styles.attachButton}
+            onPress={handlePickFile}
+            disabled={isUploading}
+          >
+            <MaterialCommunityIcons
+              name="attachment"
+              size={24}
+              color={isUploading ? '#9CA3AF' : '#6B7280'}
+            />
+          </TouchableOpacity>
+
+          <View style={styles.inputWrapper}>
             <ChatInput
               value={newMessage}
               onChangeText={setNewMessage}
-              placeholder={t('messages.typeMessage')}
+              placeholder={t('messages.typeMessage') || 'Type your message...'}
               editable={!isUploading}
             />
-  
-            <TouchableOpacity
-              onPress={handleSendMessage}
-              disabled={
-                (!newMessage.trim() && selectedAttachments.length === 0) ||
-                isUploading
-              }
-              style={[
-                styles.sendButton,
-                ((!newMessage.trim() && selectedAttachments.length === 0) ||
-                  isUploading) &&
-                  styles.sendButtonDisabled,
-              ]}
-            >
-              <MaterialCommunityIcons
-                name="send"
-                size={24}
-                color={COLORS.surface}
-              />
-            </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            onPress={handleSendMessage}
+            disabled={
+              (!newMessage.trim() && selectedAttachments.length === 0) || isUploading
+            }
+            style={[
+              styles.sendButton,
+              ((!newMessage.trim() && selectedAttachments.length === 0) || isUploading) &&
+                styles.sendButtonDisabled,
+            ]}
+          >
+            <MaterialCommunityIcons name="send" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
+      </View>
     </KeyboardAvoidingView>
-  );
-  
+  // </TouchDetector>
+);
 }
-//   return (
-//     <KeyboardAvoidingView
-//   style={{ flex: 1, backgroundColor: COLORS.background }}
-//   behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-//   keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-// >
-//       <FlatList
-//         ref={flatListRef}
-//         data={messages}
-//         renderItem={renderMessage}
-//         keyExtractor={keyExtractor}
-//         // contentContainerStyle={[
-//         //   styles.messagesList,
-//         //   { paddingBottom: inputHeight + insets.bottom + 16 },
-//         // ]}
-//         contentContainerStyle={{
-//           paddingHorizontal: SPACING.md,
-//           paddingTop: SPACING.md,
-//           paddingBottom: inputHeight + SPACING.sm, // add space equal to input height
-//         }}
-//         keyboardShouldPersistTaps="handled"
-//         onContentSizeChange={scrollToEnd}
-//         onEndReached={handleLoadMore}
-//         onEndReachedThreshold={0.1}
-//         refreshing={isLoading}
-//         onRefresh={handleRefresh}
-//         removeClippedSubviews
-//         maxToRenderPerBatch={15}
-//         initialNumToRender={15}
-//         windowSize={10}
-//         inverted={false}
-//         showsVerticalScrollIndicator={false}
-//         keyboardShouldPersistTaps="handled"
-//         ListHeaderComponent={
-//           isLoadingMore ? (
-//             <View style={styles.loadingIndicator}>
-//               <Text style={styles.loadingText}>{t('common.loading')}...</Text>
-//             </View>
-//           ) : null
-//         }
-//       />
-  
-//       {/* WhatsApp-like input above nav bar */}
-//       {/* <KeyboardAvoidingView
-//         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-//         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.bottom : 0}
-//       > */}
-//         <View
-//           style={[
-//             styles.inputContainer,
-//             {
-//               paddingBottom: insets.bottom > 0 ? insets.bottom : 12,
-//             },
-//           ]}
-//           onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
-//         >
-//           {selectedAttachments.length > 0 && (
-//             <View style={styles.selectedAttachmentsContainer}>
-//               {selectedAttachments.map((attachment, index) => (
-//                 <View key={index} style={styles.selectedAttachment}>
-//                   <MaterialCommunityIcons
-//                     name={getFileIconForMimeType(attachment.type) as any}
-//                     size={20}
-//                     color={COLORS.primary}
-//                   />
-//                   <Text style={styles.selectedAttachmentName} numberOfLines={1}>
-//                     {attachment.name}
-//                   </Text>
-//                   <TouchableOpacity
-//                     onPress={() => {
-//                       setSelectedAttachments((prev) =>
-//                         prev.filter((_, i) => i !== index)
-//                       );
-//                     }}
-//                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-//                   >
-//                     <MaterialCommunityIcons
-//                       name="close-circle"
-//                       size={18}
-//                       color={COLORS.error}
-//                     />
-//                   </TouchableOpacity>
-//                 </View>
-//               ))}
-//             </View>
-//           )}
-  
-//           {isUploading && (
-//             <View style={styles.uploadProgressContainer}>
-//               <View style={styles.progressBar}>
-//                 <View
-//                   style={[styles.progressFill, { width: `${uploadProgress}%` }]}
-//                 />
-//               </View>
-//               <Text style={styles.uploadProgressText}>
-//                 {t('common.uploading')} {Math.round(uploadProgress)}%
-//               </Text>
-//             </View>
-//           )}
-  
-//           <View style={styles.inputRow}>
-//             <TouchableOpacity
-//               style={styles.attachButton}
-//               onPress={handlePickFile}
-//               disabled={isUploading}
-//             >
-//               <MaterialCommunityIcons
-//                 name="paperclip"
-//                 size={24}
-//                 color={isUploading ? COLORS.textSecondary : COLORS.primary}
-//               />
-//             </TouchableOpacity>
-  
-//             <ChatInput
-//               value={newMessage}
-//               onChangeText={setNewMessage}
-//               placeholder={t('messages.typeMessage')}
-//               editable={!isUploading}
-//             />
-  
-//             <TouchableOpacity
-//               onPress={handleSendMessage}
-//               disabled={
-//                 (!newMessage.trim() && selectedAttachments.length === 0) ||
-//                 isUploading
-//               }
-//               style={[
-//                 styles.sendButton,
-//                 ((!newMessage.trim() && selectedAttachments.length === 0) ||
-//                   isUploading) &&
-//                   styles.sendButtonDisabled,
-//               ]}
-//             >
-//               <MaterialCommunityIcons
-//                 name="send"
-//                 size={24}
-//                 color={COLORS.surface}
-//               />
-//             </TouchableOpacity>
-//           </View>
-//         </View>
-//       </KeyboardAvoidingView>
-//   );
-  
-  
-// }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    // Subtle pattern background effect
-  },
+container: {
+  flex: 1,
+  backgroundColor: '#E5DDD5',
+},
 
-  messagesList: {
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.lg,
+messagesList: {
+  paddingHorizontal: SPACING.md,
+  paddingTop: SPACING.md,
+  paddingBottom: SPACING.lg,
+},
+messageContainer: {
+  flexDirection: 'row',
+  marginBottom: 8,
+  alignItems: 'flex-end',
+  paddingHorizontal: 0,
+},
+myMessageContainer: {
+  justifyContent: 'flex-end',
+  alignItems: 'flex-end',
+},
+avatar: {
+  marginRight: 8,
+  backgroundColor: '#D1D5DB',
+  marginBottom: 2,
+},
+avatarLabel: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#4B5563',
+},
+messageBubble: {
+  maxWidth: '75%',
+  minWidth: 80,
+  backgroundColor: '#FFFFFF',
+  borderRadius: 8,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  shadowColor: '#000',
+  shadowOffset: {
+    width: 0,
+    height: 1,
   },
-  messageContainer: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    alignItems: 'flex-end',
-    paddingHorizontal: 0,
-  },
-  myMessageContainer: {
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-  },
-  avatar: {
-    marginRight: SPACING.sm,
-    backgroundColor: COLORS.primary + '20',
-  },
-  avatarLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  messageBubble: {
-    maxWidth: '80%',
-    minWidth: 60,
-    minHeight: 40,
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
-    borderBottomLeftRadius: 4, // Tail at bottom left for incoming messages
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    paddingTop: 12,
-    paddingBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  myMessageBubble: {
-    backgroundColor: COLORS.primary,
-  
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 4, // Tail at bottom right for my messages
-  },
-  senderName: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 4,
-    color: COLORS.primary,
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: COLORS.text,
-    fontWeight: '500',
-    marginBottom: 4,
-    opacity: 1,
-  },
-  myMessageText: {
-    color: '#FFFFFF',
-    fontWeight: '500',
-    marginBottom: 4,
-    fontSize: 16,
-    lineHeight: 22,
-    opacity: 1,
-  },
-  timestamp: {
-    fontSize: 10,
-    marginTop: 6,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  myTimestamp: {
-    color: COLORS.surface + 'DD',
-  },
-  attachmentsContainer: {
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  attachmentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 6,
-  },
-  myAttachmentCard: {
-    backgroundColor: COLORS.primary + 'E6',
-  },
-  attachmentInfo: {
-    flex: 1,
-    marginLeft: 10,
-    marginRight: 6,
-  },
-  attachmentName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 2,
-  },
-  myAttachmentName: {
-    color: COLORS.surface,
-  },
-  attachmentSize: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  myAttachmentSize: {
-    color: COLORS.surface + 'DD',
-  },
+  shadowOpacity: 0.1,
+  shadowRadius: 1.5,
+  elevation: 1,
+},
+myMessageBubble: {
+  backgroundColor: '#1F7CE6',
+  alignSelf: 'flex-end',
+},
+senderName: {
+  fontSize: 12,
+  fontWeight: '600',
+  marginBottom: 4,
+  color: '#6B7280',
+},
+messageText: {
+  fontSize: 15,
+  lineHeight: 20,
+  color: '#000000',
+  marginBottom: 4,
+},
+myMessageText: {
+  color: '#FFFFFF',
+},
+timestamp: {
+  fontSize: 11,
+  marginTop: 2,
+  color: '#9CA3AF',
+  fontWeight: '400',
+},
+myTimestamp: {
+  color: '#FFFFFF',
+  opacity: 0.8,
+},
+attachmentsContainer: {
+  marginTop: 8,
+  marginBottom: 4,
+},
+attachmentCard: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#F3F4F6',
+  padding: 12,
+  borderRadius: 12,
+  marginBottom: 6,
+},
+myAttachmentCard: {
+  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+},
+attachmentIconContainer: {
+  width: 40,
+  height: 40,
+  borderRadius: 8,
+  backgroundColor: 'rgba(31, 124, 230, 0.1)',
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginRight: 10,
+},
+attachmentInfo: {
+  flex: 1,
+},
+attachmentName: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#1F2937',
+  marginBottom: 2,
+},
+myAttachmentName: {
+  color: '#FFFFFF',
+},
+attachmentSize: {
+  fontSize: 12,
+  color: '#6B7280',
+  fontWeight: '400',
+},
+myAttachmentSize: {
+  color: '#FFFFFF',
+  opacity: 0.8,
+},
 
-  inputContainer: {
-    paddingTop: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 6,
-    minHeight: 60, // Ensure minimum height for visibility
-   
-  },
+inputContainer: {
+  paddingTop: 8,
+  paddingHorizontal: 8,
+  backgroundColor: '#F7F7F7',
+  borderTopWidth: 1,
+  borderTopColor: '#E5E7EB',
+  borderTopLeftRadius: 16,
+  borderTopRightRadius: 16,
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  bottom: 0,
+},
+// inputContainer: {
+//   paddingTop: SPACING.xs,
+//   paddingHorizontal: SPACING.sm,
+//   backgroundColor: COLORS.surface,
+//   borderTopWidth: 1,
+//   borderTopColor: COLORS.border,
+
+//   // Remove border radius to make it flush with bottom
   
-  selectedAttachmentsContainer: {
-    marginBottom: SPACING.sm,
-    gap: SPACING.xs,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  selectedAttachment: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary + '15',
-    padding: SPACING.sm,
-    borderRadius: 20,
-    gap: SPACING.xs,
-    marginRight: SPACING.xs,
-  },
-  selectedAttachmentName: {
-    flex: 1,
-    fontSize: 12,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
-  uploadProgressContainer: {
-    marginBottom: SPACING.sm,
-  },
-  progressBar: {
-    height: 3,
-    backgroundColor: COLORS.border,
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: SPACING.xs,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
-    borderRadius: 3,
-  },
-  uploadProgressText: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingVertical: 8,
-    paddingBottom: 8,
-  },
-  attachButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.sm,
-    backgroundColor: COLORS.background,
-    borderRadius: 22,
-  },
-  inputWrapperInner: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    paddingBottom: 10,
-    marginRight: SPACING.sm,
-    maxHeight: 120,
-    minHeight: 44,
-  },
-  input: {
-    fontSize: 15,
-    color: COLORS.text,
-    maxHeight: 100,
-    lineHeight: 20,
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  sendButtonDisabled: {
-    backgroundColor: COLORS.textSecondary,
-    opacity: 0.4,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  // OPTIMISTIC UPDATE STYLES
-  pendingMessageText: {
-    opacity: 0.6,
-  },
-  failedMessageText: {
-    color: COLORS.error,
-  },
-  messageFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statusIndicator: {
-    marginLeft: 4,
-  },
-  failedActions: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.error + '20',
-  },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary + '10',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
-  },
-  retryButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  deleteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.error + '10',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
-  },
-  deleteButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.error,
-  },
-  loadingIndicator: {
-    paddingVertical: SPACING.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
+//   shadowColor: '#000',
+//   shadowOffset: { width: 0, height: -3 },
+//   shadowOpacity: 0.08,
+//   shadowRadius: 8,
+//   elevation: 6,
+//   // Remove any bottom margin/padding that might create space
+//   marginBottom: 0,
+//   paddingBottom: 0,
+// },
+selectedAttachmentsContainer: {
+  marginBottom: 8,
+  gap: 6,
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+},
+selectedAttachment: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#E0F2FE',
+  padding: 8,
+  borderRadius: 16,
+  gap: 6,
+  marginRight: 6,
+},
+selectedAttachmentName: {
+  flex: 1,
+  fontSize: 12,
+  color: '#1F2937',
+  fontWeight: '500',
+},
+uploadProgressContainer: {
+  marginBottom: 8,
+},
+progressBar: {
+  height: 3,
+  backgroundColor: '#E5E7EB',
+  borderRadius: 3,
+  overflow: 'hidden',
+  marginBottom: 4,
+},
+progressFill: {
+  height: '100%',
+  backgroundColor: '#1F7CE6',
+  borderRadius: 3,
+},
+uploadProgressText: {
+  fontSize: 11,
+  color: '#6B7280',
+  textAlign: 'center',
+  fontWeight: '500',
+},
+inputRow: {
+  flexDirection: 'row',
+  alignItems: 'flex-end',
+  paddingBottom: 8,
+  gap: 6,
+},
+attachButton: {
+  width: 40,
+  height: 40,
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: 20,
+},
+inputWrapper: {
+  flex: 1,
+  backgroundColor: '#FFFFFF',
+  borderRadius: 20,
+  paddingHorizontal: 16,
+  paddingVertical: 10,
+  minHeight: 40,
+  maxHeight: 120,
+  justifyContent: 'center',
+  borderWidth: 1,
+  borderColor: '#E5E7EB',
+},
+input: {
+  fontSize: 15,
+  color: '#1F2937',
+  maxHeight: 100,
+  lineHeight: 20,
+  paddingVertical: 0,
+},
+sendButton: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: '#1F7CE6',
+  alignItems: 'center',
+  justifyContent: 'center',
+  shadowColor: '#1F7CE6',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.3,
+  shadowRadius: 3,
+  elevation: 3,
+},
+sendButtonDisabled: {
+  backgroundColor: '#9CA3AF',
+  opacity: 0.5,
+  shadowOpacity: 0,
+  elevation: 0,
+},
+// OPTIMISTIC UPDATE STYLES
+pendingMessageText: {
+  opacity: 0.6,
+},
+failedMessageText: {
+  color: '#FF3B30',
+},
+messageFooter: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 4,
+  marginTop: 2,
+},
+statusIndicator: {
+  marginLeft: 4,
+},
+failedActions: {
+  flexDirection: 'row',
+  marginTop: 8,
+  gap: 8,
+  paddingTop: 8,
+  borderTopWidth: 1,
+  borderTopColor: 'rgba(255, 59, 48, 0.2)',
+},
+retryButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: 'rgba(31, 124, 230, 0.1)',
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 16,
+  gap: 4,
+},
+retryButtonText: {
+  fontSize: 12,
+  fontWeight: '600',
+  color: '#1F7CE6',
+},
+deleteButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: 'rgba(255, 59, 48, 0.1)',
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 16,
+  gap: 4,
+},
+deleteButtonText: {
+  fontSize: 12,
+  fontWeight: '600',
+  color: '#FF3B30',
+},
+loadingIndicator: {
+  paddingVertical: SPACING.md,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+loadingText: {
+  fontSize: 14,
+  color: '#6B7280',
+  fontWeight: '500',
+},
 });

@@ -370,6 +370,257 @@ curl -X POST http://localhost:3000/api/emails/send \
 
 ---
 
+## 📖 Email Reading Functionality
+
+**Date:** October 2025  
+**Status:** ✅ **COMPLETED**
+
+### Overview
+
+The mobile app now fully supports reading email messages with complete API integration for fetching individual emails and managing read status (single and batch operations).
+
+---
+
+### API Endpoints
+
+#### 1. Get Single Email
+**Endpoint:** `GET /api/emails/{id}`  
+**Authentication:** Required (Firebase ID Token)
+
+**Response:**
+```typescript
+interface EmailResponse {
+  success: boolean;
+  data: {
+    email: {
+      id: string;
+      subject: string;
+      content: string;
+      senderId: string;
+      recipientId: string;
+      sender: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+      };
+      recipient: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+      };
+      sentAt: string; // ISO timestamp
+      isRead: boolean;
+      readAt: string | null; // ISO timestamp
+      caseId: string | null;
+      case: {
+        id: string;
+        caseNumber: string;
+        serviceType: string;
+      } | null;
+      attachments: {
+        id: string;
+        fileName: string;
+        url: string;
+        mimeType: string;
+        fileSize: number;
+      }[];
+      threadId: string;
+    };
+  };
+  message: string;
+}
+```
+
+#### 2. Mark Single Email as Read
+**Endpoint:** `PUT /api/emails/{id}/read`  
+**Authentication:** Required
+
+**Response:**
+```typescript
+interface MarkReadResponse {
+  success: boolean;
+  data: {
+    email: {
+      id: string;
+      isRead: true;
+      readAt: string; // ISO timestamp
+    };
+  };
+  message: string;
+}
+```
+
+**Authorization:** Only the email recipient can mark it as read.
+
+#### 3. List Emails with Filters
+**Endpoint:** `GET /api/emails?page=1&limit=20&caseId={id}&isRead=true`  
+**Authentication:** Required
+
+**Query Parameters:**
+- `page` (number): Page number (default: 1)
+- `limit` (number): Items per page (default: 20)
+- `caseId` (string, optional): Filter by case ID
+- `isRead` (boolean, optional): Filter by read status
+
+**Response:**
+```typescript
+interface EmailsListResponse {
+  success: boolean;
+  data: {
+    emails: Email[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  };
+}
+```
+
+#### 4. Mark Multiple Emails as Read (Batch)
+**Endpoint:** `PUT /api/emails/mark-read`  
+**Authentication:** Required
+
+**Request Body:**
+```typescript
+{
+  emailIds: string[]; // Array of email IDs (max 100)
+}
+```
+
+**Response:**
+```typescript
+interface BatchMarkReadResponse {
+  success: boolean;
+  data: {
+    count: number; // Number of emails marked as read
+  };
+  message: string;
+}
+```
+
+---
+
+### Implementation Files
+
+#### 1. Messages API (`lib/api/messages.api.ts`)
+
+**Methods Added:**
+- `getEmail(id: string)` - Get single email message
+- `markEmailAsRead(id: string)` - Mark single email as read
+- `getEmails(page, pageSize, filters?)` - List emails with pagination and filters
+- `markEmailsAsRead(emailIds: string[])` - Mark multiple emails as read
+
+**Example Usage:**
+```typescript
+import { messagesApi } from '@/lib/api/messages.api';
+
+// Get single email
+const result = await messagesApi.getEmail('email-id-123');
+if (result.success && result.data) {
+  console.log('Email:', result.data.subject);
+}
+
+// Mark as read
+const markResult = await messagesApi.markEmailAsRead('email-id-123');
+if (markResult.success) {
+  console.log('Email marked as read');
+}
+
+// List emails
+const emailsResult = await messagesApi.getEmails(1, 20, {
+  caseId: 'case-id-123',
+  isRead: false,
+});
+
+// Mark multiple as read
+const batchResult = await messagesApi.markEmailsAsRead(['id1', 'id2', 'id3']);
+```
+
+#### 2. Email Reader Screen (`app/email/[id].tsx`)
+
+**Features:**
+- ✅ Full email display with sender information
+- ✅ Automatic read marking when email is opened
+- ✅ Attachment download support
+- ✅ Related case navigation
+- ✅ Loading and error states
+- ✅ Internationalization support
+
+**Key Functions:**
+- `loadEmail()` - Fetches email data from API
+- `markAsRead()` - Automatically marks email as read when opened
+- `downloadAttachment()` - Downloads and shares attachment files
+
+---
+
+### Email Reader Integration
+
+#### Navigation
+```typescript
+import { router } from 'expo-router';
+
+// Navigate to email reader
+router.push(`/email/${emailId}`);
+```
+
+#### Auto Mark as Read
+When a user opens an email, it's automatically marked as read:
+```typescript
+useEffect(() => {
+  if (email && !email.isRead) {
+    markAsRead();
+  }
+}, [email, markAsRead]);
+```
+
+---
+
+### Error Handling
+
+| Status | Error | Response |
+|--------|-------|----------|
+| **401** | Unauthorized | "Unauthorized - please login again" |
+| **403** | Forbidden | "You can only mark emails sent to you as read" |
+| **404** | Not Found | "Email not found" |
+| **400** | Invalid Request | "Invalid email IDs provided" |
+| **500** | Server Error | "Server error - unable to load email" |
+
+---
+
+### Features
+
+✅ **Email Reading**
+- Full email content display
+- Sender/recipient information
+- Timestamp formatting (today, yesterday, date)
+- Related case linking
+- Attachment support
+
+✅ **Read Status Management**
+- Single email mark as read
+- Batch mark as read (up to 100 emails)
+- Automatic read marking on open
+- Real-time read status updates
+
+✅ **API Integration**
+- Complete backend API integration
+- Proper error handling
+- TypeScript type safety
+- Comprehensive logging
+
+✅ **User Experience**
+- Loading states
+- Error messages
+- Attachment downloads
+- Navigation to related cases
+- Internationalization
+
+---
+
 ## 📝 Notes
 
 1. **Backend SMTP Configuration:** The backend must be configured with SMTP settings in the .env file (lines 56-61) as mentioned by the user.
@@ -382,8 +633,13 @@ curl -X POST http://localhost:3000/api/emails/send \
 
 5. **Contact Form:** The `/contact` endpoint remains separate for general inquiries (not role-specific).
 
+6. **Email Reading:** All email read operations are handled via REST API endpoints, ensuring persistent read status across devices.
+
+7. **Batch Operations:** Mark up to 100 emails as read in a single API call for improved performance.
+
 ---
 
 **Implementation completed by:** Senior Mobile Developer  
-**Date:** October 26, 2025  
-**Integration status:** ✅ Ready for production
+**Date:** October 2025  
+**Integration status:** ✅ Ready for production  
+**Email Reading:** ✅ Fully Implemented

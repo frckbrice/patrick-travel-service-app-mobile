@@ -1,5 +1,5 @@
 import { apiClient } from './axios';
-import { ServiceType, TemplateCategory, ApiResponse, DocumentTemplate } from '../types';
+import { ServiceType, TemplateCategory, ApiResponse, DocumentTemplate, Document } from '../types';
 import { logger } from '../utils/logger';
 import * as FileSystem from 'expo-file-system';
 import { templateCache } from '../services/templateCache';
@@ -13,9 +13,14 @@ export interface ListTemplatesRequest {
   isRequired?: boolean;
 }
 
-export interface DownloadTemplateResponse {
-  template: DocumentTemplate;
-  fileUrl: string;
+export interface UploadFilledTemplateRequest {
+  templateId: string;
+  caseId: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  filledData?: Record<string, any>; // Optional form data if we implement in-app filling
 }
 
 class TemplatesApi {
@@ -198,6 +203,64 @@ class TemplatesApi {
       } catch (error) {
         logger.error('Error preloading template', { templateId, error });
       }
+    }
+  }
+
+  /**
+   * Upload a filled template as a document
+   * This creates a new document in the case from a filled template
+   */
+  async uploadFilledTemplate(
+    data: UploadFilledTemplateRequest
+  ): Promise<ApiResponse<Document>> {
+    try {
+      logger.info('Uploading filled template', {
+        templateId: data.templateId,
+        caseId: data.caseId,
+        fileName: data.fileName,
+      });
+
+      const response = await apiClient.post<ApiResponse<Document>>(
+        `/templates/${data.templateId}/upload-filled`,
+        {
+          caseId: data.caseId,
+          fileName: data.fileName,
+          filePath: data.filePath,
+          fileSize: data.fileSize,
+          mimeType: data.mimeType,
+          filledData: data.filledData,
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      logger.error('Error uploading filled template', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Unable to upload filled template.',
+      };
+    }
+  }
+
+  /**
+   * Get template form fields for in-app filling
+   * This would be used if we implement in-app form filling
+   */
+  async getTemplateFormFields(templateId: string): Promise<ApiResponse<any>> {
+    try {
+      logger.info('Fetching template form fields', { templateId });
+      
+      const response = await apiClient.get<ApiResponse<any>>(
+        `/templates/${templateId}/form-fields`
+      );
+      
+      return response.data;
+    } catch (error: any) {
+      logger.error('Error fetching template form fields', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Unable to load form fields.',
+      };
     }
   }
 }

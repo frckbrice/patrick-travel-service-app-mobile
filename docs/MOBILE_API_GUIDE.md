@@ -264,13 +264,36 @@ GET /api/documents/{documentId}
 ```javascript
 // Get all notifications
 GET /api/notifications
-GET /api/notifications?status=unread&page=1&limit=20
+GET /api/notifications?page=1&limit=20
+
+// Get unread count
+GET /api/notifications/unread-count
 
 // Mark all as read
-POST /api/notifications/mark-all-read
+PUT /api/notifications/mark-all-read
 
 // Mark single as read
-PATCH /api/notifications/{notificationId}
+PUT /api/notifications/{notificationId}
+
+// Delete notification
+DELETE /api/notifications/{notificationId}
+```
+
+### Email Messages
+
+```javascript
+// Get all emails (with pagination and filters)
+GET /api/emails?page=1&limit=20&caseId={caseId}&isRead=true
+
+// Get single email
+GET /api/emails/{id}
+
+// Mark single email as read
+PUT /api/emails/{id}/read
+
+// Mark multiple emails as read (batch)
+PUT /api/emails/mark-read
+Body: { emailIds: ["id1", "id2", "id3"] }
 ```
 
 ### Messages/Chat
@@ -278,6 +301,19 @@ PATCH /api/notifications/{notificationId}
 ```javascript
 // Get chat history
 GET /api/chat/history?chatRoomId={roomId}&limit=50
+
+// Get single chat message
+GET /api/chat/messages/{id}
+
+// Mark single chat message as read
+PUT /api/chat/messages/{id}/read
+
+// Mark multiple chat messages as read (batch)
+PUT /api/chat/messages/mark-read
+Body: { 
+  messageIds: ["id1", "id2", "id3"],
+  chatRoomId: "room-id" // optional, for Firebase sync
+}
 
 // Search messages
 GET /api/chat/search?query=visa&chatRoomId={roomId}
@@ -616,7 +652,17 @@ For API issues or questions:
 | `/api/cases/{id}` | GET | ✅ Yes | Case details |
 | `/api/documents` | GET | ✅ Yes | List user's documents |
 | `/api/notifications` | GET | ✅ Yes | User notifications |
-| `/api/notifications/mark-all-read` | POST | ✅ Yes | Mark all read |
+| `/api/notifications/unread-count` | GET | ✅ Yes | Get unread count |
+| `/api/notifications/{id}` | PUT | ✅ Yes | Mark notification as read |
+| `/api/notifications/{id}` | DELETE | ✅ Yes | Delete notification |
+| `/api/notifications/mark-all-read` | PUT | ✅ Yes | Mark all notifications as read |
+| `/api/emails` | GET | ✅ Yes | List emails with filters |
+| `/api/emails/{id}` | GET | ✅ Yes | Get single email |
+| `/api/emails/{id}/read` | PUT | ✅ Yes | Mark email as read |
+| `/api/emails/mark-read` | PUT | ✅ Yes | Mark multiple emails as read |
+| `/api/chat/messages/{id}` | GET | ✅ Yes | Get single chat message |
+| `/api/chat/messages/{id}/read` | PUT | ✅ Yes | Mark chat message as read |
+| `/api/chat/messages/mark-read` | PUT | ✅ Yes | Mark multiple chat messages as read |
 | `/api/users/push-token` | POST | ✅ Yes | Register push token |
 | `/api/users/settings` | GET | ✅ Yes | Get user settings |
 | `/api/users/settings` | PUT | ✅ Yes | Update settings |

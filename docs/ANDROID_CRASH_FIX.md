@@ -116,3 +116,5 @@ After applying the fix:
 3. Press the home button (or switch to another app)
 4. The app should not crash and should resume properly when reopened
 
+
+

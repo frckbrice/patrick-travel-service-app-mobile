@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SegmentedButtons, Text as PaperText } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -36,9 +36,10 @@ export default function UploadDocumentScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const { caseId } = useLocalSearchParams<{ caseId?: string }>();
   const cases = useCasesStore((state) => state.cases);
   const { requiresActiveCase, activeCases } = useCaseRequirementGuard();
-  const [selectedCaseId, setSelectedCaseId] = useState('');
+  const [selectedCaseId, setSelectedCaseId] = useState(caseId || '');
   const [documentType, setDocumentType] = useState<DocumentType>(
     DocumentType.PASSPORT
   );
@@ -65,229 +66,145 @@ export default function UploadDocumentScreen() {
     return;
   }, []);
 
-  // Auto-select first case when cases are loaded
+  // Auto-select case when cases are loaded (prioritize URL parameter)
   useEffect(() => {
     if (caseOptions.length > 0 && !selectedCaseId) {
-      setSelectedCaseId(caseOptions[0].value);
+      // If caseId is provided in URL, use it; otherwise use first available case
+      const targetCaseId = caseId || caseOptions[0].value;
+      setSelectedCaseId(targetCaseId);
     }
-  }, [caseOptions]);
+  }, [caseOptions, caseId]);
 
   // Memoize document picker function for performance
   const pickDocument = useCallback(async () => {
     try {
-      logger.info('Opening document picker');
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
         copyToCacheDirectory: true,
       });
 
-      if (!result.canceled && result.assets[0]) {
-        const file = result.assets[0];
-        if (file.size && file.size > MAX_FILE_SIZE) {
-          toast.error({
-            title: t('common.error'),
-            message: t('documents.fileTooLarge'),
-          });
-          return;
-        }
-
-        setFileUri(file.uri);
-        setFileName(file.name);
-        setFileSize(file.size || 0);
-        setMimeType(file.mimeType || 'application/octet-stream');
-        logger.info('Document selected', {
-          fileName: file.name,
-          size: file.size,
-        });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setFileUri(asset.uri);
+        setFileName(asset.name);
+        setFileSize(asset.size || 0);
+        setMimeType(asset.mimeType || '');
       }
     } catch (error) {
-      logger.error('Document picker error', error);
+      logger.error('Document picker error:', error);
       toast.error({
         title: t('common.error'),
-        message: 'Failed to pick document',
+        message: t('errors.failedToPickDocument'),
       });
     }
   }, [t]);
 
+  // Memoize image picker function for performance
   const pickImage = useCallback(async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert(
-        t('documents.permissionRequired'),
-        t('documents.photoPermissionNeeded')
-      );
-      return;
-    }
-
     try {
-      logger.info('Opening image picker');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
         allowsEditing: true,
         aspect: [4, 3],
+        quality: 0.8,
       });
 
-      if (!result.canceled && result.assets[0]) {
-        const file = result.assets[0];
-        setFileUri(file.uri);
-        setFileName(`image_${Date.now()}.jpg`);
-        setFileSize(file.fileSize || 0);
-        setMimeType('image/jpeg');
-        logger.info('Image selected', { size: file.fileSize });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setFileUri(asset.uri);
+        setFileName(asset.fileName || `image_${Date.now()}.jpg`);
+        setFileSize(asset.fileSize || 0);
+        setMimeType(asset.type || 'image/jpeg');
       }
     } catch (error) {
-      logger.error('Image picker error', error);
+      logger.error('Image picker error:', error);
       toast.error({
         title: t('common.error'),
-        message: 'Failed to pick image',
+        message: t('errors.failedToPickImage'),
       });
     }
   }, [t]);
 
+  // Memoize camera function for performance
   const takePhoto = useCallback(async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert(
-        t('documents.permissionRequired'),
-        t('documents.cameraPermissionNeeded')
-      );
-      return;
-    }
-
     try {
-      logger.info('Opening camera');
       const result = await ImagePicker.launchCameraAsync({
-        quality: 0.8,
         allowsEditing: true,
         aspect: [4, 3],
+        quality: 0.8,
       });
 
-      if (!result.canceled && result.assets[0]) {
-        const file = result.assets[0];
-        setFileUri(file.uri);
-        setFileName(`photo_${Date.now()}.jpg`);
-        setFileSize(file.fileSize || 0);
-        setMimeType('image/jpeg');
-        logger.info('Photo taken', { size: file.fileSize });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setFileUri(asset.uri);
+        setFileName(asset.fileName || `photo_${Date.now()}.jpg`);
+        setFileSize(asset.fileSize || 0);
+        setMimeType(asset.type || 'image/jpeg');
       }
     } catch (error) {
-      logger.error('Camera error', error);
+      logger.error('Camera error:', error);
       toast.error({
         title: t('common.error'),
-        message: 'Failed to take photo',
+        message: t('errors.failedToTakePhoto'),
       });
     }
   }, [t]);
 
-  const handleUpload = useCallback(async () => {
-    if (!selectedCaseId || !fileUri || !fileName) {
-      toast.error({
-        title: t('common.error'),
-        message: 'Please select a case and file',
-      });
-      return;
-    }
+  // Memoize upload function for performance
+  const uploadDocument = useCallback(async () => {
+    if (!fileUri || !selectedCaseId) return;
 
-    // PERFORMANCE: Generate temp ID
-    const tempId = `temp-${Date.now()}`;
-    let lastProgressUpdate = 0;
-
-    logger.info('Starting optimistic document upload', {
-      caseId: selectedCaseId,
-      fileName,
-      fileSize,
-    });
-
-    // 1. Navigate back immediately - no blocking!
-    router.back();
-
-    // 2. Show instant feedback with toast
-    toast.info({
-      title: t('documents.uploading'),
-      message: fileName,
-    });
+    setIsUploading(true);
+    setUploadProgress(0);
 
     try {
-    // 3. PERFORMANCE: Upload with 60 FPS throttled progress
+      // Upload file to UploadThing
       const uploadResult = await uploadThingService.uploadFile(
         fileUri,
         fileName,
         mimeType,
-        {
-          onProgress: (progress: number) => {
-            const now = Date.now();
-
-            // PERFORMANCE: Throttle to 60 FPS (16.6ms intervals)
-            if (now - lastProgressUpdate < 16.6) return;
-
-            lastProgressUpdate = now;
-            setUploadProgress(Math.round(progress * 100));
-            logger.debug('Upload progress', { progress: Math.round(progress * 100) });
-          },
-        }
+        (progress) => setUploadProgress(progress)
       );
 
-      if (!uploadResult.success || !uploadResult.url) {
-        throw new Error(uploadResult.error || t('errors.uploadFailed'));
+      if (!uploadResult.success || !uploadResult.data) {
+        throw new Error(uploadResult.error || 'Upload failed');
       }
 
-      // 4. Save document metadata to backend
-      const response = await documentsApi.uploadDocument({
+      // Create document record
+      const documentData = {
         caseId: selectedCaseId,
         documentType,
-        fileName: uploadResult.name || fileName,
-        filePath: uploadResult.url,
+        originalName: fileName,
         fileSize,
         mimeType,
-      });
+        uploadUrl: uploadResult.data.url,
+        uploadKey: uploadResult.data.key,
+      };
+
+      const response = await documentsApi.createDocument(documentData);
 
       if (response.success) {
-        // 5. Success - document uploaded
-        logger.info('Document uploaded successfully', {
-          documentId: response.data?.id,
-          fileName,
-          progress: 100,
-        });
-
-        // Show success feedback with toast
         toast.success({
-          title: t('common.success'),
-          message: t('documents.uploadSuccess'),
+          title: t('documents.uploadSuccess'),
+          message: t('documents.uploadSuccessMessage'),
         });
+        router.back();
       } else {
         throw new Error(response.error || t('errors.uploadFailed'));
       }
     } catch (error: any) {
-      // 6. Error - show failure message with toast
-      logger.error('Document upload failed', error);
-
+      logger.error('Upload error:', error);
       toast.error({
-        title: t('common.error'),
+        title: t('documents.uploadFailed'),
         message: error.message || t('errors.uploadFailed'),
       });
     } finally {
-      // 7. PERFORMANCE: Clean up state
       setIsUploading(false);
       setUploadProgress(0);
     }
-  }, [
-    selectedCaseId,
-    fileUri,
-    fileName,
-    documentType,
-    fileSize,
-    mimeType,
-    t,
-    router,
-  ]);
+  }, [fileUri, selectedCaseId, fileName, mimeType, documentType, fileSize, t, router]);
 
-  // Memoize whether preview should be shown
-  const isImageFile = useMemo(() => mimeType.includes('image'), [mimeType]);
-
-  // Check if upload button should be enabled
+  // Memoize validation for upload button
   const isUploadEnabled = useMemo(() => {
     return !isUploading && !!fileName && !!selectedCaseId;
   }, [isUploading, fileName, selectedCaseId]);
@@ -320,346 +237,177 @@ export default function UploadDocumentScreen() {
         ) : (
           <>
               <Animated.View entering={FadeInDown.delay(0).duration(400)}>
-                <PaperText style={styles.sectionTitle}>
-                  {t('documents.selectCase')}
-                </PaperText>
-                {caseOptions.length > 0 ? (
-                  caseOptions.length <= 3 ? (
-                    <SegmentedButtons
-                      value={selectedCaseId}
-                      onValueChange={setSelectedCaseId}
-                      buttons={caseOptions.map((option) => ({
-                        ...option,
-                        style: styles.segmentButton,
-                        labelStyle: styles.segmentLabel,
-                      }))}
-                      style={styles.segmentedButtons}
-                      theme={{
-                        colors: {
-                          secondaryContainer: COLORS.primary,
-                          onSecondaryContainer: COLORS.surface,
-                          outline: COLORS.border,
-                        },
-                      }}
-                    />
-                  ) : (
-                    <View style={styles.casePickerContainer}>
-                      {caseOptions.map((option) => (
-                        <TouchableOpacity
-                          key={option.value}
-                          style={[
-                            styles.caseOption,
-                            selectedCaseId === option.value &&
-                            styles.caseOptionSelected,
-                          ]}
-                          onPress={() => setSelectedCaseId(option.value)}
-                        >
-                          <MaterialCommunityIcons
-                            name="briefcase"
-                            size={20}
-                            color={
-                              selectedCaseId === option.value
-                                ? COLORS.primary
-                                : COLORS.textSecondary
-                            }
-                          />
-                          <PaperText
-                            style={[
-                              styles.caseOptionText,
-                              selectedCaseId === option.value &&
-                              styles.caseOptionTextSelected,
-                            ]}
-                          >
-                            {option.label}
-                          </PaperText>
-                          {selectedCaseId === option.value && (
-                            <MaterialCommunityIcons
-                              name="check-circle"
-                              size={20}
-                              color={COLORS.primary}
-                            />
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )
-                ) : (
-                  <PaperText style={styles.helperText}>
-                    {t('documents.createCaseFirst') || 'Create a case first'}
+                <Card style={styles.card}>
+                  <PaperText style={styles.sectionTitle}>
+                    {t('documents.selectCase')}
                   </PaperText>
-                )}
+                  <View style={styles.casePickerContainer}>
+                    {caseOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.caseOption,
+                          selectedCaseId === option.value && styles.caseOptionSelected,
+                        ]}
+                        onPress={() => setSelectedCaseId(option.value)}
+                      >
+                        <MaterialCommunityIcons
+                          name="folder"
+                          size={20}
+                          color={selectedCaseId === option.value ? COLORS.primary : COLORS.textSecondary}
+                        />
+                        <PaperText
+                          style={[
+                            styles.caseOptionText,
+                            selectedCaseId === option.value && styles.caseOptionTextSelected,
+                          ]}
+                        >
+                          {option.label}
+                        </PaperText>
+                        {selectedCaseId === option.value && (
+                          <MaterialCommunityIcons
+                            name="check-circle"
+                            size={20}
+                            color={COLORS.primary}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </Card>
               </Animated.View>
 
               <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-                <PaperText
-                  style={[styles.sectionTitle, { marginTop: SPACING.lg }]}
-                >
-                  {t('documents.documentType')}
-                </PaperText>
-                <View style={styles.documentTypeContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.documentTypeOption,
-                      documentType === DocumentType.PASSPORT &&
-                      styles.documentTypeOptionSelected,
+                <Card style={styles.card}>
+                  <PaperText style={styles.sectionTitle}>
+                    {t('documents.documentType')}
+                  </PaperText>
+                  <SegmentedButtons
+                    value={documentType}
+                    onValueChange={(value) => setDocumentType(value as DocumentType)}
+                    buttons={[
+                      {
+                        value: DocumentType.PASSPORT,
+                        label: DOCUMENT_TYPE_LABELS[DocumentType.PASSPORT],
+                        icon: 'passport',
+                      },
+                      {
+                        value: DocumentType.ID_CARD,
+                        label: DOCUMENT_TYPE_LABELS[DocumentType.ID_CARD],
+                        icon: 'card-account-details',
+                      },
+                      {
+                        value: DocumentType.DIPLOMA,
+                        label: DOCUMENT_TYPE_LABELS[DocumentType.DIPLOMA],
+                        icon: 'school',
+                      },
+                      {
+                        value: DocumentType.OTHER,
+                        label: DOCUMENT_TYPE_LABELS[DocumentType.OTHER],
+                        icon: 'file-document',
+                      },
                     ]}
-                    onPress={() => setDocumentType(DocumentType.PASSPORT)}
-                  >
-                    <View
-                      style={[
-                        styles.documentTypeIconContainer,
-                        documentType === DocumentType.PASSPORT &&
-                        styles.documentTypeIconContainerSelected,
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="passport"
-                        size={28}
-                        color={
-                          documentType === DocumentType.PASSPORT
-                            ? COLORS.primary
-                            : COLORS.textSecondary
-                        }
-                      />
-                    </View>
-                    <PaperText
-                      style={[
-                        styles.documentTypeLabel,
-                        documentType === DocumentType.PASSPORT &&
-                        styles.documentTypeLabelSelected,
-                      ]}
-                    >
-                      Passport
-                    </PaperText>
-                    {documentType === DocumentType.PASSPORT && (
-                      <MaterialCommunityIcons
-                        name="check-circle"
-                        size={18}
-                        color={COLORS.primary}
-                        style={styles.checkIcon}
-                      />
-                    )}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.documentTypeOption,
-                      documentType === DocumentType.ID_CARD &&
-                      styles.documentTypeOptionSelected,
-                    ]}
-                    onPress={() => setDocumentType(DocumentType.ID_CARD)}
-                  >
-                    <View
-                      style={[
-                        styles.documentTypeIconContainer,
-                        documentType === DocumentType.ID_CARD &&
-                        styles.documentTypeIconContainerSelected,
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="card-account-details"
-                        size={28}
-                        color={
-                          documentType === DocumentType.ID_CARD
-                            ? COLORS.primary
-                            : COLORS.textSecondary
-                        }
-                      />
-                    </View>
-                    <PaperText
-                      style={[
-                        styles.documentTypeLabel,
-                        documentType === DocumentType.ID_CARD &&
-                        styles.documentTypeLabelSelected,
-                      ]}
-                    >
-                      ID Card
-                    </PaperText>
-                    {documentType === DocumentType.ID_CARD && (
-                      <MaterialCommunityIcons
-                        name="check-circle"
-                        size={18}
-                        color={COLORS.primary}
-                        style={styles.checkIcon}
-                      />
-                    )}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.documentTypeOption,
-                      documentType === DocumentType.OTHER &&
-                      styles.documentTypeOptionSelected,
-                    ]}
-                    onPress={() => setDocumentType(DocumentType.OTHER)}
-                  >
-                    <View
-                      style={[
-                        styles.documentTypeIconContainer,
-                        documentType === DocumentType.OTHER &&
-                        styles.documentTypeIconContainerSelected,
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="file-document"
-                        size={28}
-                        color={
-                          documentType === DocumentType.OTHER
-                            ? COLORS.primary
-                            : COLORS.textSecondary
-                        }
-                      />
-                    </View>
-                    <PaperText
-                      style={[
-                        styles.documentTypeLabel,
-                        documentType === DocumentType.OTHER &&
-                        styles.documentTypeLabelSelected,
-                      ]}
-                    >
-                      Other
-                    </PaperText>
-                    {documentType === DocumentType.OTHER && (
-                      <MaterialCommunityIcons
-                        name="check-circle"
-                        size={18}
-                        color={COLORS.primary}
-                        style={styles.checkIcon}
-                      />
-                    )}
-                  </TouchableOpacity>
-                </View>
+                    style={styles.segmentedButtons}
+                  />
+                </Card>
               </Animated.View>
 
               <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-                <PaperText
-                  style={[styles.sectionTitle, { marginTop: SPACING.lg }]}
-                >
-                  {t('documents.selectFile')}
-                </PaperText>
-
-                <View style={styles.uploadOptions}>
-                  <TouchableOpacity
-                    style={styles.uploadOption}
-                    onPress={takePhoto}
-                  >
-                    <View
-                      style={[
-                        styles.uploadIconContainer,
-                        { backgroundColor: COLORS.primary + '15' },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="camera"
-                        size={32}
-                        color={COLORS.primary}
-                      />
-                    </View>
-                    <PaperText style={styles.uploadOptionText}>
-                      {t('documents.takePhoto') || 'Take Photo'}
-                    </PaperText>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.uploadOption}
-                    onPress={pickImage}
-                  >
-                    <View
-                      style={[
-                        styles.uploadIconContainer,
-                        { backgroundColor: COLORS.success + '15' },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="image"
-                        size={32}
-                        color={COLORS.success}
-                      />
-                    </View>
-                    <PaperText style={styles.uploadOptionText}>
-                      {t('documents.gallery') || 'Gallery'}
-                    </PaperText>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.uploadOption}
-                    onPress={pickDocument}
-                  >
-                    <View
-                      style={[
-                        styles.uploadIconContainer,
-                        { backgroundColor: COLORS.warning + '15' },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name="file-document"
-                        size={32}
-                        color={COLORS.warning}
-                      />
-                    </View>
-                    <PaperText style={styles.uploadOptionText}>
-                      {t('documents.document') || 'Document'}
-                    </PaperText>
-                  </TouchableOpacity>
-                </View>
-
-                {fileName && (
-                  <Card style={styles.previewCard}>
-                    <View style={styles.previewContent}>
-                      {isImageFile && fileUri ? (
-                        <Image
-                          source={{ uri: fileUri }}
-                          style={styles.imagePreview}
-                          resizeMode="cover"
+                <Card style={styles.card}>
+                  <PaperText style={styles.sectionTitle}>
+                    {t('documents.selectFile')}
+                  </PaperText>
+                  
+                  {fileName ? (
+                    <View style={styles.filePreview}>
+                      <View style={styles.fileInfo}>
+                        <MaterialCommunityIcons
+                          name={mimeType.includes('pdf') ? 'file-pdf-box' : 'file-image'}
+                          size={32}
+                          color={COLORS.primary}
                         />
-                      ) : (
-                        <View style={styles.filePreview}>
-                          <MaterialCommunityIcons
-                            name={
-                              mimeType.includes('pdf')
-                                ? 'file-pdf-box'
-                                : 'file-document'
-                            }
-                            size={64}
-                            color={COLORS.primary}
-                          />
+                        <View style={styles.fileDetails}>
+                          <PaperText style={styles.fileName} numberOfLines={1}>
+                            {fileName}
+                          </PaperText>
+                          <PaperText style={styles.fileSize}>
+                            {(fileSize / 1024).toFixed(1)} KB
+                          </PaperText>
                         </View>
-                      )}
-                      <View style={styles.fileInfoContainer}>
-                        <Text style={styles.fileName} numberOfLines={2}>
-                          {fileName}
-                        </Text>
-                        <Text style={styles.fileSize}>
-                          {(fileSize / 1024).toFixed(2)} KB
-                        </Text>
-                        <Text style={styles.fileType}>
-                          {DOCUMENT_TYPE_LABELS[documentType]}
-                        </Text>
                       </View>
                       <TouchableOpacity
+                        style={styles.removeFileButton}
                         onPress={() => {
                           setFileUri('');
                           setFileName('');
+                          setFileSize(0);
+                          setMimeType('');
                         }}
-                        style={styles.removeButton}
                       >
                         <MaterialCommunityIcons
-                          name="close-circle"
-                          size={24}
+                          name="close"
+                          size={20}
                           color={COLORS.error}
                         />
                       </TouchableOpacity>
                     </View>
-                  </Card>
-                )}
+                  ) : (
+                    <View style={styles.filePickerContainer}>
+                      <TouchableOpacity
+                        style={styles.pickerButton}
+                        onPress={pickDocument}
+                      >
+                        <MaterialCommunityIcons
+                          name="file-document"
+                          size={24}
+                          color={COLORS.primary}
+                        />
+                        <PaperText style={styles.pickerButtonText}>
+                          {t('documents.chooseFile')}
+                        </PaperText>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.pickerButton}
+                        onPress={pickImage}
+                      >
+                        <MaterialCommunityIcons
+                          name="image"
+                          size={24}
+                          color={COLORS.primary}
+                        />
+                        <PaperText style={styles.pickerButtonText}>
+                          {t('documents.chooseImage')}
+                        </PaperText>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.pickerButton}
+                        onPress={takePhoto}
+                      >
+                        <MaterialCommunityIcons
+                          name="camera"
+                          size={24}
+                          color={COLORS.primary}
+                        />
+                        <PaperText style={styles.pickerButtonText}>
+                          {t('documents.takePhoto')}
+                        </PaperText>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </Card>
               </Animated.View>
 
-              <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-                {isUploading && uploadProgress > 0 && (
-                  <View style={styles.progressContainer}>
-                    <PaperText style={styles.progressText}>
-                      {t('documents.uploading')} {uploadProgress}%
-                    </PaperText>
+              {isUploading && (
+                <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+                  <Card style={styles.card}>
+                    <View style={styles.uploadProgress}>
+                      <ActivityIndicator size="small" color={COLORS.primary} />
+                      <PaperText style={styles.uploadText}>
+                        {t('documents.uploading')}... {Math.round(uploadProgress)}%
+                      </PaperText>
+                    </View>
                     <View style={styles.progressBar}>
                       <View
                         style={[
@@ -668,47 +416,40 @@ export default function UploadDocumentScreen() {
                         ]}
                       />
                     </View>
-                  </View>
-                )}
+                  </Card>
+                </Animated.View>
+              )}
 
+              <Animated.View entering={FadeInDown.delay(400).duration(400)}>
                 <TouchableOpacity
-                  onPress={handleUpload}
                   style={[
                     styles.uploadButton,
                     !isUploadEnabled && styles.uploadButtonDisabled,
                   ]}
-                  activeOpacity={0.8}
+                  onPress={uploadDocument}
                   disabled={!isUploadEnabled}
                 >
                   {isUploading ? (
-                    <View style={styles.buttonLoading}>
-                      <ActivityIndicator color={COLORS.surface} size="small" />
-                      <PaperText style={styles.buttonLabel}>
-                        {t('documents.uploading')} {uploadProgress}%
-                      </PaperText>
-                    </View>
+                    <ActivityIndicator color="white" size="small" />
                   ) : (
-                    <View style={styles.buttonContent}>
-                      <MaterialCommunityIcons
-                        name="upload"
-                        size={20}
-                        color={
-                          isUploadEnabled ? COLORS.surface : COLORS.textSecondary
-                        }
-                        />
-                      <PaperText
-                        style={[
-                          styles.buttonLabel,
-                          !isUploadEnabled && styles.buttonLabelDisabled,
-                        ]}
-                      >
-                        {t('documents.uploadDocument')}
-                      </PaperText>
-                    </View>
+                    <MaterialCommunityIcons
+                      name="cloud-upload"
+                      size={20}
+                      color="white"
+                    />
                   )}
+                  <PaperText style={styles.uploadButtonText}>
+                    {isUploading
+                      ? t('documents.uploading')
+                      : t('documents.uploadDocument')}
+                  </PaperText>
                 </TouchableOpacity>
               </Animated.View>
-          </>
+
+              <PaperText style={styles.helperText}>
+                {t('documents.uploadHelper')}
+              </PaperText>
+            </>
         )}
       </View>
     </ScrollView>
@@ -809,170 +550,119 @@ const styles = StyleSheet.create({
   },
   documentTypeOption: {
     flex: 1,
+    alignItems: 'center',
+    padding: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  documentTypeOptionSelected: {
+    backgroundColor: COLORS.primary + '15',
+    borderColor: COLORS.primary,
+  },
+  documentTypeIcon: {
+    marginBottom: SPACING.xs,
+  },
+  documentTypeLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  filePickerContainer: {
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: COLORS.surface,
     borderWidth: 1.5,
     borderColor: COLORS.border,
     borderRadius: 12,
     padding: SPACING.md,
-    alignItems: 'center',
-    position: 'relative',
+    gap: SPACING.sm,
   },
-  documentTypeOptionSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '08',
-  },
-  documentTypeIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.sm,
-  },
-  documentTypeIconContainerSelected: {
-    backgroundColor: COLORS.primary + '15',
-  },
-  documentTypeLabel: {
-    fontSize: 13,
+  pickerButtonText: {
+    fontSize: 15,
     fontWeight: '500',
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  documentTypeLabelSelected: {
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  checkIcon: {
-    position: 'absolute',
-    top: SPACING.xs,
-    right: SPACING.xs,
-  },
-  uploadOptions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.lg,
-  },
-  uploadOption: {
-    flex: 1,
-    alignItems: 'center',
-    marginHorizontal: SPACING.xs,
-  },
-  uploadIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.sm,
-  },
-  uploadOptionText: {
-    fontSize: 13,
-    fontWeight: '600',
     color: COLORS.text,
-    textAlign: 'center',
-  },
-  previewCard: {
-    marginTop: SPACING.md,
-    marginBottom: SPACING.lg,
-  },
-  previewContent: {
-    padding: SPACING.md,
-  },
-  imagePreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
-    marginBottom: SPACING.md,
   },
   filePreview: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    height: 120,
-    backgroundColor: COLORS.background,
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
     borderRadius: 12,
+    padding: SPACING.md,
     marginBottom: SPACING.md,
   },
-  fileInfoContainer: {
-    marginBottom: SPACING.sm,
+  fileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: SPACING.sm,
+  },
+  fileDetails: {
+    flex: 1,
   },
   fileName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.text,
-    marginBottom: 4,
   },
   fileSize: {
     fontSize: 13,
     color: COLORS.textSecondary,
-    marginBottom: 2,
+    marginTop: 2,
   },
-  fileType: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
+  removeFileButton: {
+    padding: SPACING.xs,
   },
-  removeButton: {
-    position: 'absolute',
-    top: SPACING.sm,
-    right: SPACING.sm,
-  },
-  progressContainer: {
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    padding: SPACING.md,
+    gap: SPACING.sm,
     marginBottom: SPACING.md,
   },
-  progressText: {
-    fontSize: 14,
+  uploadButtonDisabled: {
+    backgroundColor: COLORS.textSecondary,
+  },
+  uploadButtonText: {
+    fontSize: 16,
     fontWeight: '600',
-    color: COLORS.primary,
+    color: 'white',
+  },
+  uploadProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
     marginBottom: SPACING.sm,
-    textAlign: 'center',
+  },
+  uploadText: {
+    fontSize: 14,
+    color: COLORS.text,
   },
   progressBar: {
-    height: 8,
+    height: 4,
     backgroundColor: COLORS.border,
-    borderRadius: 4,
+    borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     backgroundColor: COLORS.primary,
-    borderRadius: 4,
+    borderRadius: 2,
   },
-  uploadButton: {
-    marginTop: SPACING.lg,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  uploadButtonDisabled: {
-    backgroundColor: COLORS.border,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.surface,
-  },
-  buttonLabelDisabled: {
-    color: COLORS.textSecondary,
-  },
-  buttonLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+  card: {
+    marginBottom: SPACING.lg,
+    padding: SPACING.md,
   },
 });

@@ -123,7 +123,7 @@ export const ROUTES = {
     HOME: '/(tabs)',
     CASES: '/(tabs)/cases',
     DOCUMENTS: '/(tabs)/documents',
-    MESSAGES: '/(tabs)/messages',
+    NOTIFICATIONS: '/(tabs)/notifications',
     PROFILE: '/(tabs)/profile',
   },
   CASE: {

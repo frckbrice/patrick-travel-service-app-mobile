@@ -16,6 +16,7 @@ import { faqApi } from '../../lib/api/faq.api';
 import { FAQ } from '../../lib/types';
 import { useDebounce } from '../../lib/hooks';
 import { EmptyState, Card } from '../../components/ui';
+import { ModernHeader } from '../../components/ui/ModernHeader';
 import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 
@@ -107,21 +108,20 @@ export default function FAQScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
-        <MaterialCommunityIcons
-          name="magnify"
-          size={20}
-          color={colors.textSecondary}
-          style={styles.searchIcon}
-        />
-        <TextInput
-          placeholder={t('help.searchFAQ')}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholderTextColor={colors.textSecondary}
-        />
-      </View>
+      {/* Modern Gradient Header */}
+      <ModernHeader
+        variant="gradient"
+        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        title="FAQ"
+        subtitle="Frequently Asked Questions"
+        showBackButton
+        showSearch
+        searchPlaceholder={t('help.searchFAQ')}
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+      />
+      
+      <View style={styles.content}>
 
       <FlatList
         data={Object.keys(groupedFAQs)}
@@ -144,6 +144,7 @@ export default function FAQScreen() {
         initialNumToRender={5}
         windowSize={5}
       />
+      </View>
     </View>
   );
 }
@@ -152,6 +153,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent', // Will be set dynamically
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: SPACING.md,
   },
   searchContainer: {
     flexDirection: 'row',

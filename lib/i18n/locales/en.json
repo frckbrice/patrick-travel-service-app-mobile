@@ -99,9 +99,32 @@
   },
   "dashboard": {
     "welcomeUser": "Welcome back, {{name}}!",
+    "welcomeBack": "Welcome back, {{name}}",
     "goodMorning": "Good Morning",
     "goodAfternoon": "Good Afternoon",
     "goodEvening": "Good Evening",
+    "greetings": {
+      "morning": "Good Morning",
+      "afternoon": "Good Afternoon",
+      "evening": "Good Evening"
+    },
+    "stats": {
+      "totalCases": "Total Cases",
+      "activeCases": "Active",
+      "documents": "Documents",
+      "messages": "Messages",
+      "notifications": "Notifications"
+    },
+    "actions": {
+      "title": "Quick Actions",
+      "caseManagement": "Case Management",
+      "supportResources": "Support & Resources",
+      "newCase": "Submit New Case",
+      "uploadDocument": "Upload Document",
+      "contactSupport": "Contact Support",
+      "viewFAQs": "View FAQs",
+      "downloadTemplates": "Download Templates"
+    },
     "overview": "Overview",
     "totalCases": "Total Cases",
     "activeCases": "Active",
@@ -168,8 +191,11 @@
   },
   "documents": {
     "myDocuments": "My Documents",
+    "searchDocuments": "Search documents",
     "uploadDocument": "Upload Document",
     "documentDetails": "Document Details",
+    "noDocuments": "No Documents",
+    "noDocumentsDescription": "You haven't uploaded any documents yet. Upload your first document to get started.",
     "selectCase": "Select Case",
     "selectCaseAndFile": "Select a case and choose a file to upload",
     "documentType": "Document Type",
@@ -179,7 +205,6 @@
     "takePhoto": "Take Photo",
     "gallery": "Gallery",
     "document": "Document",
-    "noDocuments": "No documents yet",
     "noCasesAvailable": "No cases available. Please create a case first.",
     "createCaseFirst": "Create a case first",
     "uploaded": "Uploaded:",
@@ -214,7 +239,10 @@
     "deleteFailedMessage": "Are you sure you want to delete this failed message?",
     "messageSending": "Sending...",
     "messageSent": "Sent",
-    "messageFailed": "Failed to send"
+    "messageFailed": "Failed to send",
+    "tab": "Messages",
+    "noMessages": "No Messages",
+    "noMessagesDesc": "Start a conversation with your advisor."
   },
   "profile": {
     "profile": "Profile",
@@ -262,7 +290,40 @@
     "marketingDesc": "News and promotional content",
     "testNotification": "Send Test Notification",
     "pushToken": "Push Token (for debugging):",
-    "notificationsSaved": "Notification preferences saved"
+    "notificationsSaved": "Notification preferences saved",
+    "markAllRead": "Mark All Read",
+    "subtitle": "Manage how your receive notifications",
+    "title": "Notifications",
+    "tab": "Notifications",
+    "noNotifications": "No Notifications",
+    "noNotificationsDesc": "You're all caught up! New notifications will appear here.",
+    "chatMessages": "Chat Messages"
+  },
+  "email": {
+    "noInboxEmails": "No Inbox Emails",
+    "noInboxEmailsDesc": "You don't have any received emails yet.",
+    "noSentEmails": "No Sent Emails",
+    "noSentEmailsDesc": "You haven't sent any emails yet.",
+    "reader": "Email",
+    "noSubject": "No Subject",
+    "loading": "Loading email...",
+    "notFound": "Email not found",
+    "notFoundDesc": "The email message could not be found or may have been deleted.",
+    "goBack": "Go Back",
+    "actions": "Email Actions",
+    "actionsDesc": "Reply, forward, and other actions will be available soon.",
+    "yesterday": "Yesterday",
+    "unread": "Unread",
+    "attachments": "Attachments",
+    "downloadAttachment": "Download Attachment",
+    "downloadStarted": "Download started",
+    "downloadFailed": "Failed to download attachment",
+    "noAttachments": "No attachments for this email",
+    "relatedCase": "Related Case",
+    "failedToLoad": "Failed to load email message",
+    "markReadFailed": "Failed to mark email as read",
+    "inbox": "Inbox",
+    "sent": "Sent"
   },
   "settings": {
     "customize": "Customize your app experience",

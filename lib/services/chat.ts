@@ -17,6 +17,7 @@ import {
 } from 'firebase/database';
 import { logger } from '../utils/logger';
 import { chatCacheService } from './chatCache';
+import { messagesApi } from '../api/messages.api';
 
 export interface ChatMessage {
   id: string;
@@ -534,6 +535,28 @@ class ChatService {
     }
   }
 
+  // Get total unread chat messages count across all cases for a user
+  async getTotalUnreadCount(userId: string, caseIds: string[]): Promise<number> {
+    try {
+      if (!caseIds || caseIds.length === 0) {
+        return 0;
+      }
+
+      // Get unread counts for all cases in parallel
+      const countPromises = caseIds.map(caseId => this.getUnreadCount(caseId, userId));
+      const counts = await Promise.all(countPromises);
+      
+      // Sum all counts
+      const total = counts.reduce((sum, count) => sum + count, 0);
+      
+      logger.info('Total unread chat messages', { userId, total, caseCount: caseIds.length });
+      return total;
+    } catch (error) {
+      logger.error('Failed to get total unread count', error);
+      return 0;
+    }
+  }
+
   // Listen to all conversations for a user (optimized)
   onConversationsChange(
     userId: string,
@@ -874,6 +897,144 @@ class ChatService {
     } catch (error) {
       logger.error('Failed to update chat agent', error);
       throw error;
+    }
+  }
+
+  // API Integration Methods for Message Read Status
+  // These methods sync with the backend API for persistent read status
+
+  /**
+   * Mark a single chat message as read via API
+   * This updates both Firebase (real-time) and PostgreSQL (persistent)
+   */
+  async markMessageAsReadApi(messageId: string): Promise<boolean> {
+    try {
+      const result = await messagesApi.markChatMessageAsRead(messageId);
+      
+      if (result.success) {
+        logger.info('Message marked as read via API', { messageId });
+        return true;
+      } else {
+        logger.error('Failed to mark message as read via API', result.error);
+        return false;
+      }
+    } catch (error) {
+      logger.error('Error marking message as read via API', error);
+      return false;
+    }
+  }
+
+  /**
+   * Mark multiple chat messages as read via API
+   * This updates both Firebase (real-time) and PostgreSQL (persistent)
+   */
+  async markMessagesAsReadApi(messageIds: string[], chatRoomId?: string): Promise<boolean> {
+    try {
+      const result = await messagesApi.markChatMessagesAsRead(messageIds, chatRoomId);
+      
+      if (result.success) {
+        logger.info('Messages marked as read via API', { 
+          messageCount: messageIds.length, 
+          chatRoomId 
+        });
+        return true;
+      } else {
+        logger.error('Failed to mark messages as read via API', result.error);
+        return false;
+      }
+    } catch (error) {
+      logger.error('Error marking messages as read via API', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get a single chat message from API
+   * This can be used to get message details with full sender/recipient info
+   */
+  async getChatMessageApi(messageId: string): Promise<ChatMessage | null> {
+    try {
+      const result = await messagesApi.getChatMessage(messageId);
+      
+      if (result.success && result.data) {
+        // Convert API message format to ChatMessage format
+        const apiMessage = result.data;
+        return {
+          id: apiMessage.id,
+          caseId: apiMessage.caseId || '',
+          senderId: apiMessage.senderId,
+          senderName: `${apiMessage.sender?.firstName || ''} ${apiMessage.sender?.lastName || ''}`.trim(),
+          senderRole: 'AGENT', // Default, could be determined from user role
+          message: apiMessage.content,
+          timestamp: new Date(apiMessage.sentAt).getTime(),
+          isRead: apiMessage.isRead,
+          attachments: apiMessage.attachments?.map(att => ({
+            name: att.fileName,
+            url: att.url,
+            type: att.mimeType,
+            size: att.fileSize,
+          })) || [],
+        };
+      } else {
+        logger.error('Failed to get chat message via API', result.error);
+        return null;
+      }
+    } catch (error) {
+      logger.error('Error getting chat message via API', error);
+      return null;
+    }
+  }
+
+  /**
+   * Mark all messages in a chat room as read
+   * This is useful when a user opens a chat conversation
+   */
+  async markChatRoomAsRead(caseId: string, userId: string): Promise<boolean> {
+    try {
+      // Get all unread messages for this case/user
+      const messagesRef = ref(database, `chats/${caseId}/messages`);
+      const snapshot = await get(messagesRef);
+      
+      if (!snapshot.exists()) {
+        return true; // No messages to mark as read
+      }
+
+      const messages: ChatMessage[] = [];
+      snapshot.forEach((childSnapshot) => {
+        const message = childSnapshot.val();
+        if (message.senderId !== userId && !message.isRead) {
+          messages.push({
+            ...message,
+            id: childSnapshot.key!,
+          });
+        }
+      });
+
+      if (messages.length === 0) {
+        return true; // No unread messages
+      }
+
+      // Extract message IDs for API call
+      const messageIds = messages.map(msg => msg.id);
+      
+      // Mark as read via API (this will sync to Firebase)
+      return await this.markMessagesAsReadApi(messageIds, caseId);
+    } catch (error) {
+      logger.error('Error marking chat room as read', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clean up cache when chat is closed (FIFO - keep only last 20 messages)
+   * This reduces memory usage by keeping only the most recent messages in cache
+   */
+  async cleanupCacheOnChatClose(caseId: string): Promise<void> {
+    try {
+      await chatCacheService.cleanupCacheOnChatClose(caseId, 20);
+    } catch (error) {
+      logger.error('Error cleaning up cache on chat close', error);
+      // Don't throw - cleanup is non-critical
     }
   }
 }

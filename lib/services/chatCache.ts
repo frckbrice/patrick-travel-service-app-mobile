@@ -377,6 +377,39 @@ class ChatCacheService {
       logger.error('Error clearing corrupted cache', error);
     }
   }
+
+  /**
+   * Clean up cache when chat is closed (FIFO - keep only last N messages)
+   * This reduces memory usage by keeping only the most recent messages in cache
+   */
+  async cleanupCacheOnChatClose(caseId: string, keepLast: number = 20): Promise<void> {
+    try {
+      const cachedData = await this.getCachedMessages(caseId);
+      
+      if (cachedData && cachedData.messages && Array.isArray(cachedData.messages)) {
+        // Keep only the last N messages (most recent)
+        const messagesToKeep = cachedData.messages.slice(-keepLast);
+        
+        if (messagesToKeep.length < cachedData.messages.length) {
+          // Update cache with reduced messages
+          await this.setCachedMessages(
+            caseId,
+            messagesToKeep,
+            cachedData.hasMore,
+            cachedData.totalCount
+          );
+          logger.info('Cache cleaned up on chat close', {
+            caseId,
+            originalCount: cachedData.messages.length,
+            keptCount: messagesToKeep.length,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Error cleaning up cache on chat close', error);
+      // Don't throw - cleanup is non-critical
+    }
+  }
 }
 
 export const chatCacheService = ChatCacheService.getInstance();

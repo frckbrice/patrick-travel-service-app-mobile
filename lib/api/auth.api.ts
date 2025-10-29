@@ -1,6 +1,7 @@
 import { apiClient } from './axios';
 import { User, ApiResponse, Role } from '../types';
 import { logger } from '../utils/logger';
+import { auth } from '../firebase/config';
 
 export interface LoginRequest {
   // Empty body – auth via Firebase ID token in Authorization header
@@ -38,26 +39,54 @@ export interface LoginResponse {
 export const authApi = {
   async login(_data: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     try {
-      logger.info('Logging in user using Firebase ID token');
-      
-      // Log the API endpoint being called
       const baseURL = apiClient.defaults.baseURL;
-      logger.info('API Base URL:', { baseURL, endpoint: '/auth/login' });
+      const fullUrl = `${baseURL}/auth/login`;
+      const hasAuthUser = !!auth.currentUser;
+      
+      logger.info('Calling login API', {
+        baseURL,
+        endpoint: '/auth/login',
+        fullUrl,
+        hasAuthUser,
+        userId: auth.currentUser?.uid,
+        email: auth.currentUser?.email,
+      });
+      
+      // Verify we have a Firebase user before making the request
+      if (!auth.currentUser) {
+        logger.error('No Firebase user available for login API call');
+        throw new Error('No authenticated user available');
+      }
       
       const response = await apiClient.post<ApiResponse<LoginResponse>>(
         '/auth/login',
         {}
       );
       
-      logger.info('Login API response successful');
+      logger.info('Login API response successful', {
+        success: response.data.success,
+        hasUser: !!response.data.data?.user,
+      });
+      
       return response.data;
     } catch (error: any) {
+      const baseURL = apiClient.defaults.baseURL;
+      const fullUrl = `${baseURL}/auth/login`;
+      const hasAuthUser = !!auth.currentUser;
+      
       logger.error('Login API error details:', {
         message: error.message,
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
-        baseURL: apiClient.defaults.baseURL,
+        baseURL,
+        fullUrl,
+        hasAuthUser,
+        userId: auth.currentUser?.uid,
+        email: auth.currentUser?.email,
+        requestHadAuthHeader: !!error.config?.headers?.Authorization,
+        // Don't log the actual token, just if it exists
+        authHeaderLength: error.config?.headers?.Authorization?.length || 0,
       });
       
       // Error already sanitized by interceptor - safe to use

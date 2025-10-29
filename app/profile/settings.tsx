@@ -17,6 +17,7 @@ import { useAuthStore } from '../../stores/auth/authStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, STORAGE_KEYS } from '../../lib/constants';
 import { toast } from '../../lib/services/toast';
+import { ModernHeader } from '../../components/ui/ModernHeader';
 
 type ThemeMode = 'light' | 'dark' | 'auto';
 type Language = 'en' | 'fr';
@@ -254,7 +255,9 @@ export default function SettingsScreen() {
   );
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
+      <ModernHeader title={t('profile.settings') || 'Preferences'} variant="default" showBackButton />
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
       {/* Language Section */}
       <Animated.View
         entering={FadeInDown.delay(0).springify()}
@@ -420,8 +423,9 @@ export default function SettingsScreen() {
         </View>
       </Animated.View>
 
-      <View style={{ height: SPACING.xxl }} />
-    </ScrollView>
+      <View style={{ height: SPACING.xl }} />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -431,20 +435,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   section: {
-    marginTop: SPACING.lg,
-    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.md,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: SPACING.md,
+    letterSpacing: 0.6,
+    marginBottom: SPACING.sm,
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
@@ -453,63 +457,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: SPACING.md,
+    marginRight: SPACING.sm,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: COLORS.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: SPACING.md,
+    marginRight: SPACING.sm,
   },
   settingText: {
     flex: 1,
   },
   settingTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: COLORS.text,
     marginBottom: 2,
   },
   settingDescription: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textSecondary,
   },
   divider: {
-    marginLeft: 72,
+    marginLeft: 56,
     backgroundColor: COLORS.divider,
   },
   optionsGrid: {
     flexDirection: 'row',
-    gap: SPACING.sm,
+    gap: SPACING.xs,
   },
   themeOption: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: 10,
+    borderWidth: 1,
     borderColor: COLORS.border,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
   },
   themeOptionActive: {
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primary + '08',
   },
   themeOptionText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     color: COLORS.textSecondary,
   },
@@ -520,24 +524,24 @@ const styles = StyleSheet.create({
   languageOption: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: 10,
+    borderWidth: 1,
     borderColor: COLORS.border,
-    paddingVertical: SPACING.lg,
-    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   languageOptionActive: {
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primary + '08',
   },
   flagEmoji: {
-    fontSize: 32,
+    fontSize: 28,
   },
   languageOptionText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
     color: COLORS.textSecondary,
   },

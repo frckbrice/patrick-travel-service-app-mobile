@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Text } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +7,8 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { casesApi } from '../../lib/api/cases.api';
 import { Case, StatusHistory } from '../../lib/types';
-import { Card, StatusBadge, Button, LoadingSpinner } from '../../components/ui';
+import { TouchDetector } from '../../components/ui/TouchDetector';
+import { ModernHeader } from '../../components/ui/ModernHeader';
 import {
   COLORS,
   SPACING,
@@ -73,9 +74,32 @@ export default function CaseDetailsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Animated.View entering={FadeInUp.duration(400)}>
-        <Card style={styles.card}>
+    <TouchDetector>
+      <View style={styles.container}>
+        {/* Modern Gradient Header */}
+        <ModernHeader
+          variant="gradient"
+          gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
+          title="Case Details"
+          subtitle={caseData?.referenceNumber || 'Loading...'}
+          showBackButton
+          rightActions={
+            <TouchableOpacity
+              style={styles.headerAction}
+              onPress={() => router.push(`/message/${caseData?.id}`)}
+            >
+              <MaterialCommunityIcons
+                name="message-text"
+                size={24}
+                color="#FFF"
+              />
+            </TouchableOpacity>
+          }
+        />
+        
+        <ScrollView style={styles.scrollContainer}>
+          <Animated.View entering={FadeInUp.duration(400)}>
+            <Card style={styles.card}>
           <View style={styles.cardContent}>
             <View style={styles.header}>
               <View style={styles.referenceContainer}>
@@ -217,7 +241,7 @@ export default function CaseDetailsScreen() {
           title={t('documents.uploadDocument')}
           icon="upload"
           variant="secondary"
-          onPress={() => router.push('/document/upload')}
+          onPress={() => router.push(`/document/upload?caseId=${id}`)}
           fullWidth
           style={styles.actionButton}
         />
@@ -257,8 +281,10 @@ export default function CaseDetailsScreen() {
             </View>
           </Card>
         </Animated.View>
-      )}
-    </ScrollView>
+        )}
+        </ScrollView>
+      </View>
+    </TouchDetector>
   );
 }
 
@@ -266,6 +292,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  headerAction: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: SPACING.sm,
   },
   error: {
     flex: 1,

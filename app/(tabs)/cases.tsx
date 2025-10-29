@@ -22,6 +22,8 @@ import {
   StatusBadge,
   EmptyState,
 } from '../../components/ui';
+import { ModernHeader } from '../../components/ui/ModernHeader';
+import { TouchDetector } from '../../components/ui/TouchDetector';
 import {
   SPACING,
   CASE_STATUS_LABELS,
@@ -47,9 +49,19 @@ export default function CasesScreen() {
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
   const [serviceTypeMenuVisible, setServiceTypeMenuVisible] = useState(false);
 
+  // Memoize fetchCases to prevent unnecessary re-renders
+  const handleFetchCases = useCallback(
+    (status?: CaseStatus, refresh = true) => {
+      fetchCases(status, refresh);
+    },
+    [fetchCases]
+  );
+
+  // Only fetch when selectedStatus actually changes
   useEffect(() => {
-    fetchCases(selectedStatus, true);
-  }, [selectedStatus]);
+    handleFetchCases(selectedStatus, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStatus]); // Only depend on selectedStatus to prevent unnecessary fetches
 
   // Memoized filtered and sorted cases for performance
   const filteredAndSortedCases = useMemo(() => {
@@ -189,251 +201,229 @@ export default function CasesScreen() {
 
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Modern Search Header */}
-      <View style={[styles.header, { backgroundColor: colors.surface }]}>
-        <View style={styles.headerContent}>
-          <View style={[styles.searchContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <MaterialCommunityIcons
-              name="magnify"
-              size={22}
-              color={colors.textSecondary}
-              style={styles.searchIcon}
-            />
-            <TextInput
-              placeholder={t('cases.searchByReference')}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholderTextColor={colors.textSecondary}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <MaterialCommunityIcons
-                  name="close-circle"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.push('/case/new')}
+    <TouchDetector>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Modern Gradient Header */}
+      <ModernHeader
+        variant="gradient"
+        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        title="Cases"
+        subtitle="Manage your legal cases"
+        showBackButton
+        showSearch
+        searchPlaceholder={t('cases.searchByReference')}
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        showAddButton
+        addButtonIcon="plus"
+        onAddPress={() => router.push('/case/new')}
+        showFilterButton
+        onFilterPress={() => setStatusMenuVisible(true)}
+      >
+        {/* Filter Bar with Menus */}
+        <View style={[styles.filtersBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersContent}
           >
-            <MaterialCommunityIcons
-              name="plus"
-              size={26}
-              color="#FFF"
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Filter Bar with Menus */}
-      <View style={[styles.filtersBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersContent}
-        >
-          {/* Status Filter */}
-          <Menu
-            visible={statusMenuVisible}
-            onDismiss={() => setStatusMenuVisible(false)}
-            anchor={
-              <TouchableOpacity
-                style={[
-                  styles.filterButton, 
-                  { backgroundColor: colors.background, borderColor: colors.border },
-                  selectedStatus && { backgroundColor: colors.primary + '15', borderColor: colors.primary }
-                ]}
-                onPress={() => setStatusMenuVisible(!statusMenuVisible)}
-              >
-                <MaterialCommunityIcons
-                  name="filter-variant"
-                  size={16}
-                  color={selectedStatus ? colors.primary : colors.textSecondary}
-                  style={{ marginRight: SPACING.xs }}
-                />
-                <PaperText style={[styles.filterButtonText, selectedStatus && styles.filterButtonTextActive]}>
-                  {selectedStatus ? CASE_STATUS_LABELS[selectedStatus] : 'Status'}
-                </PaperText>
-                <MaterialCommunityIcons
-                  name="chevron-down"
-                  size={16}
-                  color={selectedStatus ? colors.primary : colors.textSecondary}
-                  style={{ marginLeft: SPACING.xs }}
-                />
-              </TouchableOpacity>
-            }
-          >
-            <Menu.Item
-              onPress={() => {
-                setSelectedStatus(undefined);
-                setStatusMenuVisible(false);
-              }}
-              title="All Statuses"
-              leadingIcon={!selectedStatus ? "check" : undefined}
-            />
-            <Divider />
-            {Object.values(CaseStatus).map((status) => (
+            {/* Status Filter */}
+            <Menu
+              visible={statusMenuVisible}
+              onDismiss={() => setStatusMenuVisible(false)}
+              anchor={
+                <TouchableOpacity
+                  style={[
+                    styles.filterButton, 
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                    selectedStatus && { backgroundColor: colors.primary + '15', borderColor: colors.primary }
+                  ]}
+                  onPress={() => setStatusMenuVisible(!statusMenuVisible)}
+                >
+                  <MaterialCommunityIcons
+                    name="filter-variant"
+                    size={16}
+                    color={selectedStatus ? colors.primary : colors.textSecondary}
+                    style={{ marginRight: SPACING.xs }}
+                  />
+                  <PaperText style={[styles.filterButtonText, selectedStatus && styles.filterButtonTextActive]}>
+                    {selectedStatus ? CASE_STATUS_LABELS[selectedStatus] : 'Status'}
+                  </PaperText>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={16}
+                    color={selectedStatus ? colors.primary : colors.textSecondary}
+                    style={{ marginLeft: SPACING.xs }}
+                  />
+                </TouchableOpacity>
+              }
+            >
               <Menu.Item
-                key={status}
                 onPress={() => {
-                  setSelectedStatus(status);
+                  setSelectedStatus(undefined);
                   setStatusMenuVisible(false);
                 }}
-                title={CASE_STATUS_LABELS[status]}
-                leadingIcon={selectedStatus === status ? "check" : undefined}
+                title="All Statuses"
+                leadingIcon={!selectedStatus ? "check" : undefined}
               />
-            ))}
-          </Menu>
+              <Divider />
+              {Object.values(CaseStatus).map((status) => (
+                <Menu.Item
+                  key={status}
+                  onPress={() => {
+                    setSelectedStatus(status);
+                    setStatusMenuVisible(false);
+                  }}
+                  title={CASE_STATUS_LABELS[status]}
+                  leadingIcon={selectedStatus === status ? "check" : undefined}
+                />
+              ))}
+            </Menu>
 
-          {/* Service Type Filter */}
-          <Menu
-            visible={serviceTypeMenuVisible}
-            onDismiss={() => setServiceTypeMenuVisible(false)}
-            anchor={
-              <TouchableOpacity
-                style={[
-                  styles.filterButton, 
-                  { backgroundColor: colors.background, borderColor: colors.border },
-                  selectedServiceType && { backgroundColor: colors.primary + '15', borderColor: colors.primary }
-                ]}
-                onPress={() => setServiceTypeMenuVisible(!serviceTypeMenuVisible)}
-              >
-                <MaterialCommunityIcons
-                  name="briefcase"
-                  size={16}
-                  color={selectedServiceType ? colors.primary : colors.textSecondary}
-                  style={{ marginRight: SPACING.xs }}
-                />
-                <PaperText style={[styles.filterButtonText, selectedServiceType && styles.filterButtonTextActive]}>
-                  {selectedServiceType ? SERVICE_TYPE_LABELS[selectedServiceType] : 'Service'}
-                </PaperText>
-                <MaterialCommunityIcons
-                  name="chevron-down"
-                  size={16}
-                  color={selectedServiceType ? colors.primary : colors.textSecondary}
-                  style={{ marginLeft: SPACING.xs }}
-                />
-              </TouchableOpacity>
-            }
-          >
-            <Menu.Item
-              onPress={() => {
-                setSelectedServiceType(undefined);
-                setServiceTypeMenuVisible(false);
-              }}
-              title="All Services"
-              leadingIcon={!selectedServiceType ? "check" : undefined}
-            />
-            <Divider />
-            {Object.values(ServiceType).map((type) => (
+            {/* Service Type Filter */}
+            <Menu
+              visible={serviceTypeMenuVisible}
+              onDismiss={() => setServiceTypeMenuVisible(false)}
+              anchor={
+                <TouchableOpacity
+                  style={[
+                    styles.filterButton, 
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                    selectedServiceType && { backgroundColor: colors.primary + '15', borderColor: colors.primary }
+                  ]}
+                  onPress={() => setServiceTypeMenuVisible(!serviceTypeMenuVisible)}
+                >
+                  <MaterialCommunityIcons
+                    name="briefcase"
+                    size={16}
+                    color={selectedServiceType ? colors.primary : colors.textSecondary}
+                    style={{ marginRight: SPACING.xs }}
+                  />
+                  <PaperText style={[styles.filterButtonText, selectedServiceType && styles.filterButtonTextActive]}>
+                    {selectedServiceType ? SERVICE_TYPE_LABELS[selectedServiceType] : 'Service'}
+                  </PaperText>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={16}
+                    color={selectedServiceType ? colors.primary : colors.textSecondary}
+                    style={{ marginLeft: SPACING.xs }}
+                  />
+                </TouchableOpacity>
+              }
+            >
               <Menu.Item
-                key={type}
                 onPress={() => {
-                  setSelectedServiceType(type);
+                  setSelectedServiceType(undefined);
                   setServiceTypeMenuVisible(false);
                 }}
-                title={SERVICE_TYPE_LABELS[type]}
-                leadingIcon={selectedServiceType === type ? "check" : undefined}
+                title="All Services"
+                leadingIcon={!selectedServiceType ? "check" : undefined}
               />
-            ))}
-          </Menu>
+              <Divider />
+              {Object.values(ServiceType).map((type) => (
+                <Menu.Item
+                  key={type}
+                  onPress={() => {
+                    setSelectedServiceType(type);
+                    setServiceTypeMenuVisible(false);
+                  }}
+                  title={SERVICE_TYPE_LABELS[type]}
+                  leadingIcon={selectedServiceType === type ? "check" : undefined}
+                />
+              ))}
+            </Menu>
 
-          {/* Sort Menu */}
-          <Menu
-            visible={sortMenuVisible}
-            onDismiss={() => setSortMenuVisible(false)}
-            anchor={
+            {/* Sort Menu */}
+            <Menu
+              visible={sortMenuVisible}
+              onDismiss={() => setSortMenuVisible(false)}
+              anchor={
+                <TouchableOpacity
+                  style={[styles.filterButton, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setSortMenuVisible(!sortMenuVisible)}
+                >
+                  <MaterialCommunityIcons
+                    name="sort"
+                    size={16}
+                    color={colors.textSecondary}
+                    style={{ marginRight: SPACING.xs }}
+                  />
+                  <PaperText style={styles.filterButtonText}>
+                    {sortBy === 'date-desc' && 'Newest'}
+                    {sortBy === 'date-asc' && 'Oldest'}
+                    {sortBy === 'status' && 'Status'}
+                    {sortBy === 'priority' && 'Priority'}
+                  </PaperText>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={16}
+                    color={colors.textSecondary}
+                    style={{ marginLeft: SPACING.xs }}
+                  />
+                </TouchableOpacity>
+              }
+            >
+              <Menu.Item
+                onPress={() => {
+                  setSortBy('date-desc');
+                  setSortMenuVisible(false);
+                }}
+                title="Newest First"
+                leadingIcon={sortBy === 'date-desc' ? "check" : undefined}
+              />
+              <Menu.Item
+                onPress={() => {
+                  setSortBy('date-asc');
+                  setSortMenuVisible(false);
+                }}
+                title="Oldest First"
+                leadingIcon={sortBy === 'date-asc' ? "check" : undefined}
+              />
+              <Menu.Item
+                onPress={() => {
+                  setSortBy('priority');
+                  setSortMenuVisible(false);
+                }}
+                title="By Priority"
+                leadingIcon={sortBy === 'priority' ? "check" : undefined}
+              />
+              <Menu.Item
+                onPress={() => {
+                  setSortBy('status');
+                  setSortMenuVisible(false);
+                }}
+                title="By Status"
+                leadingIcon={sortBy === 'status' ? "check" : undefined}
+              />
+            </Menu>
+
+            {/* Clear Filters */}
+            {(selectedStatus || selectedServiceType) && (
               <TouchableOpacity
-                style={[styles.filterButton, { backgroundColor: colors.background, borderColor: colors.border }]}
-                onPress={() => setSortMenuVisible(!sortMenuVisible)}
+                style={styles.clearButton}
+                onPress={() => {
+                  setSelectedStatus(undefined);
+                  setSelectedServiceType(undefined);
+                }}
               >
                 <MaterialCommunityIcons
-                  name="sort"
+                  name="close"
                   size={16}
-                  color={colors.textSecondary}
-                  style={{ marginRight: SPACING.xs }}
+                  color={colors.error}
                 />
-                <PaperText style={styles.filterButtonText}>
-                  {sortBy === 'date-desc' && 'Newest'}
-                  {sortBy === 'date-asc' && 'Oldest'}
-                  {sortBy === 'status' && 'Status'}
-                  {sortBy === 'priority' && 'Priority'}
-                </PaperText>
-                <MaterialCommunityIcons
-                  name="chevron-down"
-                  size={16}
-                  color={colors.textSecondary}
-                  style={{ marginLeft: SPACING.xs }}
-                />
+                <PaperText style={styles.clearButtonText}>Clear</PaperText>
               </TouchableOpacity>
-            }
-          >
-            <Menu.Item
-              onPress={() => {
-                setSortBy('date-desc');
-                setSortMenuVisible(false);
-              }}
-              title="Newest First"
-              leadingIcon={sortBy === 'date-desc' ? "check" : undefined}
-            />
-            <Menu.Item
-              onPress={() => {
-                setSortBy('date-asc');
-                setSortMenuVisible(false);
-              }}
-              title="Oldest First"
-              leadingIcon={sortBy === 'date-asc' ? "check" : undefined}
-            />
-            <Menu.Item
-              onPress={() => {
-                setSortBy('priority');
-                setSortMenuVisible(false);
-              }}
-              title="By Priority"
-              leadingIcon={sortBy === 'priority' ? "check" : undefined}
-            />
-            <Menu.Item
-              onPress={() => {
-                setSortBy('status');
-                setSortMenuVisible(false);
-              }}
-              title="By Status"
-              leadingIcon={sortBy === 'status' ? "check" : undefined}
-            />
-          </Menu>
+            )}
+          </ScrollView>
+        </View>
 
-          {/* Clear Filters */}
-          {(selectedStatus || selectedServiceType) && (
-            <TouchableOpacity
-              style={styles.clearButton}
-              onPress={() => {
-                setSelectedStatus(undefined);
-                setSelectedServiceType(undefined);
-              }}
-            >
-              <MaterialCommunityIcons
-                name="close"
-                size={16}
-                color={colors.error}
-              />
-              <PaperText style={styles.clearButtonText}>Clear</PaperText>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-      </View>
-
-      {/* Results Count */}
-      <View style={[styles.resultsBar, { backgroundColor: colors.surface }]}>
-        <PaperText style={[styles.resultsText, { color: colors.textSecondary }]}>
-          {filteredAndSortedCases.length} {filteredAndSortedCases.length === 1 ? 'case' : 'cases'} found
-        </PaperText>
-      </View>
+        {/* Results Count */}
+        <View style={[styles.resultsBar, { backgroundColor: colors.surface }]}>
+          <PaperText style={[styles.resultsText, { color: colors.textSecondary }]}>
+            {filteredAndSortedCases.length} {filteredAndSortedCases.length === 1 ? 'case' : 'cases'} found
+          </PaperText>
+        </View>
+      </ModernHeader>
 
       {/* Cases List */}
       <FlatList
@@ -447,7 +437,7 @@ export default function CasesScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
-            onRefresh={() => fetchCases(selectedStatus, true)}
+            onRefresh={() => handleFetchCases(selectedStatus, true)}
             tintColor={colors.primary}
           />
         }
@@ -473,6 +463,7 @@ export default function CasesScreen() {
         })}
       />
     </View>
+    </TouchDetector>
   );
 }
 

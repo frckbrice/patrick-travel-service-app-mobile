@@ -44,13 +44,51 @@ export function sanitizeErrorMessage(error: any): string {
   // Handle API response errors with user-friendly messages
   if (error?.response?.data?.error) {
     const backendError = error.response.data.error;
+    
+    // Handle account status errors (matches web API)
+    if (backendError.toLowerCase().includes('inactive')) {
+      return 'Your account has been deactivated. Please contact support.';
+    }
+    
+    if (backendError.toLowerCase().includes('forbidden') || error?.response?.status === 403) {
+      return 'Access denied. You do not have permission to perform this action.';
+    }
+    
+    if (backendError.toLowerCase().includes('unauthorized') || error?.response?.status === 401) {
+      return 'Your session has expired. Please login again.';
+    }
+    
     // If backend already provides a user-friendly message, use it
     if (
       !backendError.includes('Firebase') &&
       !backendError.includes('Firestore') &&
-      !backendError.includes('auth/')
+      !backendError.includes('auth/') &&
+      !backendError.includes('Database') &&
+      !backendError.includes('Prisma')
     ) {
       return backendError;
+    }
+  }
+
+  // Handle HTTP status codes (matches web API error handling)
+  if (error?.response?.status) {
+    const status = error.response.status;
+    switch (status) {
+      case 403:
+        return 'Access forbidden. Your account may be inactive or you lack permission.';
+      case 401:
+        return 'Your session has expired. Please login again.';
+      case 404:
+        return 'The requested resource was not found.';
+      case 409:
+        return 'A conflict occurred. The resource may already exist.';
+      case 429:
+        return 'Too many requests. Please wait a moment and try again.';
+      case 500:
+      case 503:
+        return 'Server error. Please try again later.';
+      default:
+        break;
     }
   }
 

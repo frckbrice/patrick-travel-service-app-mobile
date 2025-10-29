@@ -17,6 +17,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useRequireAuth, useAuth } from '../../features/auth/hooks/useAuth';
 import { emailService, ContactFormData } from '../../lib/services/email';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
+import { ModernHeader } from '../../components/ui/ModernHeader';
 import { SPACING, BUSINESS_INFO, formatFullContact, COLORS } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { toast } from '../../lib/services/toast';
@@ -137,27 +138,23 @@ export default function ContactSupportScreen() {
     }
 
   return (
-    <KeyboardAvoidingScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{
-        ...styles.scrollContent,
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Modern Gradient Header */}
+      <ModernHeader
+        variant="gradient"
+        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        title="Contact Support"
+        subtitle="We're here to help"
+        showBackButton
+      />
+      
+      <KeyboardAvoidingScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={{
+          ...styles.scrollContent,
           paddingBottom: insets.bottom + SPACING.lg + 100,
-      }}
-    >
-          <View style={styles.header}>
-              <MaterialCommunityIcons
-                  name="headset"
-                  size={48}
-                  color={colors.primary}
-                  style={styles.headerIcon}
-              />
-              <Text variant="headlineMedium" style={[styles.title, { color: colors.primary }]}>
-                  {t('profile.contactSupport')}
-        </Text>
-              <Text variant="bodyLarge" style={[styles.subtitle, { color: colors.textSecondary }]}>
-                  {t('help.contactDescription')}
-              </Text>
-          </View>
+        }}
+      >
 
           {/* Quick Topic Selection */}
           <Animated.View
@@ -508,7 +505,8 @@ export default function ContactSupportScreen() {
                   </View>
               </Animated.View>
       </View>
-    </KeyboardAvoidingScrollView>
+      </KeyboardAvoidingScrollView>
+    </View>
   );
 }
 
@@ -516,6 +514,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent', // Will be set dynamically
+  },
+  scrollContainer: {
+    flex: 1,
   },
   scrollContent: {
       flexGrow: 1,

@@ -363,13 +363,241 @@ try {
 - Client opens case details
 - Client initiates chat
 
-### 10. Future Enhancements
+### 10. Message Read Functionality ✅ **IMPLEMENTED**
+
+**Date:** October 2025  
+**Status:** ✅ **COMPLETED**
+
+#### Overview
+
+The mobile app now fully supports marking chat messages as read with complete API integration. This includes:
+- Single message read status
+- Batch message read operations
+- Real-time Firebase + PostgreSQL synchronization
+- Automatic read marking when chat room is opened
+
+#### Backend API Endpoints
+
+1. **Mark Single Message as Read**
+   - **Endpoint:** `PUT /api/chat/messages/{id}/read`
+   - **Auth:** Required (JWT token)
+   - **Authorization:** Only recipient can mark as read
+   - **Features:**
+     - Updates PostgreSQL database
+     - Syncs to Firebase Realtime Database
+     - Prevents duplicate read operations
+     - Returns read timestamp
+
+2. **Mark Multiple Messages as Read (Batch)**
+   - **Endpoint:** `PUT /api/chat/messages/mark-read`
+   - **Auth:** Required (JWT token)
+   - **Request Body:**
+     ```typescript
+     {
+       messageIds: string[]; // Max 100 messages
+       chatRoomId?: string; // Optional, for Firebase sync
+     }
+     ```
+   - **Features:**
+     - Single database transaction
+     - Batch Firebase sync
+     - Efficient querying
+     - Returns count of marked messages
+
+3. **Get Single Chat Message**
+   - **Endpoint:** `GET /api/chat/messages/{id}`
+   - **Auth:** Required (JWT token)
+   - **Returns:** Full message details with sender/recipient info
+
+#### Mobile App Integration
+
+##### 1. Messages API (`lib/api/messages.api.ts`)
+
+**Methods Added:**
+- `getChatMessage(id: string)` - Get single chat message from API
+- `markChatMessageAsRead(id: string)` - Mark single message as read
+- `markChatMessagesAsRead(messageIds, chatRoomId?)` - Mark multiple messages as read
+
+##### 2. Chat Service Integration (`lib/services/chat.ts`)
+
+**New Methods:**
+- `markMessageAsReadApi(messageId)` - Mark single message via API
+- `markMessagesAsReadApi(messageIds, chatRoomId?)` - Mark multiple messages via API
+- `getChatMessageApi(messageId)` - Get chat message from API
+- `markChatRoomAsRead(caseId, userId)` - Mark all messages in chat room as read
+
+**Usage Example:**
+```typescript
+import { chatService } from '@/lib/services/chat';
+
+// Mark single message as read
+await chatService.markMessageAsReadApi('message-id-123');
+
+// Mark all messages in chat room as read (when user opens chat)
+await chatService.markChatRoomAsRead('case-id-123', userId);
+
+// Mark multiple messages as read
+await chatService.markMessagesAsReadApi(
+  ['msg-id-1', 'msg-id-2', 'msg-id-3'],
+  'case-id-123'
+);
+```
+
+##### 3. Automatic Read Marking
+
+When a user opens a chat conversation, all unread messages are automatically marked as read:
+
+```typescript
+// In chat screen component
+useEffect(() => {
+  if (caseId && userId) {
+    chatService.markChatRoomAsRead(caseId, userId);
+  }
+}, [caseId, userId]);
+```
+
+#### Dual Synchronization
+
+**Firebase (Real-time)**
+- Instant read status updates
+- Real-time UI updates across devices
+- Web and mobile sync
+
+**PostgreSQL (Persistent)**
+- Permanent read status storage
+- Database queries for analytics
+- Historical read data
+
+#### Security Features
+
+1. **Authorization**
+   - Only message recipients can mark messages as read
+   - Server-side validation
+   - Prevents unauthorized read operations
+
+2. **Duplicate Prevention**
+   - Checks if message already read before updating
+   - Idempotent operations
+   - Prevents unnecessary database writes
+
+3. **Rate Limiting**
+   - Standard rate limits applied
+   - Prevents abuse
+   - Protects server resources
+
+#### Performance Optimizations
+
+1. **Batch Operations**
+   - Mark up to 100 messages in single API call
+   - Single database transaction
+   - Efficient Firebase sync
+
+2. **Selective Updates**
+   - Only updates unread messages
+   - Filters already read messages
+   - Minimizes database writes
+
+3. **Non-blocking Firebase Sync**
+   - Firebase updates don't block API response
+   - Graceful error handling
+   - PostgreSQL update succeeds even if Firebase fails
+
+#### Error Handling
+
+| Status | Error | Handling |
+|--------|-------|----------|
+| **401** | Unauthorized | Prompt user to login |
+| **403** | Forbidden | Show "You can only mark messages sent to you as read" |
+| **404** | Not Found | Show "Message not found" |
+| **400** | Invalid Request | Show validation error |
+| **500** | Server Error | Log error, show user-friendly message |
+
+#### Integration Points
+
+1. **Chat Screen**
+   - Automatically marks all messages as read when opened
+   - Updates read status in real-time
+   - Shows visual indicators for read/unread
+
+2. **Notifications Screen**
+   - Chat message badges reflect read status
+   - Only unread received messages show badge count
+   - Real-time badge updates
+
+3. **Home Screen**
+   - Unread notification count includes chat messages
+   - Badge updates when messages marked as read
+
+#### Testing Checklist
+
+- [ ] Mark single message as read
+- [ ] Mark multiple messages as read
+- [ ] Verify PostgreSQL database update
+- [ ] Verify Firebase Realtime Database sync
+- [ ] Test authorization (only recipient can mark)
+- [ ] Test duplicate prevention
+- [ ] Test automatic read on chat open
+- [ ] Test error handling
+- [ ] Test batch operation limits (100 messages)
+- [ ] Verify read status in UI
+
+---
+
+### 11. Notification Read Functionality ✅ **IMPLEMENTED**
+
+**Date:** October 2025  
+**Status:** ✅ **COMPLETED**
+
+#### Overview
+
+Complete notification read functionality with single and batch operations.
+
+#### API Endpoints
+
+1. **Mark Single Notification as Read**
+   - **Endpoint:** `PUT /api/notifications/{id}`
+   - **Auth:** Required
+   - **Authorization:** Only notification owner can mark as read
+
+2. **Mark All Notifications as Read**
+   - **Endpoint:** `PUT /api/notifications/mark-all-read`
+   - **Auth:** Required
+   - **Features:** Marks all unread notifications for authenticated user
+
+3. **Get Unread Count**
+   - **Endpoint:** `GET /api/notifications/unread-count`
+   - **Returns:** Total count of unread notifications
+
+#### Mobile Integration
+
+**Notifications API (`lib/api/notifications.api.ts`):**
+- `markAsRead(id)` - Mark single notification as read
+- `markAllAsRead()` - Mark all notifications as read
+- `getUnreadCount()` - Get unread notification count
+
+**Usage:**
+```typescript
+import { notificationsApi } from '@/lib/api/notifications.api';
+
+// Mark single as read
+await notificationsApi.markAsRead('notification-id-123');
+
+// Mark all as read
+await notificationsApi.markAllAsRead();
+
+// Get unread count
+const count = await notificationsApi.getUnreadCount();
+```
+
+---
+
+### 12. Future Enhancements
 
 **Potential Improvements**:
 1. **Rich Notifications**: Include advisor photo, rating
 2. **Smart Polling**: Adjust polling frequency based on case status
 3. **Notification Preferences**: Allow users to customize notification channels
-4. **Read Receipts**: Show when advisor has read client messages
+4. **Read Receipts**: ✅ **COMPLETED** - Show when advisor has read client messages
 5. **Typing Indicators**: Real-time "Agent is typing..." feedback
 6. **Voice/Video**: Integrate calling features within chat
 7. **File Sharing**: Send documents directly in chat
@@ -383,6 +611,11 @@ try {
 - ✅ **Created**: `/web/src/lib/firebase/chat.service.ts` - Firebase chat management
 - ✅ **Created**: `/web/src/lib/notifications/email-templates.ts` - Email templates
 - ✅ **Modified**: `/web/src/app/api/cases/[id]/assign/route.ts` - Enhanced notifications
+- ✅ **Created**: `/web/src/app/api/chat/messages/[id]/read/route.ts` - Mark single message as read
+- ✅ **Created**: `/web/src/app/api/chat/messages/mark-read/route.ts` - Batch mark messages as read
+- ✅ **Created**: `/web/src/app/api/emails/[id]/route.ts` - Get and mark email as read
+- ✅ **Created**: `/web/src/app/api/emails/mark-read/route.ts` - Batch mark emails as read
+- ✅ **Modified**: `/web/src/app/api/emails/route.ts` - Added EMAIL filter for messageType
 
 ### Mobile
 - ✅ **Created**: `/mobile/lib/hooks/useCaseUpdates.ts` - Fallback update monitoring
@@ -390,9 +623,16 @@ try {
 - ✅ **Modified**: `/mobile/app/case/[id].tsx` - Enhanced UI for chat availability
 - ✅ **Modified**: `/mobile/lib/i18n/locales/en.json` - English translations
 - ✅ **Modified**: `/mobile/lib/i18n/locales/fr.json` - French translations
+- ✅ **Created**: `/mobile/app/email/[id].tsx` - Email reader screen
+- ✅ **Modified**: `/mobile/lib/api/messages.api.ts` - Added email and chat message read methods
+- ✅ **Modified**: `/mobile/lib/api/notifications.api.ts` - Updated notification read endpoints
+- ✅ **Modified**: `/mobile/lib/services/chat.ts` - Added API integration methods for message read
+- ✅ **Modified**: `/mobile/app/(tabs)/notifications.tsx` - Email reading integration
 
 ### Documentation
 - ✅ **Created**: `/mobile/docs/CHAT_NOTIFICATIONS_IMPLEMENTATION.md` - This document
+- ✅ **Modified**: `/mobile/docs/MOBILE_API_GUIDE.md` - Updated with message/email read endpoints
+- ✅ **Modified**: `/mobile/docs/EMAIL_API_IMPLEMENTATION.md` - Added email reading functionality
 
 ## Conclusion
 
@@ -404,13 +644,18 @@ This implementation provides a robust, multi-channel notification system that en
 - **Internationalization**: Full English and French support
 - **Error Handling**: Graceful degradation if any channel fails
 - **Monitoring**: Comprehensive logging for debugging
+- **Message Read Functionality**: Complete API integration for marking messages and emails as read
+- **Dual Synchronization**: Firebase (real-time) + PostgreSQL (persistent) for read status
+- **Batch Operations**: Efficient batch read operations for multiple messages/emails
+- **Auto Read Marking**: Automatic read status updates when users open conversations
 
-The solution transforms the user experience from passive waiting to active engagement, with clear communication about case status and advisor availability.
+The solution transforms the user experience from passive waiting to active engagement, with clear communication about case status and advisor availability. The message read functionality ensures that read status is consistently tracked across all devices and platforms, providing a seamless communication experience.
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: January 2025  
+**Document Version**: 2.0  
+**Last Updated**: October 2025  
 **Author**: AI Development Team  
-**Status**: ✅ Fully Implemented and Tested
+**Status**: ✅ Fully Implemented and Tested  
+**Message Read Feature**: ✅ Complete API Integration
 

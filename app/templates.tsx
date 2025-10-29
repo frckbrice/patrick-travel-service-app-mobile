@@ -92,6 +92,10 @@ export default function TemplatesScreen() {
     }
   };
 
+  const handleDownloadAndFill = (template: DocumentTemplate) => {
+    router.push(`/template/${template.id}`);
+  };
+
   const getFileIcon = useCallback((mimeType: string) => {
     if (mimeType.includes('pdf')) return 'file-pdf-box';
     if (mimeType.includes('word')) return 'file-word';
@@ -181,18 +185,28 @@ export default function TemplatesScreen() {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={[styles.downloadButton, { backgroundColor: colors.primary }]}
-              onPress={() => handleDownload(item)}
-            >
-              <MaterialCommunityIcons name="download" size={20} color="white" />
-              <Text style={styles.downloadButtonText}>{t('templates.download')}</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={[styles.downloadButton, { backgroundColor: colors.secondary }]}
+                onPress={() => handleDownload(item)}
+              >
+                <MaterialCommunityIcons name="share" size={20} color="white" />
+                <Text style={styles.downloadButtonText}>{t('templates.share')}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.downloadButton, { backgroundColor: colors.primary }]}
+                onPress={() => handleDownloadAndFill(item)}
+              >
+                <MaterialCommunityIcons name="file-edit" size={20} color="white" />
+                <Text style={styles.downloadButtonText}>{t('templates.downloadAndFill')}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </Card>
       </Animated.View>
     ),
-    [colors, getFileIcon, getCategoryIcon, t, handleDownload]
+    [colors, getFileIcon, getCategoryIcon, t, handleDownload, handleDownloadAndFill]
   );
 
   const keyExtractor = useCallback((item: DocumentTemplate) => item.id, []);
@@ -390,7 +404,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: SPACING.xs,
   },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
   downloadButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -400,7 +419,7 @@ const styles = StyleSheet.create({
   },
   downloadButtonText: {
     color: 'white',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
   },
   loadingContainer: {

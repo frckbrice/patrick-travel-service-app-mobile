@@ -14,6 +14,7 @@ import { useRequireAuth, useAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { userApi, UpdateProfileRequest } from '../../lib/api/user.api';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
+import { ModernHeader } from '../../components/ui/ModernHeader';
 import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
@@ -83,21 +84,23 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <KeyboardAvoidingScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{
-        ...styles.scrollContent,
-        paddingBottom: insets.bottom + SPACING.lg,
-      }}
-    >
-      <View style={styles.header}>
-        <Text variant="headlineMedium" style={[styles.title, { color: colors.primary }]}>
-          {t('profile.editProfile')}
-        </Text>
-        <Text variant="bodyLarge" style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {t('profile.updateInfo')}
-        </Text>
-      </View>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Modern Gradient Header */}
+      <ModernHeader
+        variant="gradient"
+        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        title={t('profile.editProfile')}
+        subtitle={t('profile.updateInfo')}
+        showBackButton
+      />
+      
+      <KeyboardAvoidingScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={{
+          ...styles.scrollContent,
+          paddingBottom: insets.bottom + SPACING.lg,
+        }}
+      >
 
       <View style={styles.form}>
         <Controller
@@ -227,7 +230,8 @@ export default function EditProfileScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingScrollView>
+      </KeyboardAvoidingScrollView>
+    </View>
   );
 }
 
@@ -235,6 +239,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent', // Will be set dynamically
+  },
+  scrollContainer: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,

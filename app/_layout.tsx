@@ -8,6 +8,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../stores/auth/authStore';
 import { ThemeProvider, useTheme } from '../lib/theme/ThemeContext';
+import { TabBarProvider } from '../lib/context/TabBarContext';
+import { DynamicTabBar } from '../components/ui/DynamicTabBar';
+import { useTabBarContext } from '../lib/context/TabBarContext';
 import {
   setupNotificationListeners,
   getLastNotificationResponse,
@@ -32,6 +35,7 @@ function AppContent() {
   const registerPushToken = useAuthStore((state) => state.registerPushToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { theme, isDark } = useTheme();
+  const { isTabBarVisible, showTabBar, hideTabBar } = useTabBarContext();
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const [isAppReady, setIsAppReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
@@ -159,19 +163,11 @@ function AppContent() {
         />
         <Stack
           screenOptions={{
-            headerShown: false,
+            headerShown: false, // Disable ALL global headers - we use custom headers
             contentStyle: {
               backgroundColor: theme.colors.background,
             },
-            headerStyle: {
-              backgroundColor: theme.colors.surface,
-            },
-            headerTintColor: theme.colors.onSurface,
-            headerTitleStyle: {
-              fontWeight: '700',
-              fontSize: 18,
-            },
-            headerShadowVisible: true,
+            // Remove all header-related options since we're not using them
           }}
         >
           <Stack.Screen name="index" />
@@ -181,115 +177,99 @@ function AppContent() {
           <Stack.Screen
             name="case/[id]"
             options={{
-              headerShown: true,
-              title: 'Case Details',
               presentation: 'card',
-              headerLargeTitle: false,
-              headerTransparent: false,
-              headerBlurEffect: 'light',
             }}
           />
           <Stack.Screen
             name="case/new"
             options={{
-              headerShown: true,
-              title: 'New Case',
               presentation: 'modal',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="document/upload"
             options={{
-              headerShown: true,
-              title: 'Upload Document',
               presentation: 'modal',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="document/[id]"
             options={{
-              headerShown: true,
-              title: 'Document Details',
               presentation: 'card',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="message/[id]"
             options={{
-              headerShown: true,
-              title: 'Chat',
               presentation: 'card',
-              headerLargeTitle: false,
+            }}
+          />
+          <Stack.Screen
+            name="email/[id]"
+            options={{
+              presentation: 'card',
             }}
           />
           <Stack.Screen
             name="help/faq"
             options={{
-              headerShown: true,
-              title: 'FAQs',
               presentation: 'card',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="help/contact"
             options={{
-              headerShown: true,
-              title: 'Contact Support',
               presentation: 'modal',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="profile/edit"
             options={{
-              headerShown: true,
-              title: 'Edit Profile',
               presentation: 'card',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="profile/change-password"
             options={{
-              headerShown: true,
-              title: 'Change Password',
               presentation: 'card',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="profile/notifications"
             options={{
-              headerShown: true,
-              title: 'Notification Preferences',
               presentation: 'card',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="profile/settings"
             options={{
-              headerShown: true,
-              title: 'Settings',
               presentation: 'card',
-              headerLargeTitle: false,
             }}
           />
           <Stack.Screen
             name="templates"
             options={{
-              headerShown: true,
-              title: 'Document Templates',
               presentation: 'card',
-              headerLargeTitle: false,
+            }}
+          />
+          <Stack.Screen
+            name="template/[id]"
+            options={{
+              presentation: 'card',
             }}
           />
         </Stack>
         <Toast />
+        <DynamicTabBar 
+          visible={isTabBarVisible} 
+          onVisibilityChange={(visible) => {
+            if (visible) {
+              showTabBar();
+            } else {
+              hideTabBar();
+            }
+          }} 
+        />
       </PaperProvider>
     </SafeAreaProvider>
   );
@@ -299,7 +279,9 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <AppContent />
+        <TabBarProvider>
+          <AppContent />
+        </TabBarProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

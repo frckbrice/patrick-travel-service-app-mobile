@@ -30,3 +30,4 @@ export { PDFViewer } from './PDFViewer';
 export { ImageZoomViewer } from './ImageZoomViewer';
 export { LanguageSwitcher } from './LanguageSwitcher';
 export { ThemeSwitcher } from './ThemeSwitcher';
+export { NotFound } from './NotFound';

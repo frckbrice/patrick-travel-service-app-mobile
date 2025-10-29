@@ -207,7 +207,7 @@ export const handleNotificationNavigation = (data: NotificationData) => {
         if (data.caseId) {
           router.push(`/message/${data.caseId}`);
         } else {
-          router.push('/(tabs)/messages');
+          router.push('/(tabs)/notifications');
         }
         break;
 

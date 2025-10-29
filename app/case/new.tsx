@@ -43,8 +43,6 @@ export default function NewCaseScreen() {
     const [destinations, setDestinations] = useState<Destination[]>([]);
     const [loadingDestinations, setLoadingDestinations] = useState(true);
     const [destinationMenuVisible, setDestinationMenuVisible] = useState(false);
-    const [isDraftSaving, setIsDraftSaving] = useState(false);
-    const [draftSaved, setDraftSaved] = useState(false);
     const [formProgress, setFormProgress] = useState(0);
 
   const {
@@ -80,19 +78,21 @@ export default function NewCaseScreen() {
         return progress;
     }, [getValues]);
 
-    // Debounced form data for auto-save
+    // Debounced form data for auto-save (15 seconds)
     const debouncedFormData = useDebounce({
         serviceType,
         destinationId: selectedDestinationId,
         travelDate: selectedDate,
         details,
-    }, 2000);
+    }, 15000);
 
-    // Auto-save draft functionality
+    // Auto-save draft functionality (silent with toast feedback)
     const saveDraft = useCallback(async (formData: Partial<CaseFormData>) => {
-        if (!user || !formData.serviceType) return;
+        // Only save draft if user has made meaningful progress
+        // Must have: service type, destination, travel date, and some details
+        if (!user || !formData.serviceType || !formData.destinationId || !formData.travelDate || 
+            !formData.details || formData.details.trim().length < 10) return;
 
-        setIsDraftSaving(true);
         try {
             const draftData = {
                 ...formData,
@@ -100,17 +100,25 @@ export default function NewCaseScreen() {
                 lastSaved: new Date().toISOString(),
             };
 
+            // Silent save - no state changes, no re-renders
             await secureStorage.set('case_draft', draftData);
-            setDraftSaved(true);
-
-            // Show brief confirmation
-            setTimeout(() => setDraftSaved(false), 2000);
+            
+            // Silent toast notification - no re-renders
+            toast.success({
+                title: t('cases.draftSaved'),
+                message: t('cases.draftSavedSilently'),
+                duration: 2000,
+            });
         } catch (error) {
             console.error('Failed to save draft:', error);
-        } finally {
-            setIsDraftSaving(false);
+            // Silent error toast
+            toast.error({
+                title: t('cases.draftSaveFailed'),
+                message: t('cases.draftSaveFailedMessage'),
+                duration: 2000,
+            });
         }
-    }, [user]);
+    }, [user, t]);
 
     // Load draft on mount
     const loadDraft = useCallback(async () => {
@@ -132,9 +140,11 @@ export default function NewCaseScreen() {
         }
     }, [user, setValue, t]);
 
-    // Auto-save when form data changes
+    // Auto-save when form data changes (only if meaningful progress is made)
     useEffect(() => {
-        if (debouncedFormData.serviceType) {
+        if (debouncedFormData.serviceType && debouncedFormData.destinationId && 
+            debouncedFormData.travelDate && debouncedFormData.details && 
+            debouncedFormData.details.trim().length >= 10) {
             saveDraft(debouncedFormData);
         }
     }, [debouncedFormData, saveDraft]);
@@ -275,30 +285,6 @@ export default function NewCaseScreen() {
                     </Text>
                 </View>
 
-                {/* Draft Status */}
-                {(isDraftSaving || draftSaved) && (
-                    <View style={styles.draftStatus}>
-                        {isDraftSaving ? (
-                            <>
-                                <ActivityIndicator size="small" color={colors.primary} />
-                                <Text variant="bodySmall" style={[styles.draftText, { color: colors.textSecondary }]}>
-                                    {t('cases.savingDraft')}
-                                </Text>
-                            </>
-                        ) : (
-                            <>
-                                <MaterialCommunityIcons
-                                    name="check-circle"
-                                    size={16}
-                                    color={colors.success}
-                                />
-                                <Text variant="bodySmall" style={[styles.draftText, { color: colors.textSecondary }]}>
-                                    {t('cases.draftSaved')}
-                                </Text>
-                            </>
-                        )}
-                    </View>
-                )}
             </View>
 
             <View style={styles.form}>
@@ -660,22 +646,6 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     },
     progressText: {
-        color: COLORS.textSecondary,
-        fontSize: 12,
-    },
-    // Draft Status Styles
-    draftStatus: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.xs,
-        marginTop: SPACING.sm,
-        paddingHorizontal: SPACING.sm,
-        paddingVertical: SPACING.xs,
-        backgroundColor: COLORS.surface,
-        borderRadius: 16,
-        alignSelf: 'center',
-    },
-    draftText: {
         color: COLORS.textSecondary,
         fontSize: 12,
     },

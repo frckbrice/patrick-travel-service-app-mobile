@@ -42,8 +42,8 @@ export const notificationsApi = {
 
   async markAsRead(id: string): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.patch<ApiResponse<void>>(
-        `/notifications/${id}/read`
+      const response = await apiClient.put<ApiResponse<void>>(
+        `/notifications/${id}`
       );
       return response.data;
     } catch (error: any) {
@@ -59,8 +59,8 @@ export const notificationsApi = {
 
   async markAllAsRead(): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.post<ApiResponse<void>>(
-        '/notifications/read-all'
+      const response = await apiClient.put<ApiResponse<void>>(
+        '/notifications/mark-all-read'
       );
       return response.data;
     } catch (error: any) {
