@@ -151,6 +151,14 @@ export default function ChatScreen() {
       try {
         logger.info('Starting chat initialization', { caseId });
         await loadInitial();
+        
+        // Update latestTimestampRef after loading initial messages
+        if (messages.length > 0) {
+          const latestMsg = messages[messages.length - 1];
+          latestTimestampRef.current = latestMsg.timestamp;
+          logger.info('Updated latestTimestampRef', { timestamp: latestTimestampRef.current });
+        }
+        
         logger.info('Chat initialization completed', { caseId, messageCount: messages.length });
       } catch (error) {
         logger.error('Failed to initialize chat', error);
@@ -197,23 +205,34 @@ export default function ChatScreen() {
   
      logger.info('Setting up real-time listener for case', { caseId });
   
-     // Pass the latest timestamp to filter out old messages
-     const latestTimestamp = latestTimestampRef.current;
-     logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
-  
+    // Pass undefined for timestamp filtering - we'll handle it inside the callback
     const unsubscribe = chatService.onNewMessagesChange(
       caseId,
       (newMessages) => {
         logger.info('Real-time update received', { count: newMessages.length });
 
+        // Read latestTimestampRef.current dynamically (not captured value)
+        const latestTimestamp = latestTimestampRef.current;
+        logger.info('Filtering with latest timestamp', { latestTimestamp, messageCount: newMessages.length });
+        
+        // Filter messages by timestamp if we have a latest timestamp
+        const newMessagesFiltered = latestTimestamp 
+          ? newMessages.filter(msg => msg.timestamp > latestTimestamp)
+          : newMessages;
+
         // Filter out messages sent by current user (already handled optimistically)
         // Use Firebase UID for comparison since senderId is Firebase UID
         const currentUserFirebaseId = auth.currentUser?.uid || user?.id;
-        const messagesFromOthers = newMessages.filter(msg => msg.senderId !== currentUserFirebaseId);
+        const messagesFromOthers = newMessagesFiltered.filter(msg => msg.senderId !== currentUserFirebaseId);
         
         if (messagesFromOthers.length > 0) {
           logger.info('Adding messages from others', { count: messagesFromOthers.length });
           appendMessages(messagesFromOthers);
+          
+          // Update latestTimestampRef after adding new messages
+          const latestMsg = messagesFromOthers[messagesFromOthers.length - 1];
+          latestTimestampRef.current = latestMsg.timestamp;
+          logger.info('Updated latestTimestampRef after new message', { timestamp: latestTimestampRef.current });
         } else {
           logger.info('No messages from others to add', { totalReceived: newMessages.length });
         }
@@ -226,7 +245,7 @@ export default function ChatScreen() {
           flatListRef.current?.scrollToEnd({ animated: false });
         }, 50);
       },
-      latestTimestamp
+      undefined  // Pass undefined - we handle filtering in the callback
     );
   
     setUnsubscribeMessages(() => unsubscribe);
