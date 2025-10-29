@@ -197,14 +197,14 @@ export default function ChatScreen() {
   
      logger.info('Setting up real-time listener for case', { caseId });
   
+     // Pass the latest timestamp to filter out old messages
+     const latestTimestamp = latestTimestampRef.current;
+     logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
+  
     const unsubscribe = chatService.onNewMessagesChange(
       caseId,
       (newMessages) => {
         logger.info('Real-time update received', { count: newMessages.length });
-
-        // Read latestTimestampRef.current dynamically (not captured value)
-        const latestTimestamp = latestTimestampRef.current;
-        logger.info('Filtering with latest timestamp', { latestTimestamp, messageCount: newMessages.length });
 
         // Filter out messages sent by current user (already handled optimistically)
         // Use Firebase UID for comparison since senderId is Firebase UID
@@ -226,7 +226,7 @@ export default function ChatScreen() {
           flatListRef.current?.scrollToEnd({ animated: false });
         }, 50);
       },
-      undefined  // Don't pass timestamp - let the listener handle filtering internally
+      latestTimestamp
     );
   
     setUnsubscribeMessages(() => unsubscribe);
