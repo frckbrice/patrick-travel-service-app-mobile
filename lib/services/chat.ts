@@ -402,70 +402,68 @@ class ChatService {
     const messagesRef = ref(database, `chats/${caseId}/messages`);
     const messagesQuery = query(
       messagesRef, 
-      orderByChild('sentAt'),
-      limitToLast(20) // Only listen to last 20 messages for real-time updates
+      orderByChild('sentAt')
     );
 
-    const listener = onValue(messagesQuery, async (snapshot) => {
-      const messages: ChatMessage[] = [];
+    // Use onChildAdded to capture only new messages as they arrive
+    const listener = onChildAdded(messagesQuery, async (childSnapshot) => {
+      const firebaseData = childSnapshot.val();
       
-      snapshot.forEach((childSnapshot) => {
-        const firebaseData = childSnapshot.val();
-        
-        // Skip if firebaseData is null or undefined
-        if (!firebaseData || typeof firebaseData !== 'object') {
-          logger.warn('Skipping invalid message data in onNewMessagesChange', { key: childSnapshot.key });
-          return;
-        }
-        
-        const mappedMessage: ChatMessage = {
-          id: childSnapshot.key!,
-          caseId: firebaseData.caseId || '',
-          senderId: firebaseData.senderId || '',
-          senderName: firebaseData.senderName || 'Unknown',
-          senderRole: firebaseData.senderRole || 'CLIENT',
-          message: firebaseData.content || firebaseData.message || '',
-          timestamp: firebaseData.sentAt || firebaseData.timestamp || Date.now(),
-          isRead: firebaseData.isRead || false,
-          attachments: firebaseData.attachments || [],
-          status: firebaseData.status,
-          tempId: firebaseData.tempId,
-          error: firebaseData.error,
-        };
-
-        messages.push(mappedMessage);
-      });
+      // Skip if firebaseData is null or undefined
+      if (!firebaseData || typeof firebaseData !== 'object') {
+        logger.warn('Skipping invalid message data in onNewMessagesChange', { key: childSnapshot.key });
+        return;
+      }
+      
+      const mappedMessage: ChatMessage = {
+        id: childSnapshot.key!,
+        caseId: firebaseData.caseId || '',
+        senderId: firebaseData.senderId || '',
+        senderName: firebaseData.senderName || 'Unknown',
+        senderRole: firebaseData.senderRole || 'CLIENT',
+        message: firebaseData.content || firebaseData.message || '',
+        timestamp: firebaseData.sentAt || firebaseData.timestamp || Date.now(),
+        isRead: firebaseData.isRead || false,
+        attachments: firebaseData.attachments || [],
+        status: firebaseData.status,
+        tempId: firebaseData.tempId,
+        error: firebaseData.error,
+      };
 
       // Filter only new messages if lastKnownTimestamp is provided
-      const newMessages = lastKnownTimestamp 
-        ? messages.filter(msg => msg.timestamp > lastKnownTimestamp)
-        : messages;
+      const isNewMessage = lastKnownTimestamp 
+        ? mappedMessage.timestamp > lastKnownTimestamp
+        : true;
 
-      if (newMessages && newMessages.length > 0) {
-        // Update cache with new messages
+      if (isNewMessage) {
+        logger.info('New message received via onChildAdded', { messageId: mappedMessage.id, timestamp: mappedMessage.timestamp });
+        
+        // Update cache with new message
         const cachedData = await chatCacheService.getCachedMessages(caseId);
         if (cachedData && cachedData.messages && Array.isArray(cachedData.messages)) {
-          // Filter out duplicates before updating cache
-          const uniqueNewMessages = newMessages.filter(newMsg => 
-            !cachedData.messages.some(existingMsg => 
-              existingMsg.id === newMsg.id || existingMsg.tempId === newMsg.tempId
-            )
+          // Check for duplicates before updating cache
+          const isDuplicate = cachedData.messages.some(existingMsg => 
+            existingMsg.id === mappedMessage.id || existingMsg.tempId === mappedMessage.tempId
           );
           
-          if (uniqueNewMessages.length > 0) {
-            const updatedMessages = [...cachedData.messages, ...uniqueNewMessages];
+          if (!isDuplicate) {
+            const updatedMessages = [...cachedData.messages, mappedMessage];
             await chatCacheService.setCachedMessages(caseId, updatedMessages, cachedData.hasMore, cachedData.totalCount);
-            callback(uniqueNewMessages);
+            callback([mappedMessage]);
+          } else {
+            logger.debug('Duplicate message ignored', { messageId: mappedMessage.id });
           }
         } else {
-          // If no cache exists or cache is corrupted, just cache the new messages
-          await chatCacheService.setCachedMessages(caseId, newMessages, true, newMessages.length);
-          callback(newMessages);
+          // If no cache exists, create new cache with this message
+          await chatCacheService.setCachedMessages(caseId, [mappedMessage], true, 1);
+          callback([mappedMessage]);
         }
+      } else {
+        logger.debug('Message already exists, skipping', { messageId: mappedMessage.id, timestamp: mappedMessage.timestamp, lastKnownTimestamp });
       }
     });
 
-    return () => off(messagesRef, 'value', listener);
+    return () => off(messagesRef, 'child_added', listener);
   }
 
   // Mark messages as read (aligned with web app)
