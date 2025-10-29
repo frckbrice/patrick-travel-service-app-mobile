@@ -206,7 +206,9 @@ export default function ChatScreen() {
         logger.info('Real-time update received', { count: newMessages.length });
 
         // Filter out messages sent by current user (already handled optimistically)
-        const messagesFromOthers = newMessages.filter(msg => msg.senderId !== user?.id);
+        // Use Firebase UID for comparison since senderId is Firebase UID
+        const currentUserFirebaseId = auth.currentUser?.uid || user?.id;
+        const messagesFromOthers = newMessages.filter(msg => msg.senderId !== currentUserFirebaseId);
         
         if (messagesFromOthers.length > 0) {
           logger.info('Adding messages from others', { count: messagesFromOthers.length });
