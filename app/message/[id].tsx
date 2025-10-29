@@ -90,6 +90,7 @@ export default function ChatScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const processedMessagesRef = useRef<Set<string>>(new Set());
   const latestTimestampRef = useRef<number | undefined>(undefined);
+  const chatInitializedRef = useRef(false);
 
   useEffect(() => {
     const onShow = (e: KeyboardEvent) => {
