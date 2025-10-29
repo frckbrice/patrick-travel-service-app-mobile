@@ -200,31 +200,31 @@ export default function ChatScreen() {
      const latestTimestamp = latestTimestampRef.current;
      logger.info('Latest message timestamp for listener', { latestTimestamp, messageCount: messages.length });
   
-     const unsubscribe = chatService.onNewMessagesChange(
-       caseId,
-       (newMessages) => {
-         logger.info('Real-time update received', { count: newMessages.length });
-  
-         // Filter out messages sent by current user (already handled optimistically)
-         const messagesFromOthers = newMessages.filter(msg => msg.senderId !== user?.id);
-         
-         if (messagesFromOthers.length > 0) {
-           logger.info('Adding messages from others', { count: messagesFromOthers.length });
-           appendMessages(messagesFromOthers);
-         } else {
-           logger.info('No messages from others to add', { totalReceived: newMessages.length });
-         }
-  
-         // Scroll to bottom
-         if (scrollToEndTimeoutRef.current) {
-           clearTimeout(scrollToEndTimeoutRef.current);
-         }
-         scrollToEndTimeoutRef.current = setTimeout(() => {
-           flatListRef.current?.scrollToEnd({ animated: true });
-         }, 100);
-       },
-       latestTimestamp
-     );
+    const unsubscribe = chatService.onNewMessagesChange(
+      caseId,
+      (newMessages) => {
+        logger.info('Real-time update received', { count: newMessages.length });
+
+        // Filter out messages sent by current user (already handled optimistically)
+        const messagesFromOthers = newMessages.filter(msg => msg.senderId !== user?.id);
+        
+        if (messagesFromOthers.length > 0) {
+          logger.info('Adding messages from others', { count: messagesFromOthers.length });
+          appendMessages(messagesFromOthers);
+        } else {
+          logger.info('No messages from others to add', { totalReceived: newMessages.length });
+        }
+
+        // Scroll to bottom immediately for new messages
+        if (scrollToEndTimeoutRef.current) {
+          clearTimeout(scrollToEndTimeoutRef.current);
+        }
+        scrollToEndTimeoutRef.current = setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: false });
+        }, 50);
+      },
+      latestTimestamp
+    );
   
     setUnsubscribeMessages(() => unsubscribe);
   
@@ -286,10 +286,10 @@ export default function ChatScreen() {
     setNewMessage('');
     setSelectedAttachments([]);
 
-    // 3. Scroll to end to show new message
+    // 3. Scroll to bottom immediately to show new message
     setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+      flatListRef.current?.scrollToEnd({ animated: false });
+    }, 50);
 
     try {
       // 4. Send to server in background
@@ -762,10 +762,10 @@ const handlePickFile = useCallback(async () => {
   return item.tempId || `${item.id}-${index}`;
 }, []);
 
- // Throttled scroll to end for performance
- const scrollToEnd = useThrottle(() => {
-  flatListRef.current?.scrollToEnd({ animated: true });
-}, 200);
+  // Throttled scroll to end for performance
+  const scrollToEnd = useThrottle(() => {
+    flatListRef.current?.scrollToEnd({ animated: false });
+  }, 200);
 
   // Handle load more (pull to refresh for older messages)
   const handleLoadMore = useCallback(() => {

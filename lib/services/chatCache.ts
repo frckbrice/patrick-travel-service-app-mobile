@@ -31,6 +31,7 @@ class ChatCacheService {
   // Cache expiration times (in milliseconds)
   private readonly MESSAGE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   private readonly CONVERSATION_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+  private readonly MAX_MESSAGES_IN_CACHE = 50; // Maximum messages per chat (FIFO)
   private readonly MAX_CACHE_SIZE = 50; // Maximum number of cached conversations
 
   static getInstance(): ChatCacheService {
@@ -112,8 +113,18 @@ class ChatCacheService {
     try {
       const cachedData = await this.getCachedMessages(caseId);
       if (cachedData && cachedData.messages && Array.isArray(cachedData.messages)) {
+        // Check for duplicates
+        const exists = cachedData.messages.some(
+          m => m.id === message.id || m.tempId === message.tempId || 
+          (m.timestamp === message.timestamp && m.senderId === message.senderId)
+        );
+        if (exists) return;
+        
+        // Add message and enforce FIFO limit
         const updatedMessages = [...cachedData.messages, message];
-        await this.setCachedMessages(caseId, updatedMessages, cachedData.hasMore, cachedData.totalCount);
+        const fifoMessages = updatedMessages.slice(-this.MAX_MESSAGES_IN_CACHE);
+        
+        await this.setCachedMessages(caseId, fifoMessages, cachedData.hasMore, cachedData.totalCount);
       } else {
         // If no cache exists, create new cache with this message
         await this.setCachedMessages(caseId, [message], true, 1);

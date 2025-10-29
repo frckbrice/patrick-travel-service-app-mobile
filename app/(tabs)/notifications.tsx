@@ -255,7 +255,7 @@ export default function NotificationsScreen() {
                     try {
                       const response = await messagesApi.getEmails(1, 20, { isRead: false });
                       if (response.success && response.data && response.data.length > 0) {
-                        const inboxEmail = response.data.find(m => (m.recipientId || (m as any)?.recipient?.id || (m as any)?.toUserId || (m as any)?.to?.id) === user?.id);
+                        const inboxEmail = response.data.find(m => m.senderId !== user?.id);
                         emailId = inboxEmail?.id || null;
                       }
                     } catch (error) {
@@ -457,50 +457,9 @@ export default function NotificationsScreen() {
   }, [notifications, conversations, user, t]);
 
   // Organize emails by inbox and sent
-  // Normalize IDs to support responses with nested relations (sender/recipient objects)
-  const getRecipientUserId = (m: any) => m?.recipientId || m?.recipient?.id || m?.toUserId || m?.to?.id;
-  const getSenderUserId = (m: any) => m?.senderId || m?.sender?.id || m?.fromUserId || m?.from?.id;
-  const getRecipientEmail = (m: any) => m?.recipientEmail || m?.recipient?.email || m?.to?.email;
-  const getSenderEmail = (m: any) => m?.senderEmail || m?.sender?.email || m?.from?.email;
-
-  let inboxEmails = emails.filter((email) => {
-    const byId = getRecipientUserId(email) === user?.id;
-    if (byId) return true;
-    const userEmail = user?.email?.toLowerCase?.();
-    const recipientEmail = getRecipientEmail(email)?.toLowerCase?.();
-    return !!userEmail && !!recipientEmail && userEmail === recipientEmail;
-  });
-
-  let sentEmails = emails.filter((email) => {
-    const byId = getSenderUserId(email) === user?.id;
-    if (byId) return true;
-    const userEmail = user?.email?.toLowerCase?.();
-    const senderEmail = getSenderEmail(email)?.toLowerCase?.();
-    return !!userEmail && !!senderEmail && userEmail === senderEmail;
-  });
-
-  // Fallback classification if IDs/emails are missing from payload
-  if (emails.length > 0) {
-    if (inboxEmails.length === 0) {
-      inboxEmails = emails.filter((email) => {
-        // Treat any message not sent by current user as received
-        const senderId = getSenderUserId(email);
-        const senderEmail = getSenderEmail(email)?.toLowerCase?.();
-        const userEmail = user?.email?.toLowerCase?.();
-        const notSentByMe = (senderId && user?.id && senderId !== user.id) || (!!senderEmail && !!userEmail && senderEmail !== userEmail);
-        return notSentByMe;
-      });
-    }
-    if (sentEmails.length === 0) {
-      sentEmails = emails.filter((email) => {
-        const senderId = getSenderUserId(email);
-        const senderEmail = getSenderEmail(email)?.toLowerCase?.();
-        const userEmail = user?.email?.toLowerCase?.();
-        const sentByMe = (senderId && user?.id && senderId === user.id) || (!!senderEmail && !!userEmail && senderEmail === userEmail);
-        return sentByMe;
-      });
-    }
-  }
+  // Simple, explicit rule: received = not sent by me; sent = sent by me
+  const inboxEmails = emails.filter((email) => email.senderId !== user?.id);
+  const sentEmails = emails.filter((email) => email.senderId === user?.id);
 
   // Format email date
   const formatEmailDate = useCallback((date: Date) => {
@@ -512,12 +471,7 @@ export default function NotificationsScreen() {
 
   // Render email item
   const renderEmailItem = useCallback(({ item, index }: { item: Message; index: number }) => {
-    const isInbox = (() => {
-      if (getRecipientUserId(item) === user?.id) return true;
-      const userEmail = user?.email?.toLowerCase?.();
-      const recipientEmail = getRecipientEmail(item)?.toLowerCase?.();
-      return !!userEmail && !!recipientEmail && userEmail === recipientEmail;
-    })();
+    const isInbox = item.senderId !== user?.id;
     return (
       <Animated.View entering={FadeInDown.delay(index * 30).springify()}>
         <TouchableOpacity
