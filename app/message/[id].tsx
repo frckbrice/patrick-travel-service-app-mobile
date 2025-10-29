@@ -151,6 +151,14 @@ export default function ChatScreen() {
       try {
         logger.info('Starting chat initialization', { caseId });
         await loadInitial();
+        
+        // Update latestTimestampRef after loading initial messages
+        if (messages.length > 0) {
+          const latestMsg = messages[messages.length - 1];
+          latestTimestampRef.current = latestMsg.timestamp;
+          logger.info('Updated latestTimestampRef', { timestamp: latestTimestampRef.current });
+        }
+        
         logger.info('Chat initialization completed', { caseId, messageCount: messages.length });
       } catch (error) {
         logger.error('Failed to initialize chat', error);
@@ -214,6 +222,11 @@ export default function ChatScreen() {
         if (messagesFromOthers.length > 0) {
           logger.info('Adding messages from others', { count: messagesFromOthers.length });
           appendMessages(messagesFromOthers);
+          
+          // Update latestTimestampRef after adding new messages
+          const latestMsg = messagesFromOthers[messagesFromOthers.length - 1];
+          latestTimestampRef.current = latestMsg.timestamp;
+          logger.info('Updated latestTimestampRef after new message', { timestamp: latestTimestampRef.current });
         } else {
           logger.info('No messages from others to add', { totalReceived: newMessages.length });
         }
