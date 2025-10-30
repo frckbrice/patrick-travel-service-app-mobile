@@ -150,16 +150,18 @@ export default function ChatScreen() {
     const initializeChat = async () => {
       try {
         logger.info('Starting chat initialization', { caseId });
-        await loadInitial();
+        const result = await loadInitial();
         
         // Update latestTimestampRef after loading initial messages
-        if (messages.length > 0) {
-          const latestMsg = messages[messages.length - 1];
+        // Use the returned data instead of messages state (which updates asynchronously)
+        const loadedMessages = result?.data || messages;
+        if (loadedMessages.length > 0) {
+          const latestMsg = loadedMessages[loadedMessages.length - 1];
           latestTimestampRef.current = latestMsg.timestamp;
-          logger.info('Updated latestTimestampRef', { timestamp: latestTimestampRef.current });
+          logger.info('Updated latestTimestampRef', { timestamp: latestTimestampRef.current, messageId: latestMsg.id });
         }
         
-        logger.info('Chat initialization completed', { caseId, messageCount: messages.length });
+        logger.info('Chat initialization completed', { caseId, messageCount: loadedMessages.length });
       } catch (error) {
         logger.error('Failed to initialize chat', error);
       }
@@ -196,64 +198,56 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!caseId) return;
-  
+
     // Ensure only one listener at a time
     if (unsubscribeMessages) {
       unsubscribeMessages();
       setUnsubscribeMessages(null);
     }
-  
-     logger.info('Setting up real-time listener for case', { caseId });
-  
-    // Pass undefined for timestamp filtering - we'll handle it inside the callback
-    const unsubscribe = chatService.onNewMessagesChange(
+
+    logger.info('Setting up real-time listener (child_added) for case', { caseId });
+
+    // Use incremental child_added listener to get messages as they arrive
+    const unsubscribe = chatService.listenToChatMessages(
       caseId,
-      (newMessages) => {
-        logger.info('Real-time update received', { count: newMessages.length });
+      (incoming) => {
+        if (!incoming || incoming.length === 0) return;
 
-        // Read latestTimestampRef.current dynamically (not captured value)
-        const latestTimestamp = latestTimestampRef.current;
-        logger.info('Filtering with latest timestamp', { latestTimestamp, messageCount: newMessages.length });
-        
-        // Filter messages by timestamp if we have a latest timestamp
-        const newMessagesFiltered = latestTimestamp 
-          ? newMessages.filter(msg => msg.timestamp > latestTimestamp)
-          : newMessages;
-
-        // Filter out messages sent by current user (already handled optimistically)
-        // Use Firebase UID for comparison since senderId is Firebase UID
+        // Exclude messages sent by current user (optimistic already added)
         const currentUserFirebaseId = auth.currentUser?.uid || user?.id;
-        const messagesFromOthers = newMessagesFiltered.filter(msg => msg.senderId !== currentUserFirebaseId);
-        
-        if (messagesFromOthers.length > 0) {
-          logger.info('Adding messages from others', { count: messagesFromOthers.length });
-          appendMessages(messagesFromOthers);
-          
-          // Update latestTimestampRef after adding new messages
-          const latestMsg = messagesFromOthers[messagesFromOthers.length - 1];
-          latestTimestampRef.current = latestMsg.timestamp;
-          logger.info('Updated latestTimestampRef after new message', { timestamp: latestTimestampRef.current });
-        } else {
-          logger.info('No messages from others to add', { totalReceived: newMessages.length });
-        }
+        const fromOthers = incoming.filter(m => m.senderId !== currentUserFirebaseId);
 
-        // Scroll to bottom immediately for new messages
-        if (scrollToEndTimeoutRef.current) {
-          clearTimeout(scrollToEndTimeoutRef.current);
-        }
-        scrollToEndTimeoutRef.current = setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: false });
-        }, 50);
+        if (fromOthers.length === 0) return;
+
+        // Deduplicate against current state via functional update to avoid effect dependencies
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const deduped = fromOthers.filter(m => !existingIds.has(m.id));
+          if (deduped.length === 0) return prev;
+
+          // Update latest timestamp ref for any logic relying on it
+          latestTimestampRef.current = deduped[deduped.length - 1].timestamp;
+
+          // Scroll to bottom to reveal the new message(s)
+          if (scrollToEndTimeoutRef.current) {
+            clearTimeout(scrollToEndTimeoutRef.current);
+          }
+          scrollToEndTimeoutRef.current = setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }, 50);
+
+          return [...prev, ...deduped];
+        });
       },
-      undefined  // Pass undefined - we handle filtering in the callback
+      50
     );
-  
+
     setUnsubscribeMessages(() => unsubscribe);
-  
+
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [caseId]);
+  }, [caseId, user]);
 
   // Update latest timestamp ref when messages change
   useEffect(() => {
