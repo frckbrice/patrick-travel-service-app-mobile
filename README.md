@@ -7,7 +7,7 @@
 
 > **Complete production-ready React Native mobile application for Patrick Travel Services immigration management platform.**
 
-> ✅ **All Features Complete** | 🚀 **Performance Optimized** | 📱 **iOS & Android Ready** | 🔒 **GDPR Compliant**
+> 🚧 **Actively Developed** | 🚀 **Performance Optimized** | 📱 **iOS & Android Ready** | 🔒 **GDPR Compliant**
 
 ## 🌟 Overview
 
@@ -19,7 +19,13 @@ A comprehensive mobile application that allows clients to:
 - Track case progress
 - Access FAQs and support
 
-## 🆕 Recent Updates (January 2025)
+## 🆕 Recent Updates
+
+### ✅ Chat Stability Fix (October 30, 2025)
+- Fixed a "Maximum update depth exceeded" error in the chat screen by stabilizing the real-time listener and using functional state updates for deduplication.
+- Improved Firebase permission error handling for sending messages (non-blocking alerts when rules deny writes).
+- Branch: `fix/chat-max-depth-listener` — open PR: https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/fix/chat-max-depth-listener
+- Docs: see `docs/MOBILE_CHAT_FIX_GUIDE.md`
 
 ### ✅ Backend GDPR Implementation Guide (NEW!)
 - ✅ Complete implementation guide with ready-to-use code
@@ -327,7 +333,9 @@ pnpm run submit:ios
 
 ### For Mobile Team:
 - **[SETUP_GUIDE.md](./docs/SETUP_GUIDE.md)** - Complete setup instructions
+- **[MOBILE_CHAT_FIX_GUIDE.md](./docs/MOBILE_CHAT_FIX_GUIDE.md)** - Chat listener, Firebase rules, and known pitfalls
 - **[ANDROID_DEV_GUIDE.md](./ANDROID_DEV_GUIDE.md)** - Android emulator & dev build troubleshooting
+- **[ANDROID_CRASH_FIX.md](./docs/ANDROID_CRASH_FIX.md)** - Android stability fixes
 - **[PUSH_NOTIFICATIONS_SETUP.md](./docs/PUSH_NOTIFICATIONS_SETUP.md)** - Push notifications setup
 - **[AUTHENTICATION_SETUP.md](./docs/AUTHENTICATION_SETUP.md)** - Firebase Auth setup
 - **[IMPLEMENTATION_PROGRESS.md](./docs/IMPLEMENTATION_PROGRESS.md)** - Feature status
@@ -349,6 +357,8 @@ pnpm run submit:ios
 - Verify all Firebase config in `.env`
 - Check Firebase Console for enabled services
 - Ensure database rules allow read/write
+- If you see "PERMISSION_DENIED" when sending messages, verify the user's Firebase UID is used consistently in rules and writes.
+- If you encounter "Maximum update depth exceeded" on the chat screen, ensure you're on a branch including the chat listener stabilization (see Recent Updates) and clear Metro cache: `npx expo start -c`.
 
 ### Metro bundler issues
 ```bash
@@ -407,6 +417,7 @@ For detailed help, see:
 4. ✅ `feature/document-management` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/document-management)
 5. ✅ `feature/real-time-chat` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/real-time-chat)
 6. ✅ `feature/profile-help-notifications` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/profile-help-notifications)
+7. ✅ `fix/chat-max-depth-listener` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/fix/chat-max-depth-listener)
 
 ### Next Steps
 1. Review and merge feature branches
