@@ -13,7 +13,7 @@ import {
   update,
   get,
   limitToLast,
-  startAfter,
+  endAt,
 } from 'firebase/database';
 import { logger } from '../utils/logger';
 import { chatCacheService } from './chatCache';
@@ -96,6 +96,31 @@ interface ApiChatMessage {
 }
 
 class ChatService {
+  // Fetch chat metadata (maps Firebase chat ID to true case reference and participants)
+  async getChatMetadata(caseId: string): Promise<ChatMetadata | null> {
+    try {
+      const metadataRef = ref(database, `chats/${caseId}/metadata`);
+      const snap = await get(metadataRef);
+      if (!snap.exists()) return null;
+      const raw = snap.val();
+      const metadata: ChatMetadata = {
+        caseReference: raw.caseReference || caseId,
+        participants: raw.participants || {
+          clientId: '',
+          clientName: '',
+          agentId: '',
+          agentName: '',
+        },
+        createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
+        lastMessage: raw.lastMessage ?? null,
+        lastMessageTime: raw.lastMessageTime ?? null,
+      };
+      return metadata;
+    } catch (error) {
+      logger.error('Failed to get chat metadata', error);
+      return null;
+    }
+  }
   // Send a message (aligned with web app)
   async sendMessage(
     caseId: string,
@@ -273,8 +298,10 @@ class ChatService {
       
       if (cachedData && cachedData.messages && Array.isArray(cachedData.messages)) {
         logger.info('\n\n Initial messages loaded from cache', { caseId, count: cachedData.messages.length });
+        const latest = cachedData.messages.slice(-50);
+        latest.sort((a, b) => a.timestamp - b.timestamp); // Ensure chronological order
         return {
-          messages: cachedData.messages.slice(-50), // Return last 50 from cache
+          messages: latest,
           hasMore: cachedData.hasMore || false,
           totalCount: cachedData.totalCount || 0,
         };
@@ -388,8 +415,8 @@ class ChatService {
       const messagesQuery = query(
         messagesRef,
         orderByChild('sentAt'),
-        limitToLast(limit),
-        startAfter(beforeTimestamp)
+        endAt(beforeTimestamp - 1),
+        limitToLast(limit)
       );
 
       const snapshot = await get(messagesQuery);
@@ -422,16 +449,17 @@ class ChatService {
         messages.push(mappedMessage);
       });
 
-      // Ensure chronological order (oldest → newest)
-      messages.sort((a, b) => a.timestamp - b.timestamp);
+      // Filter to strictly older than the boundary and ensure chronological order (oldest → newest)
+      const filtered = messages.filter(m => m.timestamp < beforeTimestamp);
+      filtered.sort((a, b) => a.timestamp - b.timestamp);
 
       // Update cache with older messages
-      await chatCacheService.prependMessagesToCache(caseId, messages);
+      await chatCacheService.prependMessagesToCache(caseId, filtered);
 
-      logger.info('Older messages loaded from Firebase', { caseId, count: messages.length });
+      logger.info('Older messages loaded from Firebase', { caseId, count: filtered.length });
       return {
-        messages: Array.isArray(messages) ? messages : [],
-        hasMore: messages.length === limit, // If we got exactly the limit, there might be more
+        messages: Array.isArray(filtered) ? filtered : [],
+        hasMore: filtered.length === limit, // If we got exactly the limit, there might be more
       };
     } catch (error) {
       logger.error('Error loading older messages', error);

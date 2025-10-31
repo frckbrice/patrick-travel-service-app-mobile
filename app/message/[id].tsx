@@ -11,7 +11,8 @@ import {
   Alert,Keyboard, KeyboardEvent 
 } from 'react-native';
 import { Avatar } from 'react-native-paper';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -53,7 +54,7 @@ import { casesApi } from '@/lib/api/cases.api';
 }) {
   const onChange = React.useCallback((text: string) => onChangeText(text), [onChangeText]);
   return (
-    <View style={styles.inputWrapper}>
+    <View >
       <RNTextInput
         placeholder={placeholder}
         value={value}
@@ -73,6 +74,8 @@ export default function ChatScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { id: caseId } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const colorScheme = Platform.OS === 'ios' || Platform.OS === 'android' ? (require('react-native').useColorScheme?.() || 'light') : 'light';
   const user = useAuthStore((state) => state.user);
   const [newMessage, setNewMessage] = useState('');
   const [selectedAttachments, setSelectedAttachments] = useState<
@@ -92,6 +95,7 @@ export default function ChatScreen() {
   const processedMessagesRef = useRef<Set<string>>(new Set());
   const latestTimestampRef = useRef<number | undefined>(undefined);
   const chatInitializedRef = useRef(false);
+  const [agentInfo, setAgentInfo] = useState<{ id?: string; name?: string } | null>(null);
 
   useEffect(() => {
     const onShow = (e: KeyboardEvent) => {
@@ -214,25 +218,24 @@ export default function ChatScreen() {
 
         if (fromOthers.length === 0) return;
 
-        // Deduplicate against current state (non-functional update as setData expects array)
-        {
-          const existingIds = new Set(messages.map(m => m.id));
-          const deduped = fromOthers.filter(m => !existingIds.has(m.id));
-          if (deduped.length === 0) return;
+        // Deduplicate against current state snapshot
+        const existingIds = new Set(messages.map(m => m.id));
+        const deduped = fromOthers.filter(m => !existingIds.has(m.id));
+        if (deduped.length === 0) return;
 
-          // Update latest timestamp ref for any logic relying on it
-          latestTimestampRef.current = deduped[deduped.length - 1].timestamp;
+        // Update latest timestamp ref for any logic relying on it
+        latestTimestampRef.current = deduped[deduped.length - 1].timestamp;
 
-          // Scroll to bottom to reveal the new message(s)
-          if (scrollToEndTimeoutRef.current) {
-            clearTimeout(scrollToEndTimeoutRef.current);
-          }
-          scrollToEndTimeoutRef.current = setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: false });
-          }, 50);
+        // Append via pagination hook helper to avoid unnecessary re-renders
+        appendMessages(deduped as any);
 
-          setMessages([...messages, ...deduped]);
+        // Defer scroll to next frame for layout to settle
+        if (scrollToEndTimeoutRef.current) {
+          clearTimeout(scrollToEndTimeoutRef.current);
         }
+        scrollToEndTimeoutRef.current = setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 16);
       },
       50
     );
@@ -244,11 +247,19 @@ export default function ChatScreen() {
     };
   }, [caseId, user]);
 
-  // Update latest timestamp ref when messages change
+  // Update latest timestamp ref when messages change and ensure auto-scroll on growth
+  const messageCountRef = useRef(0);
   useEffect(() => {
     if (messages.length > 0) {
       latestTimestampRef.current = messages[messages.length - 1].timestamp;
     }
+    // Auto-scroll only when list grows
+    if (messages.length > messageCountRef.current) {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      });
+    }
+    messageCountRef.current = messages.length;
   }, [messages]);
 
   // Debug: Monitor when messages are loaded
@@ -368,17 +379,27 @@ useEffect(() => {
     if (chatInitializedRef.current) return;
     if (!user || !caseId) return;
     try {
-      const resp = await casesApi.getCaseById(caseId);
+      // Resolve true case reference via chat metadata (Firebase chat ID -> caseReference)
+      const metadata = await chatService.getChatMetadata(caseId);
+      const trueCaseId = metadata?.caseReference || caseId;
+      // Prefer agent info from metadata if present
+      if (metadata?.participants?.agentId || metadata?.participants?.agentName) {
+        setAgentInfo({ id: metadata.participants.agentId, name: metadata.participants.agentName });
+      }
+
+      const resp = await casesApi.getCaseById(trueCaseId);
       const c: any = resp?.data;
       if (resp?.success && c?.assignedAgent) {
         await chatService.initializeConversation(
           caseId,
-          c.referenceNumber || caseId,
+          c.referenceNumber || trueCaseId,
           user.id,
           `${user.firstName} ${user.lastName}`,
           c.assignedAgent.id,
           `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim()
         );
+        // Ensure UI header shows correct agent info
+        setAgentInfo({ id: c.assignedAgent.id, name: `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim() });
         chatInitializedRef.current = true;
       }
     } catch {}
@@ -608,8 +629,8 @@ const handlePickFile = useCallback(async () => {
     }
   }, []);
 
- // Memoize render function for performance
- const renderMessage = useCallback(
+  // Message row (memoized) to reduce re-renders when typing/sending
+  const MessageRow = memo(
   ({ item, index }: { item: ChatMessage; index: number }) => {
     const isMyMessage = item.senderId === user?.id;
     const AnimatedView = isMyMessage
@@ -624,7 +645,7 @@ const handlePickFile = useCallback(async () => {
           isMyMessage && styles.myMessageContainer,
         ]}
       >
-        {!isMyMessage && (
+        {/* {!isMyMessage && (
           <Avatar.Text
             size={36}
             label={item.senderName.charAt(0)}
@@ -632,13 +653,26 @@ const handlePickFile = useCallback(async () => {
             color={COLORS.primary}
             labelStyle={styles.avatarLabel}
           />
-        )}
+        )} */}
         <View
           style={[
             styles.messageBubble,
             isMyMessage && styles.myMessageBubble,
           ]}
         >
+          {/* Bubble tails - WhatsApp/Telegram style (rounded) */}
+          {!isMyMessage ? (
+            <>
+              <View style={styles.tailLeftBubble} />
+              <View style={styles.tailLeftMask} />
+            </>
+          ) : (
+            <>
+              <View style={styles.tailRightBubble} />
+              <View style={styles.tailRightMask} />
+            </>
+          )}
+
           {!isMyMessage && (
             <Text style={styles.senderName}>{item.senderName}</Text>
           )}
@@ -769,8 +803,28 @@ const handlePickFile = useCallback(async () => {
       </AnimatedView>
     );
   },
-  [user, formatMessageTime, handleDownloadAttachment, handleRetryMessage, handleDeleteFailedMessage]
-);
+    (prevProps, nextProps) => {
+      const p = prevProps.item;
+      const n = nextProps.item;
+      // Only re-render if identity or critical fields changed
+      return (
+        p.id === n.id &&
+        p.tempId === n.tempId &&
+        p.status === n.status &&
+        p.message === n.message &&
+        p.timestamp === n.timestamp &&
+        (p.attachments?.length || 0) === (n.attachments?.length || 0)
+      );
+    }
+  );
+
+  // Memoized renderItem to keep stable reference
+  const renderMessage = useCallback(
+    ({ item, index }: { item: ChatMessage; index: number }) => (
+      <MessageRow item={item} index={index} />
+    ),
+    []
+  );
   // Memoize key extractor with unique key generation
  // Memoize key extractor with unique key generation
  const keyExtractor = useCallback((item: ChatMessage, index: number) => {
@@ -853,6 +907,33 @@ return (
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
+    {/* Header consistent with profile page, with WhatsApp-like agent info */}
+    <ModernHeader
+      title={agentInfo?.name || (t('messages.chat') as string) || 'Chat'}
+      subtitle={(t('messages.online') as string) || 'online'}
+      showBackButton
+      leftActions={(
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.headerAvatar}>
+            <Text style={styles.headerAvatarLabel}>
+              {(agentInfo?.name || 'A').charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        </View>
+      )}
+      rightActions={(
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity style={{ paddingHorizontal: 8 }}>
+            <MaterialCommunityIcons name="video" size={22} color={'#FFF'} />
+          </TouchableOpacity>
+          <TouchableOpacity style={{ paddingHorizontal: 4 }}>
+            <MaterialCommunityIcons name="phone" size={22} color={'#FFF'} />
+          </TouchableOpacity>
+        </View>
+      )}
+      variant="gradient"
+      gradientColors={[COLORS.primary, '#1D4ED8']}
+    />
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -956,6 +1037,45 @@ container: {
   backgroundColor: '#E5DDD5',
 },
 
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    paddingTop: 8,
+    backgroundColor: COLORS.primary,
+  },
+  headerBackBtn: {
+    padding: 4,
+    marginRight: 4,
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  headerAvatarLabel: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+  },
+
 messagesList: {
   paddingHorizontal: SPACING.md,
   paddingTop: SPACING.md,
@@ -996,11 +1116,53 @@ messageBubble: {
   shadowOpacity: 0.1,
   shadowRadius: 1.5,
   elevation: 1,
+  position: 'relative',
 },
 myMessageBubble: {
   backgroundColor: '#1F7CE6',
   alignSelf: 'flex-end',
 },
+  // Bubble tails - WhatsApp/Telegram-like curved tails using layered circles
+  tailLeftBubble: {
+    position: 'absolute',
+    bottom: -1,
+    left: -6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF', // same as incoming bubble
+    zIndex: 1,
+  },
+  tailLeftMask: {
+    position: 'absolute',
+    bottom: -1,
+    left: -8,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#E5DDD5', // same as chat background to carve the curve
+    zIndex: 2,
+  },
+  tailRightBubble: {
+    position: 'absolute',
+    bottom: -1,
+    right: -6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#1F7CE6', // same as outgoing bubble
+    zIndex: 1,
+  },
+  tailRightMask: {
+    position: 'absolute',
+    bottom: -1,
+    right: -8,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#E5DDD5', // same as chat background to carve the curve
+    zIndex: 2,
+  },
 senderName: {
   fontSize: 12,
   fontWeight: '600',

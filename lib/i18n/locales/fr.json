@@ -226,6 +226,7 @@
     "tapToViewPDF": "Appuyez pour voir le PDF"
   },
   "messages": {
+    "online": "En ligne",
     "conversations": "Conversations",
     "chat": "Discussion",
     "noConversations": "Pas encore de conversations",
