@@ -345,6 +345,9 @@ class ChatService {
         messages.push(mappedMessage);
       });
 
+      // Ensure chronological order (oldest → newest)
+      messages.sort((a, b) => a.timestamp - b.timestamp);
+
       logger.info('Messages processed from Firebase', { caseId, count: messages.length });
 
       // Get total count for pagination info
@@ -418,6 +421,9 @@ class ChatService {
 
         messages.push(mappedMessage);
       });
+
+      // Ensure chronological order (oldest → newest)
+      messages.sort((a, b) => a.timestamp - b.timestamp);
 
       // Update cache with older messages
       await chatCacheService.prependMessagesToCache(caseId, messages);

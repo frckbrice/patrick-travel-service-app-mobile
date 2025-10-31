@@ -186,12 +186,14 @@ class ChatCacheService {
   ): Promise<void> {
     try {
       const now = Date.now();
+      // Ensure chronological order (oldest → newest)
+      const sortedMessages = [...messages].sort((a, b) => a.timestamp - b.timestamp);
       // Calculate oldest timestamp for pagination (oldest = boundary for loading older messages)
-      const oldestTimestamp = messages.length > 0 ? Math.min(...messages.map(m => m.timestamp)) : 0;
+      const oldestTimestamp = sortedMessages.length > 0 ? Math.min(...sortedMessages.map(m => m.timestamp)) : 0;
       
       const cacheEntry: CacheEntry<PaginatedMessageCache> = {
         data: {
-          messages,
+          messages: sortedMessages,
           hasMore,
           oldestTimestamp,
           totalCount,
