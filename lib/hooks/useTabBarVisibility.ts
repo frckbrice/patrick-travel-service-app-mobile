@@ -10,7 +10,7 @@ interface UseTabBarVisibilityReturn {
 
 export const useTabBarVisibility = (): UseTabBarVisibilityReturn => {
   const [isTabBarVisible, setIsTabBarVisible] = useState(false);
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastInteractionRef = useRef<number>(Date.now());
 
   const clearHideTimeout = () => {

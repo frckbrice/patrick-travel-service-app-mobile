@@ -55,6 +55,46 @@ export interface ChatMetadata {
   lastMessageTime: number | null;
 }
 
+// Local conversation type used within this service
+export interface Conversation {
+  id: string;
+  caseId: string;
+  caseReference: string;
+  lastMessage: string | null;
+  lastMessageTime: number | null;
+  unreadCount: number;
+  participants: ChatParticipants;
+}
+
+// Types for API responses used in mapping (no 'any')
+interface ApiChatSender {
+  firstName?: string;
+  lastName?: string;
+}
+
+interface ApiChatAttachment {
+  fileName?: string;
+  name?: string;
+  url: string;
+  mimeType?: string;
+  type?: string;
+  fileSize?: number;
+  size?: number;
+}
+
+interface ApiChatMessage {
+  id: string;
+  caseId?: string;
+  senderId: string;
+  senderFirstName?: string;
+  senderLastName?: string;
+  sender?: ApiChatSender;
+  content: string;
+  sentAt: string | number | Date;
+  isRead: boolean;
+  attachments?: ApiChatAttachment[];
+}
+
 class ChatService {
   // Send a message (aligned with web app)
   async sendMessage(
@@ -222,28 +262,28 @@ class ChatService {
     totalCount: number;
   }> {
     try {
-      logger.info('loadInitialMessages called', { caseId });
+      logger.info('\n\n loadInitialMessages from chat service called', { caseId });
       
       // Clear corrupted cache entries first
       await chatCacheService.clearCorruptedCache();
       
       // Try cache first
       const cachedData = await chatCacheService.getCachedMessages(caseId);
-      logger.info('Cache check completed', { caseId, hasCache: !!cachedData });
+      logger.info('\n\n Cache check completed', { caseId, hasCache: !!cachedData, cachedData });
       
       if (cachedData && cachedData.messages && Array.isArray(cachedData.messages)) {
-        logger.info('Initial messages loaded from cache', { caseId, count: cachedData.messages.length });
+        logger.info('\n\n Initial messages loaded from cache', { caseId, count: cachedData.messages.length });
         return {
-          messages: cachedData.messages.slice(-20), // Return last 20 from cache
+          messages: cachedData.messages.slice(-50), // Return last 50 from cache
           hasMore: cachedData.hasMore || false,
           totalCount: cachedData.totalCount || 0,
         };
       }
 
       // Load from Firebase
-      logger.info('Loading from Firebase', { caseId });
+      logger.info('\n\n Loading from Firebase', { caseId });
       const messagesRef = ref(database, `chats/${caseId}/messages`);
-      logger.info('Messages ref created', { path: messagesRef.toString() });
+      logger.info('\n\n Messages ref created', { path: messagesRef.toString() });
       
       // Try without orderByChild first to see if data exists
       let messagesQuery;
@@ -253,19 +293,19 @@ class ChatService {
           orderByChild('sentAt'),
           limitToLast(20)
         );
-      } catch (error) {
+      } catch (error: any) {
         logger.warn('orderByChild failed, trying without ordering', { caseId, error: error.message });
         messagesQuery = query(messagesRef, limitToLast(20));
       }
 
       let snapshot = await get(messagesQuery);
-      logger.info('Firebase snapshot received', { caseId, size: snapshot.size, exists: snapshot.exists() });
+      logger.info('\n\n Firebase snapshot received', { caseId, size: snapshot.size, exists: snapshot.exists() });
       
       // If no data with query, try without any restrictions
       if (!snapshot.exists() || snapshot.size === 0) {
-        logger.info('No data with query, trying without restrictions', { caseId });
+        logger.info('\n\n No data with query, trying without restrictions', { caseId });
         snapshot = await get(messagesRef);
-        logger.info('Direct ref snapshot', { caseId, size: snapshot.size, exists: snapshot.exists() });
+        logger.info('\n\n Direct ref snapshot', { caseId, size: snapshot.size, exists: snapshot.exists() });
       }
       
       // Log the actual data structure
@@ -487,13 +527,12 @@ class ChatService {
         if (msg.senderId !== userId && !msg.isRead) {
           const messageRef = ref(database, `chats/${caseId}/messages/${msgSnap.key}`);
           updatePromises.push(
-            update(messageRef, { isRead: true }).catch((err) => {
+            update(messageRef, { isRead: true }).catch((err: any) => {
               if (err.code !== 'PERMISSION_DENIED') {
-                logger.error('Failed to mark message as read', err, {
-                  caseId,
-                  messageId: msgSnap.key,
-                  userId,
-                });
+                logger.error(
+                  `Failed to mark message as read (caseId=${caseId}, messageId=${msgSnap.key}, userId=${userId})`,
+                  err
+                );
               }
             })
           );
@@ -509,7 +548,7 @@ class ChatService {
         });
       }
     } catch (error) {
-      logger.error('Failed to mark messages as read', error, { caseId, userId });
+      logger.error(`Failed to mark messages as read (caseId=${caseId}, userId=${userId})`, error);
       // Don't throw - this is non-critical
     }
   }
@@ -733,7 +772,7 @@ class ChatService {
         logger.warn('Missing participant IDs during deletion', { caseId, participants });
       }
     } catch (error) {
-      logger.error('Failed to delete Firebase chat or clean up userChats', error, { caseId });
+      logger.error(`Failed to delete Firebase chat or clean up userChats (caseId=${caseId})`, error);
       throw error;
     }
   }
@@ -958,22 +997,31 @@ class ChatService {
       
       if (result.success && result.data) {
         // Convert API message format to ChatMessage format
-        const apiMessage = result.data;
+        const apiMessage = result.data as unknown as ApiChatMessage;
+        const firstName = apiMessage.senderFirstName ?? apiMessage.sender?.firstName ?? '';
+        const lastName = apiMessage.senderLastName ?? apiMessage.sender?.lastName ?? '';
+
+        const attachments: ChatMessage['attachments'] = (apiMessage.attachments || []).map((att) => ({
+          name: att.fileName ?? att.name ?? 'file',
+          url: att.url,
+          type: att.mimeType ?? att.type ?? 'application/octet-stream',
+          size: att.fileSize ?? att.size ?? 0,
+        }));
+
+        const sentAtMs = typeof apiMessage.sentAt === 'number'
+          ? apiMessage.sentAt
+          : new Date(apiMessage.sentAt).getTime();
+
         return {
           id: apiMessage.id,
           caseId: apiMessage.caseId || '',
           senderId: apiMessage.senderId,
-          senderName: `${apiMessage.sender?.firstName || ''} ${apiMessage.sender?.lastName || ''}`.trim(),
+          senderName: `${firstName} ${lastName}`.trim(),
           senderRole: 'AGENT', // Default, could be determined from user role
           message: apiMessage.content,
-          timestamp: new Date(apiMessage.sentAt).getTime(),
+          timestamp: sentAtMs,
           isRead: apiMessage.isRead,
-          attachments: apiMessage.attachments?.map(att => ({
-            name: att.fileName,
-            url: att.url,
-            type: att.mimeType,
-            size: att.fileSize,
-          })) || [],
+          attachments,
         };
       } else {
         logger.error('Failed to get chat message via API', result.error);

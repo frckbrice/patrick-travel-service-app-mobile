@@ -36,6 +36,7 @@ import { logger } from '../../lib/utils/logger';
 import { SafeAreaView } from 'react-native-safe-area-context'; // Make sure this import exists
 
 import { ModernHeader } from '../../components/ui/ModernHeader';
+import { casesApi } from '@/lib/api/cases.api';
 
 
  // Standalone memoized chat input prevents parent re-renders on keystrokes
@@ -52,7 +53,7 @@ import { ModernHeader } from '../../components/ui/ModernHeader';
 }) {
   const onChange = React.useCallback((text: string) => onChangeText(text), [onChangeText]);
   return (
-    <View style={styles.inputWrapperInner}>
+    <View style={styles.inputWrapper}>
       <RNTextInput
         placeholder={placeholder}
         value={value}
@@ -134,7 +135,7 @@ export default function ChatScreen() {
   } = useChatPagination(
     caseId || '',
     chatService.loadInitialMessages,
-    (beforeTimestamp: number) => chatService.loadOlderMessages(caseId || '', beforeTimestamp)
+    chatService.loadOlderMessages
   );
 
 
@@ -152,16 +153,10 @@ export default function ChatScreen() {
         logger.info('Starting chat initialization', { caseId });
         const result = await loadInitial();
         
-        // Update latestTimestampRef after loading initial messages
-        // Use the returned data instead of messages state (which updates asynchronously)
-        const loadedMessages = result?.data || messages;
-        if (loadedMessages.length > 0) {
-          const latestMsg = loadedMessages[loadedMessages.length - 1];
-          latestTimestampRef.current = latestMsg.timestamp;
-          logger.info('Updated latestTimestampRef', { timestamp: latestTimestampRef.current, messageId: latestMsg.id });
-        }
-        
-        logger.info('Chat initialization completed', { caseId, messageCount: loadedMessages.length });
+        console.log("\n\n messages: ", result);
+        // Note: messages state updates asynchronously after loadInitial
+        // latestTimestampRef will be updated in the messages effect
+        logger.info('Chat initialization completed', { caseId });
       } catch (error) {
         logger.error('Failed to initialize chat', error);
       }
@@ -219,11 +214,11 @@ export default function ChatScreen() {
 
         if (fromOthers.length === 0) return;
 
-        // Deduplicate against current state via functional update to avoid effect dependencies
-        setMessages((prev) => {
-          const existingIds = new Set(prev.map(m => m.id));
+        // Deduplicate against current state (non-functional update as setData expects array)
+        {
+          const existingIds = new Set(messages.map(m => m.id));
           const deduped = fromOthers.filter(m => !existingIds.has(m.id));
-          if (deduped.length === 0) return prev;
+          if (deduped.length === 0) return;
 
           // Update latest timestamp ref for any logic relying on it
           latestTimestampRef.current = deduped[deduped.length - 1].timestamp;
@@ -236,8 +231,8 @@ export default function ChatScreen() {
             flatListRef.current?.scrollToEnd({ animated: false });
           }, 50);
 
-          return [...prev, ...deduped];
-        });
+          setMessages([...messages, ...deduped]);
+        }
       },
       50
     );
@@ -295,15 +290,13 @@ export default function ChatScreen() {
       status: 'pending', // Mark as pending
     };
 
-    // 1. Add message to UI immediately
-    setMessages((prev) => {
-      // Check for duplicates
-      const exists = prev.some(m => m.tempId === tempId || (m.id === tempId));
-      if (exists) return prev;
-      
-      // Add to end of array
-      return [...prev, optimisticMessage];
-    });
+    // 1. Add message to UI immediately (setData expects array, not updater fn)
+    {
+      const exists = messages.some(m => m.tempId === tempId || (m.id === tempId));
+      if (!exists) {
+        setMessages([...messages, optimisticMessage]);
+      }
+    }
 
     // 2. Clear input immediately for better UX
     setNewMessage('');
@@ -325,15 +318,15 @@ export default function ChatScreen() {
         attachments.length > 0 ? attachments : undefined
       );
 
-      // 5. Update message status to sent
-      setMessages((prev) => {
-        const index = prev.findIndex((m) => m.tempId === tempId);
-        if (index === -1) return prev;
-
-        const updated = [...prev];
-        updated[index] = { ...prev[index], status: 'sent' };
-        return updated;
-      });
+      // 5. Update message status to sent (setData expects array, not updater fn)
+      {
+        const index = messages.findIndex((m) => m.tempId === tempId);
+        if (index !== -1) {
+          const updated = [...messages];
+          updated[index] = { ...updated[index], status: 'sent' };
+          setMessages(updated);
+        }
+      }
 
       logger.info('Message sent successfully', {
         caseId,
@@ -343,19 +336,19 @@ export default function ChatScreen() {
     } catch (error: any) {
       logger.error('Failed to send message', error);
 
-      // 6. PERFORMANCE: Mark as failed efficiently (avoid full map)
-      setMessages((prev) => {
-        const index = prev.findIndex((m) => m.tempId === tempId);
-        if (index === -1) return prev;
-
-        const updated = [...prev];
-        updated[index] = {
-          ...prev[index],
-          status: 'failed',
-          error: error.message || 'Failed to send'
-        };
-        return updated;
-      });
+      // 6. PERFORMANCE: Mark as failed efficiently (setData expects array, not updater fn)
+      {
+        const index = messages.findIndex((m) => m.tempId === tempId);
+        if (index !== -1) {
+          const updated = [...messages];
+          updated[index] = {
+            ...updated[index],
+            status: 'failed',
+            error: error.message || 'Failed to send'
+          };
+          setMessages(updated);
+        }
+      }
 
       // Friendly feedback for permission issues
       const errorMessage = String(error?.message || '');
@@ -398,15 +391,15 @@ useEffect(() => {
   async (failedMessage: ChatMessage) => {
     if (!user || !caseId) return;
 
-    // PERFORMANCE: Mark as pending efficiently
-    setMessages((prev) => {
-      const index = prev.findIndex((m) => m.id === failedMessage.id);
-      if (index === -1) return prev;
-
-      const updated = [...prev];
-      updated[index] = { ...prev[index], status: 'pending', error: undefined };
-      return updated;
-    });
+     // PERFORMANCE: Mark as pending efficiently (setData expects array, not updater fn)
+     {
+       const index = messages.findIndex((m) => m.id === failedMessage.id);
+       if (index !== -1) {
+         const updated = [...messages];
+         updated[index] = { ...updated[index], status: 'pending', error: undefined };
+         setMessages(updated);
+       }
+     }
 
     try {
         await chatService.sendMessage(
@@ -418,33 +411,33 @@ useEffect(() => {
         failedMessage.attachments
       );
 
-      // PERFORMANCE: Mark as sent efficiently
-      setMessages((prev) => {
-        const index = prev.findIndex((m) => m.id === failedMessage.id);
-        if (index === -1) return prev;
-
-        const updated = [...prev];
-        updated[index] = { ...prev[index], status: 'sent' };
-        return updated;
-      });
+      // PERFORMANCE: Mark as sent efficiently (setData expects array, not updater fn)
+      {
+        const index = messages.findIndex((m) => m.id === failedMessage.id);
+        if (index !== -1) {
+          const updated = [...messages];
+          updated[index] = { ...updated[index], status: 'sent' };
+          setMessages(updated);
+        }
+      }
 
       logger.info('Message retry successful', { messageId: failedMessage.id });
     } catch (error: any) {
       logger.error('Message retry failed', error);
 
-      // PERFORMANCE: Mark as failed efficiently
-      setMessages((prev) => {
-        const index = prev.findIndex((m) => m.id === failedMessage.id);
-        if (index === -1) return prev;
-
-        const updated = [...prev];
-        updated[index] = {
-          ...prev[index],
-          status: 'failed',
-          error: error.message || 'Failed to send'
-        };
-        return updated;
-      });
+      // PERFORMANCE: Mark as failed efficiently (setData expects array, not updater fn)
+      {
+        const index = messages.findIndex((m) => m.id === failedMessage.id);
+        if (index !== -1) {
+          const updated = [...messages];
+          updated[index] = {
+            ...updated[index],
+            status: 'failed',
+            error: error.message || 'Failed to send'
+          };
+          setMessages(updated);
+        }
+      }
     }
   },
   [user, caseId]
@@ -462,7 +455,7 @@ useEffect(() => {
           text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
-            setMessages((prev) => prev.filter((m) => m.id !== messageId));
+            setMessages(messages.filter((m) => m.id !== messageId));
             logger.info('Failed message deleted', { messageId });
           },
         },
@@ -795,7 +788,7 @@ const handlePickFile = useCallback(async () => {
     if (hasMore && !isLoadingMore && messages.length > 0) {
       const oldestMessage = messages[messages.length - 1];
       if (oldestMessage) {
-        loadMore(oldestMessage.timestamp);
+        loadMore();
       }
     }
   }, [hasMore, isLoadingMore, messages.length, loadMore]);
