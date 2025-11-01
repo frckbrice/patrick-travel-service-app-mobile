@@ -951,7 +951,6 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  Alert,
   Text,
   TouchableOpacity,
   Platform,
@@ -970,9 +969,12 @@ import { toast } from '../../lib/services/toast';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
-import { useImageUploader } from '../../lib/uploadthing';
+import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { userApi } from '../../lib/api/user.api';
 import { useAuthStore } from '../../stores/auth/authStore';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { logger } from '../../lib/utils/logger';
+import { Alert } from '../../lib/utils/alert';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -980,35 +982,9 @@ export default function ProfileScreen() {
   const { user, logout, updateUser } = useAuth();
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
   const colors = useThemeColors();
+  const scrollProps = useTabBarScroll();
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-
-  // UploadThing Expo: high-performance native upload
-  const { openImagePicker, isUploading } = useImageUploader('imageUploader', {
-    onClientUploadComplete: async (res: any[]) => {
-      try {
-        const uploadedUrl = res?.[0]?.ufsUrl || res?.[0]?.url;
-        if (!uploadedUrl) throw new Error('No URL returned from upload');
-
-        // Optimistic UI + store
-        setProfileImage(uploadedUrl);
-        useAuthStore.getState().updateUserOptimistic({ profilePicture: uploadedUrl });
-
-        const updateResp = await userApi.updateProfile({ profilePicture: uploadedUrl });
-        if (!updateResp.success || !updateResp.data) throw new Error(updateResp.error || 'Update failed');
-
-        await updateUser(updateResp.data);
-        toast.success({ title: 'Success', message: 'Profile photo updated successfully!' });
-      } catch (e) {
-        useAuthStore.getState().revertUserUpdate();
-        Alert.alert(t('common.error'), 'Failed to update profile. Please try again.');
-      }
-    },
-    onUploadError: (error: any) => {
-      useAuthStore.getState().revertUserUpdate();
-      Alert.alert(t('common.error'), error?.message || 'Upload failed');
-    },
-  });
 
   const handleLogout = useCallback(async () => {
     setLogoutDialogVisible(false);
@@ -1029,6 +1005,42 @@ export default function ProfileScreen() {
     ]);
   }, [t]);
 
+  const handleImageUpload = useCallback(async (asset: ImagePicker.ImagePickerAsset) => {
+    try {
+      setIsUploadingImage(true);
+
+      // Upload file to API
+      const uploadResult = await uploadFileToAPI(
+        asset.uri,
+        asset.fileName || `profile_${Date.now()}.jpg`,
+        asset.mimeType || 'image/jpeg'
+      );
+
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+
+      // Optimistic UI + store
+      setProfileImage(uploadResult.url);
+      useAuthStore.getState().updateUserOptimistic({ profilePicture: uploadResult.url });
+
+      // Update profile with new image URL
+      const updateResp = await userApi.updateProfile({ profilePicture: uploadResult.url });
+      if (!updateResp.success || !updateResp.data) {
+        throw new Error(updateResp.error || 'Update failed');
+      }
+
+      await updateUser(updateResp.data);
+      toast.success({ title: 'Success', message: 'Profile photo updated successfully!' });
+    } catch (error: any) {
+      useAuthStore.getState().revertUserUpdate();
+      logger.error('Failed to upload profile image', error);
+      Alert.alert(t('common.error'), error.message || 'Failed to update profile photo');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  }, [t, updateUser]);
+
   const handleChangeProfilePhoto = useCallback(async () => {
     try {
       Alert.alert(
@@ -1038,47 +1050,85 @@ export default function ProfileScreen() {
           { text: t('common.cancel'), style: 'cancel' },
           {
             text: 'Take Photo',
-            onPress: () => openImagePicker({
-              input: undefined as any,
-              source: 'camera',
-              onInsufficientPermissions: () => {
-                Alert.alert(
-                  'No Permissions',
-                  'You need to grant permission to your Photos/Camera',
-                  [
-                    { text: 'Dismiss' },
-                    { text: 'Open Settings', onPress: () => Linking.openSettings() },
-                  ],
-                );
-              },
-            }),
+            onPress: async () => {
+              try {
+                // Request camera permissions
+                const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                if (status !== 'granted') {
+                  Alert.alert(
+                    'No Permissions',
+                    'You need to grant permission to your Camera',
+                    [
+                      { text: 'Dismiss' },
+                      { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                    ]
+                  );
+                  return;
+                }
+
+                // Launch camera
+                const result = await ImagePicker.launchCameraAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  aspect: [1, 1],
+                  quality: 0.8,
+                });
+
+                if (result.canceled || !result.assets[0]) {
+                  return;
+                }
+
+                await handleImageUpload(result.assets[0]);
+              } catch (error: any) {
+                logger.error('Error taking photo', error);
+                Alert.alert(t('common.error'), error.message || 'Failed to take photo');
+              }
+            },
           },
           {
             text: 'Choose from Library',
-            onPress: () => openImagePicker({
-              input: undefined as any,
-              source: 'library',
-              onInsufficientPermissions: () => {
-                Alert.alert(
-                  'No Permissions',
-                  'You need to grant permission to your Photos/Camera',
-                  [
-                    { text: 'Dismiss' },
-                    { text: 'Open Settings', onPress: () => Linking.openSettings() },
-                  ],
-                );
-              },
-            }),
+            onPress: async () => {
+              try {
+                // Request media library permissions
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (status !== 'granted') {
+                  Alert.alert(
+                    'No Permissions',
+                    'You need to grant permission to your Photos',
+                    [
+                      { text: 'Dismiss' },
+                      { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                    ]
+                  );
+                  return;
+                }
+
+                // Launch image picker
+                const result = await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  aspect: [1, 1],
+                  quality: 0.8,
+                });
+
+                if (result.canceled || !result.assets[0]) {
+                  return;
+                }
+
+                await handleImageUpload(result.assets[0]);
+              } catch (error: any) {
+                logger.error('Error picking image', error);
+                Alert.alert(t('common.error'), error.message || 'Failed to pick image');
+              }
+            },
           },
         ]
       );
     } catch (error) {
-      console.error('Error changing profile photo:', error);
+      logger.error('Error changing profile photo', error);
       Alert.alert(t('common.error'), 'Failed to change profile photo. Please try again.');
     }
-  }, [t, openImagePicker]);
-
-  // NOTE: Upload handled by useImageUploader callbacks above
+  }, [t, handleImageUpload]);
 
   const MenuCard = useCallback(
     ({ icon, title, description, onPress, danger = false }: any) => (
@@ -1128,6 +1178,8 @@ export default function ProfileScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          onScroll={scrollProps.onScroll}
+          scrollEventThrottle={scrollProps.scrollEventThrottle}
         >
           {/* Profile Header Card - Now serves as the header */}
           <Animated.View

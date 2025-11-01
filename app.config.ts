@@ -39,6 +39,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   web: {
     favicon: './assets/favicon.png',
     bundler: 'metro',
+    // output: 'server', // Required for API routes support (app/api/*.ts)
   },
   scheme: 'patrick-travel',
   plugins: [
@@ -71,8 +72,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     googleAndroidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    uploadthingApiKey: process.env.EXPO_PUBLIC_UPLOADTHING_API_KEY,
-    uploadthingAppId: process.env.EXPO_PUBLIC_UPLOADTHING_APP_ID,
     eas: {
       projectId: '2c78e03f-b77b-4a17-afde-9d7cd2171610',
     },

@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Text, Platform, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, FlatList, Text, Platform, TouchableOpacity, DeviceEventEmitter, ScrollView } from 'react-native';
 import { Avatar, Badge } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import type { Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -14,7 +15,9 @@ import { EmptyState } from '../../components/ui';
 import { ModernHeader } from '../../components/ui/ModernHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { COLORS, SPACING } from '../../lib/constants';
-import { format, isToday, isYesterday } from 'date-fns';
+import { getInitials, getConversationTitle, getNotificationBadgeColor, getNotificationIcon, getNotificationPriority, formatTime, formatEmailDate } from '../../lib/utils/notifications';
+import { logger } from '../../lib/utils/logger';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 
 type TabType = 'notifications' | 'messages' | 'inbox' | 'sent';
 
@@ -22,6 +25,7 @@ export default function NotificationsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const scrollProps = useTabBarScroll();
   const [activeTab, setActiveTab] = useState<TabType>('notifications');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -48,14 +52,17 @@ export default function NotificationsScreen() {
           })
         ]);
         
+        console.log("\n\n the conversations info: ", { conversationsData });
         setConversations(conversationsData);
         
         if (notificationsResponse.success && notificationsResponse.data) {
+          console.log("\n\n the notifications info: ", { notificationsResponse });
           setNotifications(notificationsResponse.data);
         }
         
         if (emailsResponse.success && emailsResponse.data) {
-          setEmails(emailsResponse.data);
+          console.log("\n\n the emails info: ", { emailsResponse });
+          setEmails(emailsResponse.data || []);
         }
         
         // Set up real-time listener for conversation updates
@@ -80,109 +87,34 @@ export default function NotificationsScreen() {
     });
   }, [user]);
 
-  // Generate initials for avatar
-  const getInitials = (name: string) => {
-    if (!name) return '?';
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-  };
+  // Refresh notifications/emails when screen regains focus (after reading an email)
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      let isActive = true;
+      const refresh = async () => {
+        try {
+          const [notificationsResponse, emailsResponse] = await Promise.all([
+            notificationsApi.getNotifications().catch(() => ({ success: true, data: [] })),
+            messagesApi.getEmails(1, 50).catch(() => ({ success: true, data: [] })),
+          ]);
+          if (!isActive) return;
+          if (notificationsResponse.success && notificationsResponse.data) {
+            setNotifications(notificationsResponse.data);
+          }
+          if (emailsResponse.success && emailsResponse.data) {
+            setEmails(emailsResponse.data);
+          }
+        } catch { }
+      };
+      refresh();
+      return () => {
+        isActive = false;
+      };
+    }, [user])
+  );
 
-  // Get conversation title based on context
-  const getConversationTitle = (item: Conversation) => {
-    // If user is client, show agent name
-    if (item.participants.agentName && user?.role === 'CLIENT') {
-      return item.participants.agentName;
-    }
-    // If user is agent, show client name
-    if (item.participants.clientName && user?.role !== 'CLIENT') {
-      return item.participants.clientName;
-    }
-    // Fallback to case reference (truncated)
-    return item.caseReference?.substring(0, 20) + (item.caseReference?.length > 20 ? '...' : '') || 'Case';
-  };
-
-  // Get notification badge color based on type
-  const getNotificationBadgeColor = (type: NotificationType) => {
-    switch (type) {
-      case NotificationType.CASE_STATUS_UPDATE:
-        return '#3B82F6'; // Blue
-      case NotificationType.NEW_MESSAGE:
-        return '#10B981'; // Green
-      case NotificationType.NEW_EMAIL:
-        return '#F59E0B'; // Orange
-      case NotificationType.DOCUMENT_UPLOADED:
-        return '#8B5CF6'; // Purple
-      case NotificationType.DOCUMENT_VERIFIED:
-        return '#10B981'; // Green
-      case NotificationType.DOCUMENT_REJECTED:
-        return '#EF4444'; // Red
-      case NotificationType.CASE_ASSIGNED:
-        return '#06B6D4'; // Cyan
-      case NotificationType.SYSTEM_ANNOUNCEMENT:
-        return '#6B7280'; // Gray
-      default:
-        return COLORS.primary;
-    }
-  };
-
-  // Get notification icon based on type
-  const getNotificationIcon = (type: NotificationType) => {
-    switch (type) {
-      case NotificationType.CASE_STATUS_UPDATE:
-        return 'file-document-edit';
-      case NotificationType.NEW_MESSAGE:
-        return 'message-text';
-      case NotificationType.NEW_EMAIL:
-        return 'email';
-      case NotificationType.DOCUMENT_UPLOADED:
-        return 'upload';
-      case NotificationType.DOCUMENT_VERIFIED:
-        return 'check-circle';
-      case NotificationType.DOCUMENT_REJECTED:
-        return 'close-circle';
-      case NotificationType.CASE_ASSIGNED:
-        return 'account-plus';
-      case NotificationType.SYSTEM_ANNOUNCEMENT:
-        return 'bullhorn';
-      default:
-        return 'bell';
-    }
-  };
-
-  // Get notification priority badge
-  const getNotificationPriority = (type: NotificationType) => {
-    switch (type) {
-      case NotificationType.DOCUMENT_REJECTED:
-      case NotificationType.CASE_STATUS_UPDATE:
-        return 'URGENT';
-      case NotificationType.NEW_MESSAGE:
-      case NotificationType.NEW_EMAIL:
-        return 'HIGH';
-      case NotificationType.DOCUMENT_UPLOADED:
-      case NotificationType.DOCUMENT_VERIFIED:
-        return 'NORMAL';
-      default:
-        return 'LOW';
-    }
-  };
-
-  // Smart time formatting
-  const formatTime = (timestamp: number) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    if (isToday(date)) {
-      return format(date, 'h:mm a');
-    } else if (isYesterday(date)) {
-      return 'Yesterday';
-    } else if (new Date().getTime() - timestamp < 7 * 24 * 60 * 60 * 1000) {
-      return format(date, 'EEE'); // Day of week
-    } else {
-      return format(date, 'MMM d');
-    }
-  };
+  // helpers moved to utils
 
   // Mark all notifications as read
   const markAllAsRead = useCallback(async () => {
@@ -194,6 +126,8 @@ export default function NotificationsScreen() {
           prev.map(n => ({ ...n, isRead: true, readAt: new Date() }))
         );
         console.log('All notifications marked as read');
+        // Inform other screens (Home) to refresh badges
+        DeviceEventEmitter.emit('notifications:markAllRead');
       } else {
         console.error('Failed to mark all notifications as read:', result.error);
       }
@@ -230,6 +164,8 @@ export default function NotificationsScreen() {
                       prev.map(n => n.id === item.id ? { ...n, isRead: true, readAt: new Date() } : n)
                     );
                     console.log('Notification marked as read:', item.id);
+                    // Inform other screens (Home) to refresh badges
+                    DeviceEventEmitter.emit('notifications:read', { id: item.id });
                   } else {
                     console.error('Failed to mark notification as read:', result.error);
                   }
@@ -242,6 +178,12 @@ export default function NotificationsScreen() {
                 const handleEmailNavigation = async () => {
                   let emailId: string | null = null;
                   
+                  // Short-circuit for web dashboard paths: open Inbox tab directly
+                  if (item.actionUrl && /\/dashboard\/messages/.test(item.actionUrl)) {
+                    setActiveTab('inbox');
+                    return;
+                  }
+
                   // Try to extract email ID from actionUrl
                   if (item.actionUrl) {
                     const match = item.actionUrl.match(/email[s]?\/([a-zA-Z0-9_-]+)/);
@@ -250,20 +192,42 @@ export default function NotificationsScreen() {
                     }
                   }
                   
-                  // If no email ID from actionUrl, fetch latest unread email (inbox only)
+                  // If no email ID from actionUrl, try to infer from locally loaded emails
                   if (!emailId) {
                     try {
-                      const response = await messagesApi.getEmails(1, 20, { isRead: false });
-                      if (response.success && response.data && response.data.length > 0) {
-                        const inboxEmail = response.data.find(m => m.senderId !== user?.id);
-                        emailId = inboxEmail?.id || null;
+                      // Prefer inbox emails (received), optionally match by caseId if present
+                      const createdAtMs = typeof item.createdAt === 'number' ? item.createdAt : new Date(item.createdAt as any).getTime();
+                      const inboxEmails = emails.filter((e) => e.senderId !== user?.id);
+                      const scoped = item.caseId
+                        ? inboxEmails.filter((e) => e.caseId === item.caseId)
+                        : inboxEmails;
+
+                      // Pick the email with the closest sentAt to the notification createdAt
+                      let best: { email: Message; delta: number } | null = null;
+                      for (const e of scoped) {
+                        const delta = Math.abs(new Date(e.sentAt).getTime() - createdAtMs);
+                        if (!best || delta < best.delta) {
+                          best = { email: e, delta };
+                        }
                       }
-                    } catch (error) {
-                      console.error('Failed to fetch latest email:', error);
+
+                      if (best) {
+                        emailId = best.email.id;
+                      }
+                    } catch (err) {
+                      console.warn('Failed to infer email from local list:', err);
                     }
+                  }
+
+                  // If still no email ID, open Inbox instead of guessing further
+                  if (!emailId) {
+                    setActiveTab('inbox');
+                    return;
                   }
                   
                   if (emailId) {
+                    // Warm the email cache to speed up the reader page
+                    messagesApi.prefetchEmail(emailId);
                     router.push(`/email/${emailId}`);
                   } else {
                     // Switch to inbox tab to show emails
@@ -273,7 +237,7 @@ export default function NotificationsScreen() {
                 
                 handleEmailNavigation();
               } else if (item.actionUrl) {
-                router.push(item.actionUrl);
+                router.push(item.actionUrl as Href);
               }
             }}
             activeOpacity={0.7}
@@ -321,14 +285,14 @@ export default function NotificationsScreen() {
         </Animated.View>
       );
     },
-    [router]
+    [router, emails, user]
   );
 
   // Memoize render function for performance
   const renderConversationItem = useCallback(
     ({ item, index }: { item: Conversation; index: number }) => {
       const hasUnread = item.unreadCount > 0;
-      const title = getConversationTitle(item);
+      const title = getConversationTitle(item, user?.role, t);
       const initials = getInitials(title);
       
       return (
@@ -456,17 +420,18 @@ export default function NotificationsScreen() {
     return merged;
   }, [notifications, conversations, user, t]);
 
+  console.log('\n\n\n Notifications tab items:', combinedNotifications.length);
+
   // Organize emails by inbox and sent
   // Simple, explicit rule: received = not sent by me; sent = sent by me
   const inboxEmails = emails.filter((email) => email.senderId !== user?.id);
   const sentEmails = emails.filter((email) => email.senderId === user?.id);
 
-  // Format email date
-  const formatEmailDate = useCallback((date: Date) => {
-    const d = new Date(date);
-    if (isToday(d)) return format(d, 'HH:mm');
-    if (isYesterday(d)) return t('email.yesterday') || 'Yesterday';
-    return format(d, 'MMM d, yyyy');
+  console.warn("\n\n the email info: ", { emails })
+
+  // Format email date via utils
+  const formatEmailDateMemo = useCallback((date: Date) => {
+    return formatEmailDate(date, t);
   }, [t]);
 
   // Render email item
@@ -487,7 +452,7 @@ export default function NotificationsScreen() {
               <Text style={[styles.emailSubject, !item.isRead && isInbox && styles.unreadText]}>
                 {item.subject || t('email.noSubject') || 'No Subject'}
               </Text>
-              <Text style={styles.emailDate}>{formatEmailDate(item.sentAt)}</Text>
+              <Text style={styles.emailDate}>{formatEmailDateMemo(item.sentAt)}</Text>
             </View>
             <Text numberOfLines={2} style={styles.emailPreview}>
               {item.content}
@@ -499,7 +464,7 @@ export default function NotificationsScreen() {
         </TouchableOpacity>
       </Animated.View>
     );
-  }, [user, formatEmailDate, router, t]);
+  }, [user, formatEmailDateMemo, router, t]);
 
   return (
     <TouchDetector>
@@ -583,16 +548,22 @@ export default function NotificationsScreen() {
       </View>
 
       {/* Tab Content */}
-      <View style={styles.contentContainer}>
+        <ScrollView
+          style={styles.contentContainer}
+          onScroll={scrollProps.onScroll}
+          scrollEventThrottle={scrollProps.scrollEventThrottle}
+          showsVerticalScrollIndicator={false}
+        >
         {/* Notifications Tab */}
         {activeTab === 'notifications' && (
           <>
             {combinedNotifications.length > 0 ? (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  {/* <Text style={styles.sectionTitle}>
+                    {/* <Text style={styles.sectionTitle}>
                     {t('notifications.emailNotifications') || 'Notifications'}
-                  </Text> */}
+                    </Text> */}
+
                   {unreadCount > 0 && (
                     <TouchableOpacity
                       style={styles.markAllButton}
@@ -626,7 +597,7 @@ export default function NotificationsScreen() {
                             if (item.caseId) {
                               router.push(`/message/${item.caseId}`);
                             } else if (item.actionUrl) {
-                              router.push(item.actionUrl);
+                              router.push(item.actionUrl as Href);
                             }
                           }}
                           activeOpacity={0.7}
@@ -752,7 +723,7 @@ export default function NotificationsScreen() {
             )}
           </>
         )}
-      </View>
+        </ScrollView>
     </View>
     </TouchDetector>
   );
@@ -1095,12 +1066,5 @@ const styles = StyleSheet.create({
   },
   unreadText: {
     fontWeight: '600',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: SPACING.sm,
-    marginTop: SPACING.xs,
   },
 });

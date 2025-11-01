@@ -5,13 +5,13 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { TextInput, Button, Card } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING } from '../../lib/constants';
 import { logger } from '../../lib/utils/logger';
+import { Alert } from '../../lib/utils/alert';
 
 interface FormField {
   id: string;
@@ -301,5 +301,8 @@ const styles = StyleSheet.create({
     color: 'white',
   },
 });
+
+
+
 
 

@@ -91,10 +91,11 @@ export const DynamicTabBar: React.FC<DynamicTabBarProps> = ({
       });
       opacity.value = withTiming(1, { duration: 300 });
       
-      // Auto-hide after 3 seconds
-      hideTimeoutRef.current = setTimeout(() => {
-        hideTabBar();
-      }, 3000);
+      // Clear any existing timeout - visibility is now controlled by scroll direction
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+        hideTimeoutRef.current = null;
+      }
     } else {
       hideTabBar();
     }
@@ -117,15 +118,11 @@ export const DynamicTabBar: React.FC<DynamicTabBarProps> = ({
     opacity.value = withTiming(1, { duration: 300 });
     onVisibilityChange(true);
     
-    // Clear existing timeout
+    // Clear existing timeout - visibility is now controlled by scroll direction
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
     }
-    
-    // Set new timeout
-    hideTimeoutRef.current = setTimeout(() => {
-      hideTabBar();
-    }, 3000);
   };
 
   const handleTabPress = (tab: TabItem) => {
@@ -192,13 +189,6 @@ export const DynamicTabBar: React.FC<DynamicTabBarProps> = ({
           );
         })}
       </View>
-      
-      {/* Touch area to show/hide tab bar */}
-      <TouchableOpacity
-        style={styles.touchArea}
-        onPress={visible ? hideTabBar : showTabBar}
-        activeOpacity={1}
-      />
     </Animated.View>
   );
 };
@@ -232,12 +222,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     marginTop: 4,
-  },
-  touchArea: {
-    position: 'absolute',
-    top: -20,
-    left: 0,
-    right: 0,
-    height: 20,
   },
 });

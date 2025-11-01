@@ -35,7 +35,9 @@ export const useCasesStore = create<CasesState>((set, get) => ({
   fetchCases: async (status?: CaseStatus, refresh = false) => {
     // Prevent concurrent requests
     if (get().isLoading) {
-      logger.info('Cases fetch already in progress - skipping duplicate request');
+      logger.info(
+        'Cases fetch already in progress - skipping duplicate request'
+      );
       return;
     }
 
@@ -67,14 +69,31 @@ export const useCasesStore = create<CasesState>((set, get) => ({
         pagination = (response.data as any).pagination;
       }
 
-      const existingCases = refresh ? [] : get().cases;
+      const currentCases = get().cases;
+      const existingCases = refresh ? [] : currentCases;
+
+      // Merge cases, keeping optimistic updates but replacing with server data when available
+      let mergedCases: Case[] = [];
+
+      if (refresh) {
+        // On refresh, start with server cases but preserve optimistic cases not yet in server
+        const serverCaseIds = new Set(newCases.map((c) => c.id));
+        const optimisticCases = currentCases.filter(
+          (c) => c.isPending && !serverCaseIds.has(c.id)
+        );
+        mergedCases = [...newCases, ...optimisticCases];
+      } else {
+        // On pagination, append new cases
+        mergedCases = [...existingCases, ...newCases];
+      }
+
       const hasMore =
         pagination?.hasMore ||
         pagination?.page < pagination?.totalPages ||
         false;
 
       set({
-        cases: [...existingCases, ...newCases],
+        cases: mergedCases,
         page: currentPage + 1,
         hasMore,
         isLoading: false,

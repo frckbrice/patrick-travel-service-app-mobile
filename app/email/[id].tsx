@@ -6,7 +6,7 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  DeviceEventEmitter,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -16,12 +16,14 @@ import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { Message, MessageType } from '../../lib/types';
 import { messagesApi } from '../../lib/api/messages.api';
+import { notificationsApi } from '../../lib/api/notifications.api';
 import { COLORS, SPACING } from '../../lib/constants';
 import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { ModernHeader } from '../../components/ui/ModernHeader';
 import { NotFound } from '../../components/ui/NotFound';
+import { Alert } from '../../lib/utils/alert';
 
 interface EmailReaderProps {
   emailId: string;
@@ -107,6 +109,21 @@ export default function EmailReaderScreen() {
         // Update local state
         setEmail(prev => prev ? { ...prev, isRead: true, readAt: new Date() } : null);
         logger.info('Email marked as read', { emailId: email.id });
+        DeviceEventEmitter.emit('email:read', { id: email.id });
+        // Best-effort: also mark any related notification as read (if exists)
+        try {
+          const notifResp = await notificationsApi.getNotifications(1, 20);
+          if (notifResp.success && Array.isArray(notifResp.data)) {
+            const related = notifResp.data.find((n: any) => {
+              const url: string | undefined = (n as any)?.actionUrl;
+              return url ? url.includes(email.id) : false;
+            });
+            if (related?.id) {
+              await notificationsApi.markAsRead(related.id);
+              DeviceEventEmitter.emit('notifications:read', { id: related.id });
+            }
+          }
+        } catch { }
       } else {
         // Silently log error - marking as read is not critical
         logger.warn('Failed to mark email as read', result.error);
@@ -142,14 +159,19 @@ export default function EmailReaderScreen() {
   // Get sender name from API data
   const senderName = useMemo(() => {
     if (!email) return '';
-    // Use sender data from API response
-    return `${email.sender?.firstName || ''} ${email.sender?.lastName || ''}`.trim() || 'Unknown Sender';
+    // Prefer embedded sender object when provided by API; fall back to ID
+    type EmailWithSender = Message & { sender?: { firstName?: string; lastName?: string } };
+    const e = email as EmailWithSender;
+    const name = `${e.sender?.firstName || ''} ${e.sender?.lastName || ''}`.trim();
+    return name || email.senderId || 'Unknown Sender';
   }, [email]);
 
   // Get sender email from API data
   const senderEmail = useMemo(() => {
     if (!email) return '';
-    return email.sender?.email || 'unknown@example.com';
+    type EmailWithSender = Message & { sender?: { email?: string } };
+    const e = email as EmailWithSender;
+    return e.sender?.email || 'unknown@example.com';
   }, [email]);
 
   // Handle attachment download
@@ -157,7 +179,7 @@ export default function EmailReaderScreen() {
     try {
       Alert.alert(
         t('email.downloadAttachment') || 'Download Attachment',
-        `${attachment.fileName} (${(attachment.fileSize / 1024).toFixed(1)} KB)`,
+        `${attachment.name} (${(attachment.size / 1024).toFixed(1)} KB)`,
         [
           { text: t('common.cancel') || 'Cancel', style: 'cancel' },
           {
@@ -289,7 +311,7 @@ export default function EmailReaderScreen() {
               </Text>
               {email.attachments.map((attachment, index) => (
                 <TouchableOpacity
-                  key={(attachment.id as string) || `${attachment.fileName || 'attachment'}-${index}`}
+                  key={(attachment.id as string) || `${attachment.name || 'attachment'}-${index}`}
                   style={styles.attachmentItem}
                   onPress={() => handleAttachmentDownload(attachment)}
                   activeOpacity={0.7}
@@ -303,10 +325,10 @@ export default function EmailReaderScreen() {
                   </View>
                   <View style={styles.attachmentInfo}>
                     <Text style={styles.attachmentName} numberOfLines={1}>
-                      {attachment.fileName}
+                      {attachment.name}
                     </Text>
                     <Text style={styles.attachmentSize}>
-                      {(attachment.fileSize / 1024).toFixed(1)} KB
+                      {(attachment.size / 1024).toFixed(1)} KB
                     </Text>
                   </View>
                   <MaterialCommunityIcons
@@ -347,7 +369,12 @@ export default function EmailReaderScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={styles.caseReferenceText}>
-                  Case #{email.case?.referenceNumber || email.caseId}
+                  {(() => {
+                    type EmailWithCase = Message & { case?: { referenceNumber?: string } };
+                    const e = email as EmailWithCase;
+                    const ref = e.case?.referenceNumber || email.caseId;
+                    return `Case #${ref}`;
+                  })()}
                 </Text>
                 <MaterialCommunityIcons
                   name="chevron-right"

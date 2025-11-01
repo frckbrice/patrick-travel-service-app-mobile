@@ -90,11 +90,20 @@ apiClient.interceptors.response.use(
 
     // Handle 401 Unauthorized - Invalid or expired token
     if (error.response?.status === 401) {
-      // If we already retried, log out immediately
-      if (originalRequest._retry) {
+      // Skip logout if this is already a logout/auth-related endpoint to prevent loops
+      const url = originalRequest?.url || '';
+      const isAuthEndpoint = url.includes('/auth/logout') ||
+        url.includes('/users/push-token') ||
+        url.includes('/auth/');
+
+      // If we already retried, log out immediately (unless it's an auth endpoint)
+      if (originalRequest._retry && !isAuthEndpoint) {
         logger.warn('401 received after token refresh - logging out user');
         const logout = getAuthStore().getState().logout;
         await logout();
+        return Promise.reject(error);
+      } else if (originalRequest._retry && isAuthEndpoint) {
+        logger.warn('401 received after token refresh on auth endpoint - skipping logout to prevent loop');
         return Promise.reject(error);
       }
 
@@ -112,31 +121,53 @@ apiClient.interceptors.response.use(
             return await apiClient(originalRequest);
           } catch (retryError: any) {
             // If retry also returns 401, the token is invalid or user unauthorized
-            if (retryError?.response?.status === 401) {
+            if (retryError?.response?.status === 401 && !isAuthEndpoint) {
               logger.warn('401 received after token refresh retry - logging out user');
               const logout = getAuthStore().getState().logout;
               await logout();
+            } else if (retryError?.response?.status === 401 && isAuthEndpoint) {
+              logger.warn('401 received after token refresh retry on auth endpoint - skipping logout to prevent loop');
             }
             return Promise.reject(retryError);
           }
         } else {
           // No Firebase user - clear auth state
-          logger.info('401 received with no Firebase user - clearing auth state');
-          const logout = getAuthStore().getState().logout;
-          await logout();
+          // Skip logout if this is already a logout/auth-related endpoint to prevent loops
+          const url = originalRequest?.url || '';
+          const isAuthEndpoint = url.includes('/auth/logout') ||
+            url.includes('/users/push-token') ||
+            url.includes('/auth/');
+
+          if (!isAuthEndpoint) {
+            logger.info('401 received with no Firebase user - clearing auth state');
+            const logout = getAuthStore().getState().logout;
+            await logout();
+          } else {
+            logger.info('401 received on auth endpoint - skipping logout to prevent loop');
+          }
           return Promise.reject(error);
         }
       } catch (refreshError) {
         logger.error('Token refresh failed - logging out user', refreshError);
-        // Sign out user from Firebase
-        try {
-          await auth.signOut();
-        } catch (signOutError) {
-          logger.error('Firebase sign out error', signOutError);
+        // Skip logout if this is already a logout/auth-related endpoint to prevent loops
+        const url = originalRequest?.url || '';
+        const isAuthEndpoint = url.includes('/auth/logout') ||
+          url.includes('/users/push-token') ||
+          url.includes('/auth/');
+
+        if (!isAuthEndpoint) {
+          // Sign out user from Firebase
+          try {
+            await auth.signOut();
+          } catch (signOutError) {
+            logger.error('Firebase sign out error', signOutError);
+          }
+          // Clear auth store state - this will trigger navigation to login
+          const logout = getAuthStore().getState().logout;
+          await logout();
+        } else {
+          logger.info('Token refresh failed on auth endpoint - skipping logout to prevent loop');
         }
-        // Clear auth store state - this will trigger navigation to login
-        const logout = getAuthStore().getState().logout;
-        await logout();
         return Promise.reject(error);
       }
     }

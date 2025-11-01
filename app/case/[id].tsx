@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { casesApi } from '../../lib/api/cases.api';
 import { Case, StatusHistory } from '../../lib/types';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { ModernHeader } from '../../components/ui/ModernHeader';
+import { LoadingSpinner, Button, Card, StatusBadge } from '../../components/ui';
+import { useTabBarContext } from '../../lib/context/TabBarContext';
 import {
   COLORS,
   SPACING,
@@ -22,16 +24,13 @@ export default function CaseDetailsScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const { hideTabBar, showTabBar } = useTabBarContext();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [history, setHistory] = useState<StatusHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchCaseDetails();
-  }, [id]);
-
-  const fetchCaseDetails = async () => {
+  const fetchCaseDetails = useCallback(async () => {
     if (!id) return;
 
     setIsLoading(true);
@@ -49,7 +48,19 @@ export default function CaseDetailsScreen() {
     }
 
     setIsLoading(false);
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchCaseDetails();
+  }, [fetchCaseDetails]);
+
+  // Hide tab bar when this screen mounts (stack screen)
+  useEffect(() => {
+    hideTabBar();
+    return () => {
+      showTabBar();
+    };
+  }, [hideTabBar, showTabBar]);
 
   if (isLoading) {
     return <LoadingSpinner fullScreen text={t('common.loading')} />;

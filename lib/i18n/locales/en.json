@@ -1,5 +1,6 @@
 {
   "common": {
+    "continue": "Continue",
     "welcome": "Welcome",
     "welcomeBack": "Welcome back",
     "login": "Login",
@@ -142,6 +143,7 @@
     "downloadTemplates": "Download Templates"
   },
   "cases": {
+    "selectCase": "Select Case",
     "myCases": "My Cases",
     "caseDetails": "Case Details",
     "newCase": "New Case",
@@ -190,6 +192,14 @@
     "submissionFailed": "Submission Failed"
   },
   "documents": {
+    "selectAndUpload": "Select a file to upload",
+    "uploadFailed": "Upload failed",
+    "uploadHelper": "Upload a document for your case",
+    "quickUpload": "Quick Upload",
+    "chooseFile": "Choose File",
+    "chooseImage": "Choose Image",
+    "title": "Documents",
+    "subtitle": "Upload and manage your files",
     "myDocuments": "My Documents",
     "searchDocuments": "Search documents",
     "uploadDocument": "Upload Document",
@@ -433,10 +443,18 @@
     "noCachedData": "No cached data available and offline"
   },
   "templates": {
+    "uploadFilled": "Upload file",
+    "selectFile": "Select File",
     "templates": "Document Templates",
+    "title": "Templates",
+    "subtitle": "Download and fill required documents",
     "searchTemplates": "Search templates...",
     "allServices": "All Services",
     "allCategories": "All Categories",
+    "filter": {
+      "serviceType": "Service Type",
+      "category": "Category"
+    },
     "required": "Required",
     "downloads": "downloads",
     "download": "Download",
@@ -444,7 +462,26 @@
     "noTemplatesDescription": "There are no templates available at the moment.",
     "downloading": "Downloading...",
     "downloaded": "Downloaded",
-    "downloadError": "Failed to download template"
+    "downloadError": "Failed to download template",
+    "share": "Share",
+    "downloadAndFill": "Download",
+    "completeTemplate": "Complete template",
+    "fillNow": "Fill now",
+    "fillNowDesc": "Complete the form directly in the app",
+    "downloadBlank": "Download blank",
+    "downloadBlankDesc": "Save a blank copy to fill later",
+    "submitCompleted": "Submit completed file",
+    "selectFilledFile": "Choose file",
+    "downloadSuccess": "Template downloaded successfully",
+    "downloadComplete": "Download Complete",
+    "fillInstructions": "The template has been downloaded. Please fill it out using your preferred app and then upload it back.",
+    "inAppFillNotAvailable": "In-App Filling Not Available",
+    "useExternalApp": "This template cannot be filled in-app. Please download and fill using an external app.",
+    "uploadSuccess": "Filled template uploaded successfully",
+    "noCasesAvailable": "No cases available. Please create a case first.",
+    "caseReady": "Case Ready",
+    "caseReadyDesc": "Case {{caseNumber}} is ready for document upload.",
+    "casePreselected": "Your case is preselected. You can now upload your filled template."
   },
   "legal": {
     "privacyPolicy": "Privacy Policy",

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Text, Button, IconButton } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { COLORS, SPACING } from '../../lib/constants';
+import { Alert } from '../../lib/utils/alert';
 
 const { width, height } = Dimensions.get('window');
 

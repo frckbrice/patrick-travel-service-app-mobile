@@ -6,7 +6,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { logger } from './logger';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
+import { Alert } from './alert';
 
 export interface DownloadOptions {
   url: string;

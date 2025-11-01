@@ -18,6 +18,7 @@ import { casesApi } from '../../lib/api/cases.api';
 import { destinationsApi, Destination } from '../../lib/api/destinations.api';
 import { ServiceType, CaseStatus, Priority } from '../../lib/types';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
+import { ModernHeader } from '../../components/ui/ModernHeader';
 import { CalendarDatePicker } from '../../components/ui/CalendarDatePicker';
 import { SPACING, SERVICE_TYPE_LABELS, COLORS } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
@@ -254,7 +255,15 @@ export default function NewCaseScreen() {
     }
   };
 
-    return (
+  return (
+        <>
+        <ModernHeader
+          variant="gradient"
+          gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+          title={t('dashboard.submitNewCase')}
+          subtitle={t('cases.selectServiceType')}
+          showBackButton
+        />
         <KeyboardAvoidingScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{
@@ -262,29 +271,19 @@ export default function NewCaseScreen() {
         paddingBottom: insets.bottom + SPACING.lg,
       }}
     >
-            <View style={styles.header}>
-                <Text variant="headlineMedium" style={[styles.title, { color: colors.primary }]}>
-          {t('dashboard.submitNewCase')}
-        </Text>
-                <Text variant="bodyLarge" style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {t('cases.selectServiceType')}
-        </Text>
-
-                {/* Progress Indicator */}
-                <View style={styles.progressContainer}>
-                    <View style={styles.progressBar}>
-                        <View
-                            style={[
-                                styles.progressFill,
-                                { width: `${formProgress}%`, backgroundColor: colors.primary }
-                            ]}
-                        />
-                    </View>
-                    <Text variant="bodySmall" style={[styles.progressText, { color: colors.textSecondary }]}>
-                        {formProgress}% {t('cases.complete')}
-                    </Text>
-                </View>
-
+            {/* Progress Indicator */}
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${formProgress}%`, backgroundColor: colors.primary }
+                  ]}
+                />
+              </View>
+              <Text variant="bodySmall" style={[styles.progressText, { color: colors.textSecondary }]}>
+                {formProgress}% {t('cases.complete')}
+              </Text>
             </View>
 
             <View style={styles.form}>
@@ -481,6 +480,7 @@ export default function NewCaseScreen() {
                 </Text>
             </View>
         </KeyboardAvoidingScrollView>
+        </>
     );
 }
 

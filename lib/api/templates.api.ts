@@ -1,7 +1,7 @@
 import { apiClient } from './axios';
 import { ServiceType, TemplateCategory, ApiResponse, DocumentTemplate, Document } from '../types';
 import { logger } from '../utils/logger';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { templateCache } from '../services/templateCache';
 
 // Import axios default export for base URL access

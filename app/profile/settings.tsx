@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  Alert,
   Platform,
   TouchableOpacity,
 } from 'react-native';
@@ -18,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, STORAGE_KEYS } from '../../lib/constants';
 import { toast } from '../../lib/services/toast';
 import { ModernHeader } from '../../components/ui/ModernHeader';
+import { Alert } from '../../lib/utils/alert';
 
 type ThemeMode = 'light' | 'dark' | 'auto';
 type Language = 'en' | 'fr';

@@ -5,7 +5,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   TouchableOpacity,
 } from 'react-native';
 import {
@@ -21,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth, useGuestOnly } from '../hooks/useAuth';
 import { registerSchema, RegisterFormData } from '../schemas/authSchemas';
 import { COLORS, SPACING } from '../../../lib/constants';
+import { Alert } from '../../../lib/utils/alert';
 
 export default function RegisterScreen() {
   useGuestOnly();

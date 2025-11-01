@@ -3,32 +3,25 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  Alert,
-  Text,
-  Image,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { SegmentedButtons, Text as PaperText } from 'react-native-paper';
-import { useLocalSearchParams } from 'expo-router';
+import { Text as PaperText } from 'react-native-paper';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
-import { uploadThingService } from '../../lib/services/uploadthing';
+import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { documentsApi } from '../../lib/api/documents.api';
 import { useCasesStore } from '../../stores/cases/casesStore';
 import { useCaseRequirementGuard } from '../../lib/guards/useCaseRequirementGuard';
 import { DocumentType } from '../../lib/types';
 import { Card } from '../../components/ui';
-import {
-  COLORS,
-  SPACING,
-  MAX_FILE_SIZE,
-  DOCUMENT_TYPE_LABELS,
-} from '../../lib/constants';
+import { ModernHeader } from '../../components/ui/ModernHeader';
+import { SPACING, DOCUMENT_TYPE_LABELS } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
 import { toast } from '../../lib/services/toast';
 
@@ -36,152 +29,113 @@ export default function UploadDocumentScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const colors = useThemeColors();
   const { caseId } = useLocalSearchParams<{ caseId?: string }>();
-  const cases = useCasesStore((state) => state.cases);
-  const { requiresActiveCase, activeCases } = useCaseRequirementGuard();
-  const [selectedCaseId, setSelectedCaseId] = useState(caseId || '');
+  const isLoadingCases = useCasesStore((state) => state.isLoading);
+  const { hasActiveCases, activeCases } = useCaseRequirementGuard();
+  const [selectedCaseId, setSelectedCaseId] = useState('');
   const [documentType, setDocumentType] = useState<DocumentType>(
     DocumentType.PASSPORT
   );
-  const [fileUri, setFileUri] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [fileSize, setFileSize] = useState(0);
-  const [mimeType, setMimeType] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
-  // Memoize case options for performance
+  // Redirect to documents page if no active cases (only after cases are loaded)
+  useEffect(() => {
+    if (!isLoadingCases && !hasActiveCases) {
+      router.back();
+    }
+  }, [hasActiveCases, isLoadingCases, router]);
+
+  // Memoize case options for performance - only include active cases
   const caseOptions = useMemo(
     () =>
-      cases.map((c) => ({
+      activeCases.map((c) => ({
         value: c.id,
         label: c.referenceNumber,
       })),
-    [cases]
+    [activeCases]
   );
 
-  // Guard: Check if user has active cases on mount
+  // Validate that URL caseId is active, and auto-select case when cases are loaded
   useEffect(() => {
-    requiresActiveCase('upload documents');
-    return;
-  }, []);
+    if (caseOptions.length === 0) return;
 
-  // Auto-select case when cases are loaded (prioritize URL parameter)
-  useEffect(() => {
-    if (caseOptions.length > 0 && !selectedCaseId) {
-      // If caseId is provided in URL, use it; otherwise use first available case
-      const targetCaseId = caseId || caseOptions[0].value;
-      setSelectedCaseId(targetCaseId);
+    // If caseId is provided in URL, validate it's in active cases
+    if (caseId) {
+      const isValidCase = caseOptions.some((opt) => opt.value === caseId);
+      if (isValidCase) {
+        setSelectedCaseId(caseId);
+        return;
+      }
+      // Invalid caseId from URL - ignore it and use first available
     }
-  }, [caseOptions, caseId]);
 
-  // Memoize document picker function for performance
-  const pickDocument = useCallback(async () => {
+    // Auto-select first available case if none selected
+    if (!selectedCaseId) {
+      setSelectedCaseId(caseOptions[0].value);
+    }
+  }, [caseOptions, caseId, selectedCaseId]);
+
+  // Validate selected case is still active
+  const isSelectedCaseValid = useMemo(() => {
+    return selectedCaseId && activeCases.some((c) => c.id === selectedCaseId);
+  }, [selectedCaseId, activeCases]);
+
+  // Handle document picker and upload
+  const handlePickDocument = useCallback(async () => {
+    if (!selectedCaseId || !isSelectedCaseValid) {
+      toast.error({
+        title: t('common.error'),
+        message:
+          t('documents.invalidCase') || 'Please select a valid active case',
+      });
+      // Reset selection if invalid
+      if (caseOptions.length > 0) {
+        setSelectedCaseId(caseOptions[0].value);
+      }
+      return;
+    }
+
     try {
+      // Pick document
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
+        type: '*/*',
         copyToCacheDirectory: true,
       });
 
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        setFileUri(asset.uri);
-        setFileName(asset.name);
-        setFileSize(asset.size || 0);
-        setMimeType(asset.mimeType || '');
+      if (result.canceled) {
+        return;
       }
-    } catch (error) {
-      logger.error('Document picker error:', error);
-      toast.error({
-        title: t('common.error'),
-        message: t('errors.failedToPickDocument'),
-      });
-    }
-  }, [t]);
 
-  // Memoize image picker function for performance
-  const pickImage = useCallback(async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        setFileUri(asset.uri);
-        setFileName(asset.fileName || `image_${Date.now()}.jpg`);
-        setFileSize(asset.fileSize || 0);
-        setMimeType(asset.type || 'image/jpeg');
+      const file = result.assets[0];
+      if (!file) {
+        return;
       }
-    } catch (error) {
-      logger.error('Image picker error:', error);
-      toast.error({
-        title: t('common.error'),
-        message: t('errors.failedToPickImage'),
-      });
-    }
-  }, [t]);
 
-  // Memoize camera function for performance
-  const takePhoto = useCallback(async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
+      setIsUploading(true);
 
-      if (!result.canceled && result.assets && result.assets[0]) {
-        const asset = result.assets[0];
-        setFileUri(asset.uri);
-        setFileName(asset.fileName || `photo_${Date.now()}.jpg`);
-        setFileSize(asset.fileSize || 0);
-        setMimeType(asset.type || 'image/jpeg');
-      }
-    } catch (error) {
-      logger.error('Camera error:', error);
-      toast.error({
-        title: t('common.error'),
-        message: t('errors.failedToTakePhoto'),
-      });
-    }
-  }, [t]);
-
-  // Memoize upload function for performance
-  const uploadDocument = useCallback(async () => {
-    if (!fileUri || !selectedCaseId) return;
-
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    try {
-      // Upload file to UploadThing
-      const uploadResult = await uploadThingService.uploadFile(
-        fileUri,
-        fileName,
-        mimeType,
-        (progress) => setUploadProgress(progress)
+      // Upload file to API
+      const uploadResult = await uploadFileToAPI(
+        file.uri,
+        file.name || 'document',
+        file.mimeType || 'application/octet-stream'
       );
 
-      if (!uploadResult.success || !uploadResult.data) {
-        throw new Error(uploadResult.error || 'Upload failed');
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.error || t('errors.uploadFailed'));
       }
 
-      // Create document record
+      // Save document metadata to database
       const documentData = {
         caseId: selectedCaseId,
         documentType,
-        originalName: fileName,
-        fileSize,
-        mimeType,
-        uploadUrl: uploadResult.data.url,
-        uploadKey: uploadResult.data.key,
+        fileName: file.name || 'document',
+        filePath: uploadResult.url,
+        fileSize: file.size || 0,
+        mimeType: file.mimeType || 'application/octet-stream',
       };
 
-      const response = await documentsApi.createDocument(documentData);
+      const response = await documentsApi.uploadDocument(documentData);
 
       if (response.success) {
         toast.success({
@@ -193,327 +147,230 @@ export default function UploadDocumentScreen() {
         throw new Error(response.error || t('errors.uploadFailed'));
       }
     } catch (error: any) {
-      logger.error('Upload error:', error);
+      logger.error('Failed to upload document', error);
       toast.error({
         title: t('documents.uploadFailed'),
         message: error.message || t('errors.uploadFailed'),
       });
     } finally {
       setIsUploading(false);
-      setUploadProgress(0);
     }
-  }, [fileUri, selectedCaseId, fileName, mimeType, documentType, fileSize, t, router]);
-
-  // Memoize validation for upload button
-  const isUploadEnabled = useMemo(() => {
-    return !isUploading && !!fileName && !!selectedCaseId;
-  }, [isUploading, fileName, selectedCaseId]);
+  }, [
+    selectedCaseId,
+    isSelectedCaseValid,
+    documentType,
+    caseOptions,
+    t,
+    router,
+  ]);
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <PaperText variant="headlineMedium" style={styles.title}>
-          {t('documents.uploadDocument') || 'Upload Document'}
-        </PaperText>
-        <PaperText variant="bodyLarge" style={styles.subtitle}>
-          {t('documents.selectCaseAndFile') ||
-            'Select a case and choose a file to upload'}
-        </PaperText>
-      </View>
-
-      <View style={styles.content}>
-        {caseOptions.length === 0 ? (
-          <View style={styles.noCasesContainer}>
-            <MaterialCommunityIcons
-              name="folder-open"
-              size={64}
-              color={COLORS.textSecondary}
-            />
-            <PaperText style={styles.noCasesText}>
-              {t('documents.noCasesAvailable') ||
-                'No cases available. Please create a case first.'}
-            </PaperText>
-          </View>
-        ) : (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ModernHeader
+        variant="gradient"
+        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        title={t('documents.uploadDocument') || 'Upload Document'}
+        subtitle={
+          t('documents.selectCaseAndFile') ||
+          'Select a case and choose a file to upload'
+        }
+        showBackButton
+      />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+        {!hasActiveCases ? null : (
           <>
-              <Animated.View entering={FadeInDown.delay(0).duration(400)}>
-                <Card style={styles.card}>
-                  <PaperText style={styles.sectionTitle}>
-                    {t('documents.selectCase')}
-                  </PaperText>
-                  <View style={styles.casePickerContainer}>
-                    {caseOptions.map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                          styles.caseOption,
-                          selectedCaseId === option.value && styles.caseOptionSelected,
-                        ]}
-                        onPress={() => setSelectedCaseId(option.value)}
-                      >
-                        <MaterialCommunityIcons
-                          name="folder"
-                          size={20}
-                          color={selectedCaseId === option.value ? COLORS.primary : COLORS.textSecondary}
-                        />
-                        <PaperText
-                          style={[
-                            styles.caseOptionText,
-                            selectedCaseId === option.value && styles.caseOptionTextSelected,
-                          ]}
-                        >
-                          {option.label}
-                        </PaperText>
-                        {selectedCaseId === option.value && (
-                          <MaterialCommunityIcons
-                            name="check-circle"
-                            size={20}
-                            color={COLORS.primary}
-                          />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </Card>
-              </Animated.View>
-
-              <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-                <Card style={styles.card}>
-                  <PaperText style={styles.sectionTitle}>
-                    {t('documents.documentType')}
-                  </PaperText>
-                  <SegmentedButtons
-                    value={documentType}
-                    onValueChange={(value) => setDocumentType(value as DocumentType)}
-                    buttons={[
-                      {
-                        value: DocumentType.PASSPORT,
-                        label: DOCUMENT_TYPE_LABELS[DocumentType.PASSPORT],
-                        icon: 'passport',
-                      },
-                      {
-                        value: DocumentType.ID_CARD,
-                        label: DOCUMENT_TYPE_LABELS[DocumentType.ID_CARD],
-                        icon: 'card-account-details',
-                      },
-                      {
-                        value: DocumentType.DIPLOMA,
-                        label: DOCUMENT_TYPE_LABELS[DocumentType.DIPLOMA],
-                        icon: 'school',
-                      },
-                      {
-                        value: DocumentType.OTHER,
-                        label: DOCUMENT_TYPE_LABELS[DocumentType.OTHER],
-                        icon: 'file-document',
-                      },
-                    ]}
-                    style={styles.segmentedButtons}
-                  />
-                </Card>
-              </Animated.View>
-
-              <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-                <Card style={styles.card}>
-                  <PaperText style={styles.sectionTitle}>
-                    {t('documents.selectFile')}
-                  </PaperText>
-                  
-                  {fileName ? (
-                    <View style={styles.filePreview}>
-                      <View style={styles.fileInfo}>
-                        <MaterialCommunityIcons
-                          name={mimeType.includes('pdf') ? 'file-pdf-box' : 'file-image'}
-                          size={32}
-                          color={COLORS.primary}
-                        />
-                        <View style={styles.fileDetails}>
-                          <PaperText style={styles.fileName} numberOfLines={1}>
-                            {fileName}
-                          </PaperText>
-                          <PaperText style={styles.fileSize}>
-                            {(fileSize / 1024).toFixed(1)} KB
-                          </PaperText>
-                        </View>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.removeFileButton}
-                        onPress={() => {
-                          setFileUri('');
-                          setFileName('');
-                          setFileSize(0);
-                          setMimeType('');
-                        }}
-                      >
-                        <MaterialCommunityIcons
-                          name="close"
-                          size={20}
-                          color={COLORS.error}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.filePickerContainer}>
-                      <TouchableOpacity
-                        style={styles.pickerButton}
-                        onPress={pickDocument}
-                      >
-                        <MaterialCommunityIcons
-                          name="file-document"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                        <PaperText style={styles.pickerButtonText}>
-                          {t('documents.chooseFile')}
-                        </PaperText>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.pickerButton}
-                        onPress={pickImage}
-                      >
-                        <MaterialCommunityIcons
-                          name="image"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                        <PaperText style={styles.pickerButtonText}>
-                          {t('documents.chooseImage')}
-                        </PaperText>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.pickerButton}
-                        onPress={takePhoto}
-                      >
-                        <MaterialCommunityIcons
-                          name="camera"
-                          size={24}
-                          color={COLORS.primary}
-                        />
-                        <PaperText style={styles.pickerButtonText}>
-                          {t('documents.takePhoto')}
-                        </PaperText>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </Card>
-              </Animated.View>
-
-              {isUploading && (
-                <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-                  <Card style={styles.card}>
-                    <View style={styles.uploadProgress}>
-                      <ActivityIndicator size="small" color={COLORS.primary} />
-                      <PaperText style={styles.uploadText}>
-                        {t('documents.uploading')}... {Math.round(uploadProgress)}%
-                      </PaperText>
-                    </View>
-                    <View style={styles.progressBar}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          { width: `${uploadProgress}%` },
-                        ]}
-                      />
-                    </View>
-                  </Card>
-                </Animated.View>
-              )}
-
-              <Animated.View entering={FadeInDown.delay(400).duration(400)}>
-                <TouchableOpacity
-                  style={[
-                    styles.uploadButton,
-                    !isUploadEnabled && styles.uploadButtonDisabled,
-                  ]}
-                  onPress={uploadDocument}
-                  disabled={!isUploadEnabled}
+            <Animated.View entering={FadeInDown.delay(0).duration(400)}>
+              <Card style={{ ...styles.card, backgroundColor: colors.card }}>
+                <PaperText
+                  style={[styles.sectionTitle, { color: colors.text }]}
                 >
-                  {isUploading ? (
-                    <ActivityIndicator color="white" size="small" />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name="cloud-upload"
-                      size={20}
-                      color="white"
-                    />
-                  )}
-                  <PaperText style={styles.uploadButtonText}>
-                    {isUploading
-                      ? t('documents.uploading')
-                      : t('documents.uploadDocument')}
-                  </PaperText>
-                </TouchableOpacity>
-              </Animated.View>
+                  {t('documents.selectCase')}
+                </PaperText>
+                <View style={styles.casePickerContainer}>
+                  {caseOptions.map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.caseOption,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                        selectedCaseId === option.value && {
+                          borderColor: colors.primary,
+                          backgroundColor: colors.primary + '08',
+                        },
+                      ]}
+                      onPress={() => setSelectedCaseId(option.value)}
+                    >
+                      <MaterialCommunityIcons
+                        name="folder"
+                        size={20}
+                        color={
+                          selectedCaseId === option.value
+                            ? colors.primary
+                            : colors.textSecondary
+                        }
+                      />
+                      <PaperText
+                        style={[
+                          styles.caseOptionText,
+                          { color: colors.text },
+                          selectedCaseId === option.value && [
+                            styles.caseOptionTextSelected,
+                            { color: colors.primary },
+                          ],
+                        ]}
+                      >
+                        {option.label}
+                      </PaperText>
+                      {selectedCaseId === option.value && (
+                        <MaterialCommunityIcons
+                          name="check-circle"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </Card>
+            </Animated.View>
 
-              <PaperText style={styles.helperText}>
-                {t('documents.uploadHelper')}
-              </PaperText>
-            </>
+            <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+              <Card style={{ ...styles.card, backgroundColor: colors.card }}>
+                <PaperText
+                  style={[styles.sectionTitle, { color: colors.text }]}
+                >
+                  {t('documents.documentType')}
+                </PaperText>
+                <View style={styles.documentTypeContainer}>
+                  {[
+                    DocumentType.PASSPORT,
+                    DocumentType.ID_CARD,
+                    DocumentType.DIPLOMA,
+                    DocumentType.OTHER,
+                  ].map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.documentTypeOption,
+                        {
+                          backgroundColor:
+                            documentType === type
+                              ? colors.primary + '15'
+                              : colors.surface,
+                          borderColor:
+                            documentType === type
+                              ? colors.primary
+                              : colors.border,
+                        },
+                      ]}
+                      onPress={() => setDocumentType(type)}
+                    >
+                      <MaterialCommunityIcons
+                        name={
+                          type === DocumentType.PASSPORT
+                            ? 'passport'
+                            : type === DocumentType.ID_CARD
+                              ? 'card-account-details'
+                              : type === DocumentType.DIPLOMA
+                                ? 'school'
+                                : 'file-document'
+                        }
+                        size={20}
+                        color={
+                          documentType === type
+                            ? colors.primary
+                            : colors.textSecondary
+                        }
+                        style={styles.documentTypeIcon}
+                      />
+                      <PaperText
+                        style={[
+                          styles.documentTypeLabel,
+                          {
+                            color:
+                              documentType === type
+                                ? colors.primary
+                                : colors.textSecondary,
+                          },
+                        ]}
+                      >
+                        {DOCUMENT_TYPE_LABELS[type]}
+                      </PaperText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </Card>
+            </Animated.View>
+
+            <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+              <TouchableOpacity
+                style={[
+                  styles.uploadButton,
+                  {
+                    backgroundColor:
+                      isSelectedCaseValid && !isUploading
+                        ? colors.primary
+                        : colors.border,
+                  },
+                ]}
+                onPress={handlePickDocument}
+                disabled={!isSelectedCaseValid || isUploading}
+              >
+                {isUploading ? (
+                  <>
+                    <ActivityIndicator color="white" size="small" />
+                    <PaperText style={styles.uploadButtonText}>
+                      {t('documents.uploading')}...
+                    </PaperText>
+                  </>
+                ) : (
+                    <>
+                    <MaterialCommunityIcons
+                        name="upload"
+                        size={24}
+                      color="white"
+                      />
+                      <PaperText style={styles.uploadButtonText}>
+                        {t('documents.selectAndUpload') ||
+                          'Select & Upload Document'}
+                      </PaperText>
+                  </>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+
+            <PaperText
+              style={[styles.helperText, { color: colors.textSecondary }]}
+            >
+              {t('documents.uploadHelper')}
+            </PaperText>
+          </>
         )}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingTop: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  title: {
-    fontWeight: 'bold',
-    marginBottom: SPACING.sm,
-    color: COLORS.primary,
-  },
-  subtitle: {
-    color: COLORS.textSecondary,
-    textAlign: 'center',
   },
   content: {
-    padding: SPACING.lg,
-  },
-  noCasesContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.xxl,
-  },
-  noCasesText: {
-    marginTop: SPACING.lg,
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    padding: SPACING.md,
+    paddingBottom: SPACING.xl,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: SPACING.md,
-    color: COLORS.text,
   },
   helperText: {
     fontSize: 14,
-    color: COLORS.textSecondary,
     textAlign: 'center',
     paddingVertical: SPACING.lg,
-  },
-  segmentedButtons: {
-    marginBottom: SPACING.md,
-  },
-  segmentButton: {
-    borderColor: COLORS.border,
-  },
-  segmentLabel: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   casePickerContainer: {
     gap: SPACING.sm,
@@ -522,25 +379,17 @@ const styles = StyleSheet.create({
   caseOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
     borderWidth: 1.5,
-    borderColor: COLORS.border,
     borderRadius: 12,
     padding: SPACING.md,
     gap: SPACING.sm,
-  },
-  caseOptionSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '08',
   },
   caseOptionText: {
     flex: 1,
     fontSize: 15,
     fontWeight: '500',
-    color: COLORS.text,
   },
   caseOptionTextSelected: {
-    color: COLORS.primary,
     fontWeight: '600',
   },
   documentTypeContainer: {
@@ -552,14 +401,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     padding: SPACING.md,
-    backgroundColor: COLORS.surface,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  documentTypeOptionSelected: {
-    backgroundColor: COLORS.primary + '15',
-    borderColor: COLORS.primary,
+    borderWidth: 1.5,
   },
   documentTypeIcon: {
     marginBottom: SPACING.xs,
@@ -569,100 +412,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  filePickerContainer: {
-    gap: SPACING.md,
-    marginBottom: SPACING.md,
-  },
-  pickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: SPACING.md,
-    gap: SPACING.sm,
-  },
-  pickerButtonText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: COLORS.text,
-  },
-  filePreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-  },
-  fileInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: SPACING.sm,
-  },
-  fileDetails: {
-    flex: 1,
-  },
-  fileName: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: COLORS.text,
-  },
-  fileSize: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  removeFileButton: {
-    padding: SPACING.xs,
-  },
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
     borderRadius: 12,
     padding: SPACING.md,
     gap: SPACING.sm,
     marginBottom: SPACING.md,
-  },
-  uploadButtonDisabled: {
-    backgroundColor: COLORS.textSecondary,
   },
   uploadButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
   },
-  uploadProgress: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  uploadText: {
-    fontSize: 14,
-    color: COLORS.text,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: COLORS.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
-    borderRadius: 2,
-  },
   card: {
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    borderRadius: 16,
     padding: SPACING.md,
   },
 });

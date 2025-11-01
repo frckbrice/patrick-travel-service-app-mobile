@@ -8,7 +8,7 @@ import {
   Text,
   TextInput as RNTextInput,
   TouchableOpacity,
-  Alert,Keyboard, KeyboardEvent 
+  Keyboard, KeyboardEvent 
 } from 'react-native';
 import { Avatar } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -30,7 +30,7 @@ import {
   getFileIconForMimeType,
   validateFile,
 } from '../../lib/utils/fileDownload';
-import { uploadThingService } from '../../lib/services/uploadthing';
+import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { COLORS, SPACING } from '../../lib/constants';
 import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
@@ -38,6 +38,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'; // Make sure this
 
 import { ModernHeader } from '../../components/ui/ModernHeader';
 import { casesApi } from '@/lib/api/cases.api';
+import { Alert } from '../../lib/utils/alert';
 
 
  // Standalone memoized chat input prevents parent re-renders on keystrokes
@@ -379,15 +380,18 @@ useEffect(() => {
     if (chatInitializedRef.current) return;
     if (!user || !caseId) return;
     try {
+      logger.info('Ensuring conversation exists', { caseId, userId: user.id });
       // Resolve true case reference via chat metadata (Firebase chat ID -> caseReference)
       const metadata = await chatService.getChatMetadata(caseId);
       const trueCaseId = metadata?.caseReference || caseId;
+      logger.info('Case metadata retrieved', { metadata, trueCaseId });
       // Prefer agent info from metadata if present
       if (metadata?.participants?.agentId || metadata?.participants?.agentName) {
         setAgentInfo({ id: metadata.participants.agentId, name: metadata.participants.agentName });
       }
 
       const resp = await casesApi.getCaseById(trueCaseId);
+      logger.info('Case data retrieved', { success: resp?.success, hasData: !!resp?.data, hasAgent: !!resp?.data?.assignedAgent });
       const c: any = resp?.data;
       if (resp?.success && c?.assignedAgent) {
         await chatService.initializeConversation(
@@ -398,11 +402,16 @@ useEffect(() => {
           c.assignedAgent.id,
           `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim()
         );
+        logger.info('Conversation initialized', { caseId, agentId: c.assignedAgent.id });
         // Ensure UI header shows correct agent info
         setAgentInfo({ id: c.assignedAgent.id, name: `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim() });
         chatInitializedRef.current = true;
+      } else {
+        logger.warn('Cannot initialize conversation - missing agent', { hasSuccess: resp?.success, hasAgent: !!resp?.data?.assignedAgent });
       }
-    } catch {}
+    } catch (error) {
+      logger.error('Failed to ensure conversation', error);
+    }
   };
   ensureConversation();
 }, [user, caseId]);
@@ -522,20 +531,11 @@ const handlePickFile = useCallback(async () => {
 
       logger.info('Starting file upload', { fileName, fileSize, mimeType });
 
-      // Upload file with progress tracking
-      const uploadResult = await uploadThingService.uploadFile(
+      // Upload file to API
+      const uploadResult = await uploadFileToAPI(
         file.uri,
         fileName,
-        mimeType,
-        {
-          onProgress: (progress) => {
-            setUploadProgress(progress);
-          },
-          metadata: {
-            caseId: caseId || '',
-            userId: user?.id || '',
-          },
-        }
+        mimeType
       );
 
       setIsUploading(false);
@@ -544,24 +544,24 @@ const handlePickFile = useCallback(async () => {
       if (!uploadResult.success || !uploadResult.url) {
         Alert.alert(
           t('common.error'),
-          uploadResult.error || t('errors.uploadFailed')
+          uploadResult.error || t('errors.uploadFailed') || 'Upload failed'
         );
         return;
       }
 
-      // Add to selected attachments (optimized - avoid array spread for performance)
+      // Add to selected attachments
       setSelectedAttachments((prev) => [
         ...prev,
         {
-          name: uploadResult.name || fileName,
+          name: fileName,
           url: uploadResult.url!,
           type: mimeType,
-          size: uploadResult.size || fileSize,
+          size: fileSize,
         },
       ]);
 
       logger.info('File uploaded successfully', {
-        fileName: uploadResult.name,
+        fileName,
         url: uploadResult.url,
       });
     }

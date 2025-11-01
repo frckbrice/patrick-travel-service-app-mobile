@@ -511,6 +511,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  DeviceEventEmitter,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -526,9 +527,9 @@ import { useAuthStore } from '../../stores/auth/authStore';
 import { DashboardStats } from '../../lib/types';
 import { SPACING, COLORS as STATIC_COLORS } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
-import { useCaseRequirementGuard } from '../../lib/guards/useCaseRequirementGuard';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { chatService } from '../../lib/services/chat';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - SPACING.lg * 3) / 2;
@@ -539,7 +540,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const COLORS = useThemeColors();
-  const { requiresActiveCase } = useCaseRequirementGuard();
+  const scrollProps = useTabBarScroll();
   const [stats, setStats] = useState<DashboardStats>({
     totalCases: 0,
     activeCases: 0,
@@ -550,6 +551,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const isFetchingStatsRef = useRef(false);
   const isFetchingUnreadCountsRef = useRef(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchDashboardStats = useCallback(async () => {
     if (isFetchingStatsRef.current) return; // Prevent concurrent calls
@@ -642,6 +644,31 @@ export default function HomeScreen() {
     }, [user?.id, fetchAllUnreadCounts, fetchDashboardStats])
   );
 
+  // Subscribe to notification/email read events to update counts instantly
+  useEffect(() => {
+    const scheduleRefresh = () => {
+      if (refreshTimerRef.current) return; // debounce bursts
+      refreshTimerRef.current = setTimeout(() => {
+        refreshTimerRef.current = null;
+        fetchAllUnreadCounts();
+      }, 250);
+    };
+
+    const sub1 = DeviceEventEmitter.addListener('notifications:read', scheduleRefresh);
+    const sub2 = DeviceEventEmitter.addListener('notifications:markAllRead', scheduleRefresh);
+    const sub3 = DeviceEventEmitter.addListener('email:read', scheduleRefresh);
+
+    return () => {
+      sub1.remove();
+      sub2.remove();
+      sub3.remove();
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [fetchAllUnreadCounts]);
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return t('dashboard.greetings.morning') || 'Good Morning';
@@ -649,12 +676,10 @@ export default function HomeScreen() {
     return t('dashboard.greetings.evening') || 'Good Evening';
   };
 
-  // Handle upload navigation with case requirement
+  // Handle upload navigation - navigate directly without case requirement check
   const handleUploadPress = useCallback(() => {
-    if (requiresActiveCase('upload documents')) {
-      router.push('/document/upload');
-    }
-  }, [requiresActiveCase, router]);
+    router.push('/document/upload');
+  }, [router]);
 
   return (
     <TouchDetector>
@@ -688,6 +713,8 @@ export default function HomeScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          onScroll={scrollProps.onScroll}
+          scrollEventThrottle={scrollProps.scrollEventThrottle}
           refreshControl={
             <RefreshControl
               refreshing={isLoading}
@@ -939,7 +966,7 @@ export default function HomeScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  onPress={() => router.push('/templates')}
+                  onPress={() => router.push('/(tabs)/documents?tab=templates')}
                   style={[styles.actionButton, styles.actionButtonLast]}
                   activeOpacity={0.6}
                 >

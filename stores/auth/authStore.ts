@@ -292,11 +292,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true });
 
       // Remove push token from backend (non-blocking)
-      try {
-        await userApi.removePushToken();
-      } catch (error) {
-        logger.warn('Failed to remove push token', error);
-        // Continue with logout even if push token removal fails
+      // Only attempt if we have an auth token to avoid 401 loops
+      const currentToken = get().token;
+      if (currentToken || auth.currentUser) {
+        try {
+          await userApi.removePushToken();
+        } catch (error) {
+          logger.warn('Failed to remove push token', error);
+          // Continue with logout even if push token removal fails
+        }
+      } else {
+        logger.info('Skipping push token removal - no auth token available');
       }
 
       // Logout from API - this revokes refresh tokens on server side

@@ -31,6 +31,7 @@ import {
 } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format } from 'date-fns';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 
 type SortOption = 'date-desc' | 'date-asc' | 'status' | 'priority';
 
@@ -39,6 +40,7 @@ export default function CasesScreen() {
   const router = useRouter();
   const { cases, isLoading, fetchCases } = useCasesStore();
   const colors = useThemeColors();
+  const scrollProps = useTabBarScroll();
 
   // State management
   const [searchQuery, setSearchQuery] = useState('');
@@ -434,6 +436,8 @@ export default function CasesScreen() {
           styles.list,
           { paddingBottom: Platform.OS === 'ios' ? 100 : 80 }
         ]}
+        onScroll={scrollProps.onScroll}
+        scrollEventThrottle={scrollProps.scrollEventThrottle}
         refreshControl={
           <RefreshControl
             refreshing={isLoading}

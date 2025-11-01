@@ -26,6 +26,7 @@ import {
 import { useAuthStore } from '../../../stores/auth/authStore';
 import { logger } from '../../../lib/utils/logger';
 import i18n from 'i18next';
+import { Alert } from '../../../lib/utils/alert';
 
 
 export default function LoginScreen() {
@@ -123,8 +124,7 @@ export default function LoginScreen() {
 
     logger.info('Prompting biometric enable', { email });
 
-    // Show native alert using React Native's Alert
-    const { Alert } = require('react-native');
+    // Show custom alert
     Alert.alert(
       t('settings.enableBiometric'),
       `Enable ${biometricType} for faster login?`,

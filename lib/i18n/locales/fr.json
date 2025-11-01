@@ -1,5 +1,6 @@
 {
   "common": {
+    "continue": "Continuer",
     "welcome": "Bienvenue",
     "welcomeBack": "Bon retour",
     "login": "Connexion",
@@ -142,6 +143,7 @@
     "downloadTemplates": "Télécharger des modèles"
   },
   "cases": {
+    "selectCase": "Sélectionner un cas",
     "myCases": "Mes cas",
     "caseDetails": "Détails du cas",
     "newCase": "Nouveau cas",
@@ -190,11 +192,19 @@
     "submissionFailed": "Échec de la soumission"
   },
   "documents": {
+    "selectAndUpload": "Sélectionnez un cas et choisissez un fichier à téléverser",
+    "uploadFailed": "Échec du téléversement",
+    "uploadHelper": "Télécharger un document pour votre cas",
+    "quickUpload": "envoi rapide",
+    "chooseFile": "Choisir un fichier",
+    "chooseImage": "Choisir une image",
+    "title": "Documents",
+    "subtitle": "Télécharger et gérez vos fichiers",
     "myDocuments": "Mes documents",
     "searchDocuments": "Rechercher des documents",
     "uploadDocument": "Téléverser un document",
     "documentDetails": "Détails du document",
-    "noDocumentsDescription": "Vous n'avez pas encore téléversé de documents. Téléversez votre premier document pour commencer.",
+    "noDocumentsDescription": "Vous n'avez pas encore téléversé de documents. Télécharger votre premier document pour commencer.",
     "selectCase": "Sélectionner un cas",
     "selectCaseAndFile": "Sélectionnez un cas et choisissez un fichier à téléverser",
     "documentType": "Type de document",
@@ -432,10 +442,18 @@
     "noCachedData": "Aucune donnée en cache disponible et hors ligne"
   },
   "templates": {
+    "upaloadFilled": "Envoyez",
+    "selectFile": "Sélectionner un fichier",
     "templates": "Modèles de documents",
+    "title": "Modèles",
+    "subtitle": "Téléchargez et remplissez les documents requis",
     "searchTemplates": "Rechercher des modèles...",
     "allServices": "Tous les services",
     "allCategories": "Toutes les catégories",
+    "filter": {
+      "serviceType": "Type de service",
+      "category": "Catégorie"
+    },
     "required": "Obligatoire",
     "downloads": "téléchargements",
     "download": "Télécharger",
@@ -443,7 +461,26 @@
     "noTemplatesDescription": "Il n'y a pas de modèles disponibles pour le moment.",
     "downloading": "Téléchargement...",
     "downloaded": "Téléchargé",
-    "downloadError": "Échec du téléchargement du modèle"
+    "downloadError": "Échec du téléchargement du modèle",
+    "share": "Partager",
+    "downloadAndFill": "Télécharger",
+    "completeTemplate": "Compléter le modèle",
+    "fillNow": "Remplir maintenant",
+    "fillNowDesc": "Complétez le formulaire directement dans l'application",
+    "downloadBlank": "Télécharger vierge",
+    "downloadBlankDesc": "Enregistrer une copie vierge à remplir plus tard",
+    "submitCompleted": "Soumettre le fichier complété",
+    "selectFilledFile": "Choisir le fichier",
+    "downloadSuccess": "Modèle téléchargé avec succès",
+    "downloadComplete": "Téléchargement terminé",
+    "fillInstructions": "Le modèle a été téléchargé. Veuillez le remplir dans votre application préférée puis le téléverser.",
+    "inAppFillNotAvailable": "Remplissage intégré non disponible",
+    "useExternalApp": "Ce modèle ne peut pas être rempli dans l'application. Veuillez le télécharger et le remplir dans une application externe.",
+    "uploadSuccess": "Modèle complété téléversé avec succès",
+    "noCasesAvailable": "Aucun cas disponible. Veuillez créer un cas d'abord.",
+    "caseReady": "Cas prêt",
+    "caseReadyDesc": "Le cas {{caseNumber}} est prêt pour le téléversement de documents.",
+    "casePreselected": "Votre cas est présélectionné. Vous pouvez maintenant téléverser votre modèle complété."
   },
   "legal": {
     "privacyPolicy": "Politique de Confidentialité",

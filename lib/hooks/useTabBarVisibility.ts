@@ -9,7 +9,8 @@ interface UseTabBarVisibilityReturn {
 }
 
 export const useTabBarVisibility = (): UseTabBarVisibilityReturn => {
-  const [isTabBarVisible, setIsTabBarVisible] = useState(false);
+  // Facebook-like: tab bar visible by default, hides/shows based on scroll
+  const [isTabBarVisible, setIsTabBarVisible] = useState(true);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastInteractionRef = useRef<number>(Date.now());
 
@@ -25,10 +26,8 @@ export const useTabBarVisibility = (): UseTabBarVisibilityReturn => {
     lastInteractionRef.current = Date.now();
     clearHideTimeout();
     
-    // Auto-hide after 3 seconds of inactivity
-    hideTimeoutRef.current = setTimeout(() => {
-      setIsTabBarVisible(false);
-    }, 3000);
+    // Don't auto-hide when shown via scroll - let scroll direction control it
+    // Only auto-hide after 3 seconds for manual interactions
   };
 
   const hideTabBar = () => {

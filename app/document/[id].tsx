@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, Alert, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import { Text, Button, Chip, ActivityIndicator } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import {
 import { format } from 'date-fns';
 import { toast } from '../../lib/services/toast';
 import { PDFViewer, ImageZoomViewer } from '../../components/ui';
+import { Alert } from '../../lib/utils/alert';
 
 const { width } = Dimensions.get('window');
 

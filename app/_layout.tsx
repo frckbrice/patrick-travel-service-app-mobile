@@ -20,6 +20,8 @@ import { useCaseUpdates } from '../lib/hooks/useCaseUpdates';
 import { logger } from '../lib/utils/logger';
 import { SPACING, FONT_SIZES } from '../lib/constants';
 import '../lib/i18n';
+import { AlertProvider, useCustomAlert } from '../components/ui/CustomAlert';
+import { initAlert } from '../lib/utils/alert';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,9 +38,15 @@ function AppContent() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { theme, isDark } = useTheme();
   const { isTabBarVisible, showTabBar, hideTabBar } = useTabBarContext();
+  const { showAlert } = useCustomAlert();
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const [isAppReady, setIsAppReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+
+  // Initialize global Alert API
+  useEffect(() => {
+    initAlert(showAlert);
+  }, [showAlert]);
 
   // Enable fallback case update monitoring (acts as backup if push notifications fail)
   useCaseUpdates();
@@ -279,9 +287,11 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TabBarProvider>
-          <AppContent />
-        </TabBarProvider>
+        <AlertProvider>
+          <TabBarProvider>
+            <AppContent />
+          </TabBarProvider>
+        </AlertProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -1,12 +1,7 @@
 // Firebase configuration
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import {
-  getAuth,
-  initializeAuth,
-  getReactNativePersistence,
-} from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
 const firebaseConfig = {
@@ -34,9 +29,9 @@ let database: ReturnType<typeof getDatabase>;
 
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
+  // getAuth handles persistence automatically on React Native
+  // No need to use initializeAuth with getReactNativePersistence in Firebase v12
+  auth = getAuth(app);
   database = getDatabase(app);
 } else {
   app = getApps()[0];
