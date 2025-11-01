@@ -259,18 +259,18 @@ export default function NewCaseScreen() {
         <>
         <ModernHeader
           variant="gradient"
-          gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+              gradientColors={[colors.primary, colors.secondary, colors.accent]}
           title={t('dashboard.submitNewCase')}
           subtitle={t('cases.selectServiceType')}
           showBackButton
         />
         <KeyboardAvoidingScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{
-        ...styles.scrollContent,
-        paddingBottom: insets.bottom + SPACING.lg,
-      }}
-    >
+              style={{ flex: 1, backgroundColor: colors.background }}
+              contentContainerStyle={{
+                  ...styles.scrollContent,
+                  paddingBottom: insets.bottom + SPACING.lg,
+              }}
+          >
             {/* Progress Indicator */}
             <View style={styles.progressContainer}>
               <View style={styles.progressBar}>

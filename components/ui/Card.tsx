@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 
 interface CardProps {
   children: React.ReactNode;
@@ -27,10 +28,13 @@ export const Card: React.FC<CardProps> = ({
   elevated = true,
   bordered = false,
 }) => {
+  const colors = useThemeColors();
+  
   const cardStyle: ViewStyle = {
     ...styles.card,
+    backgroundColor: colors.card,
     ...(elevated && styles.elevated),
-    ...(bordered && styles.bordered),
+    ...(bordered && { borderWidth: 1, borderColor: colors.border }),
     ...style,
   };
 
@@ -47,7 +51,6 @@ export const Card: React.FC<CardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
   },
@@ -66,10 +69,6 @@ const styles = StyleSheet.create({
         elevation: 4,
       },
     }),
-  },
-  bordered: {
-    borderWidth: 1,
-    borderColor: '#E9ECEF',
   },
 });
 
@@ -103,7 +102,12 @@ interface CardFooterProps {
 }
 
 export const CardFooter: React.FC<CardFooterProps> = ({ children, style }) => {
-  return <View style={[cardSubStyles.cardFooter, style]}>{children}</View>;
+  const colors = useThemeColors();
+  return (
+    <View style={[cardSubStyles.cardFooter, { borderTopColor: colors.border }, style]}>
+      {children}
+    </View>
+  );
 };
 
 const cardSubStyles = StyleSheet.create({
@@ -117,7 +121,6 @@ const cardSubStyles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E9ECEF',
   },
 });
 

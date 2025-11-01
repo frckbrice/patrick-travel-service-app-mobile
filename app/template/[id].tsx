@@ -31,6 +31,7 @@ import {
   SPACING,
   MAX_FILE_SIZE,
 } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
 import { toast } from '../../lib/services/toast';
 import { Alert } from '../../lib/utils/alert';
@@ -39,6 +40,7 @@ export default function TemplateDownloadUploadScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const themeColors = useThemeColors();
   const { id, caseId: initialCaseId } = useLocalSearchParams<{ id: string; caseId?: string }>();
   const insets = useSafeAreaInsets();
   
@@ -415,7 +417,7 @@ export default function TemplateDownloadUploadScreen() {
       <View style={styles.container}>
         <ModernHeader
         variant="gradient"
-        gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
           title={template.name}
         subtitle={template.description || (t('templates.subtitle') || 'Download and fill required documents')}
         showBackButton

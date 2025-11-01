@@ -18,10 +18,10 @@ const lightTheme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
-    primary: '#5B7C99',
-    secondary: '#7C9885',
-    tertiary: '#9B8B7E',
-    error: '#C85C5C',
+    primary: '#2563EB',
+    secondary: '#22C55E',
+    tertiary: '#F97316',
+    error: '#EF4444',
     surface: '#FFFFFF',
     background: '#F5F6F7',
     onSurface: '#2C3E50',
@@ -33,10 +33,10 @@ const darkTheme = {
   ...MD3DarkTheme,
   colors: {
     ...MD3DarkTheme.colors,
-    primary: '#7A9BB8',
-    secondary: '#94B5A0',
-    tertiary: '#B5A899',
-    error: '#D77C7C',
+    primary: '#3B82F6',
+    secondary: '#22C55E',
+    tertiary: '#FB923C',
+    error: '#F87171',
     surface: '#1E2329',
     background: '#15191E',
     onSurface: '#E8EAED',
@@ -95,9 +95,9 @@ export const useThemeColors = () => {
 
     // Status Colors
     error: theme.colors.error,
-    success: isDark ? '#6B9E78' : '#6B9E78',
-    warning: isDark ? '#D4A574' : '#D4A574',
-    info: isDark ? '#7A9BB8' : '#6B8CAE',
+    success: '#22C55E',
+    warning: '#F59E0B',
+    info: '#3B82F6',
 
     // Neutral Palette
     background: theme.colors.background,
@@ -114,5 +114,8 @@ export const useThemeColors = () => {
     divider: isDark ? '#252A31' : '#EDF0F2',
     disabled: isDark ? '#3E4852' : '#C4CDD5',
     overlay: isDark ? 'rgba(0, 0, 0, 0.7)' : 'rgba(44, 62, 80, 0.6)',
+    
+    // Theme Mode
+    isDark,
   };
 };

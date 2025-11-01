@@ -604,7 +604,7 @@ export default function DocumentsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.downloadButton, { backgroundColor: colors.primary }]}
+                style={[styles.downloadButton, { backgroundColor: '#0066CC' }]}
                 onPress={() => handleDownloadAndFill(item)}
               >
                 <MaterialCommunityIcons name="file-edit" size={20} color="white" />
@@ -644,10 +644,10 @@ export default function DocumentsScreen() {
 
   return (
     // <TouchDetector>
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: insets.bottom + SPACING.lg }]}>
       <ModernHeader
         variant="gradient"
-        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={activeTab === 'documents' ? t('documents.title') || 'Documents' : t('templates.title') || 'Templates'}
         subtitle={activeTab === 'documents' ? (t('documents.subtitle') || 'Upload and manage your files') : (t('templates.subtitle') || 'Download and fill required documents')}
         showBackButton
@@ -682,7 +682,7 @@ export default function DocumentsScreen() {
           <TouchableOpacity
             style={[
               styles.segment,
-              activeTab === 'templates' && [styles.segmentActive, { backgroundColor: colors.primary }],
+              activeTab === 'templates' && [styles.segmentActive, { backgroundColor: '#0066CC' }],
             ]}
             onPress={() => setActiveTab('templates')}
           >

@@ -31,7 +31,8 @@ import {
   validateFile,
 } from '../../lib/utils/fileDownload';
 import { uploadFileToAPI } from '../../lib/services/fileUpload';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING } from '../../lib/constants';
+import { useThemeColors, useTheme } from '../../lib/theme/ThemeContext';
 import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
 import { SafeAreaView } from 'react-native-safe-area-context'; // Make sure this import exists
@@ -39,6 +40,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'; // Make sure this
 import { ModernHeader } from '../../components/ui/ModernHeader';
 import { casesApi } from '@/lib/api/cases.api';
 import { Alert } from '../../lib/utils/alert';
+import { useTabBarContext } from '../../lib/context/TabBarContext';
 
 
  // Standalone memoized chat input prevents parent re-renders on keystrokes
@@ -47,11 +49,15 @@ import { Alert } from '../../lib/utils/alert';
   onChangeText,
   placeholder,
   editable,
+   placeholderTextColor,
+   textColor,
 }: {
   value: string;
   onChangeText: (text: string) => void;
   placeholder: string;
   editable: boolean;
+     placeholderTextColor: string;
+     textColor: string;
 }) {
   const onChange = React.useCallback((text: string) => onChangeText(text), [onChangeText]);
   return (
@@ -60,10 +66,10 @@ import { Alert } from '../../lib/utils/alert';
         placeholder={placeholder}
         value={value}
         onChangeText={onChange}
-        style={styles.input}
+        style={[styles.input, { color: textColor }]}
         multiline
         maxLength={500}
-        placeholderTextColor={COLORS.textSecondary}
+        placeholderTextColor={placeholderTextColor}
         editable={editable}
       />
     </View>
@@ -76,8 +82,11 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { id: caseId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { hideTabBar, showTabBar } = useTabBarContext();
   const colorScheme = Platform.OS === 'ios' || Platform.OS === 'android' ? (require('react-native').useColorScheme?.() || 'light') : 'light';
   const user = useAuthStore((state) => state.user);
+  const { isDark } = useTheme();
+  const themeColors = useThemeColors();
   const [newMessage, setNewMessage] = useState('');
   const [selectedAttachments, setSelectedAttachments] = useState<
     {
@@ -96,7 +105,7 @@ export default function ChatScreen() {
   const processedMessagesRef = useRef<Set<string>>(new Set());
   const latestTimestampRef = useRef<number | undefined>(undefined);
   const chatInitializedRef = useRef(false);
-  const [agentInfo, setAgentInfo] = useState<{ id?: string; name?: string } | null>(null);
+  const [agentInfo, setAgentInfo] = useState<{ id?: string; name?: string; profilePicture?: string; isOnline?: boolean } | null>(null);
 
   useEffect(() => {
     const onShow = (e: KeyboardEvent) => {
@@ -169,9 +178,9 @@ export default function ChatScreen() {
 
     initializeChat();
 
-    // Mark messages as read when opening chat
+    // Mark messages as read when opening chat - update both Firebase and database
     if (user) {
-      chatService.markMessagesAsRead(caseId, user.id).catch(error => {
+      chatService.markChatRoomAsRead(caseId, user.id).catch(error => {
         // Silently handle permission errors - user may not have permission to mark messages as read
         logger.warn('Failed to mark messages as read (non-blocking)', error);
       });
@@ -263,15 +272,7 @@ export default function ChatScreen() {
     messageCountRef.current = messages.length;
   }, [messages]);
 
-  // Debug: Monitor when messages are loaded
-  useEffect(() => {
-    logger.info('Messages array updated', { 
-      caseId, 
-      count: messages.length,
-      messageIds: messages.map(m => m.id),
-      timestamps: messages.map(m => m.timestamp)
-    });
-  }, [messages, caseId]);
+
 
   
 
@@ -387,7 +388,11 @@ useEffect(() => {
       logger.info('Case metadata retrieved', { metadata, trueCaseId });
       // Prefer agent info from metadata if present
       if (metadata?.participants?.agentId || metadata?.participants?.agentName) {
-        setAgentInfo({ id: metadata.participants.agentId, name: metadata.participants.agentName });
+        setAgentInfo({
+          id: metadata.participants.agentId,
+          name: metadata.participants.agentName,
+          isOnline: false // Default to offline if no metadata available
+        });
       }
 
       const resp = await casesApi.getCaseById(trueCaseId);
@@ -404,7 +409,12 @@ useEffect(() => {
         );
         logger.info('Conversation initialized', { caseId, agentId: c.assignedAgent.id });
         // Ensure UI header shows correct agent info
-        setAgentInfo({ id: c.assignedAgent.id, name: `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim() });
+        setAgentInfo({
+          id: c.assignedAgent.id,
+          name: `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim(),
+          profilePicture: c.assignedAgent.profilePicture,
+          isOnline: true // Assume online for now, can be updated with real-time status later
+        });
         chatInitializedRef.current = true;
       } else {
         logger.warn('Cannot initialize conversation - missing agent', { hasSuccess: resp?.success, hasAgent: !!resp?.data?.assignedAgent });
@@ -415,6 +425,14 @@ useEffect(() => {
   };
   ensureConversation();
 }, [user, caseId]);
+
+  // Hide tab bar when this screen mounts (stack screen)
+  useEffect(() => {
+    hideTabBar();
+    return () => {
+      showTabBar();
+    };
+  }, [hideTabBar, showTabBar]);
 
  // RETRY: Retry sending a failed message
  const handleRetryMessage = useCallback(
@@ -631,7 +649,7 @@ const handlePickFile = useCallback(async () => {
 
   // Message row (memoized) to reduce re-renders when typing/sending
   const MessageRow = memo(
-  ({ item, index }: { item: ChatMessage; index: number }) => {
+    ({ item, index, themeColors, dynamicStyles }: { item: ChatMessage; index: number; themeColors: ReturnType<typeof useThemeColors>; dynamicStyles: any }) => {
     const isMyMessage = item.senderId === user?.id;
     const AnimatedView = isMyMessage
       ? Animated.createAnimatedComponent(View)
@@ -650,37 +668,38 @@ const handlePickFile = useCallback(async () => {
             size={36}
             label={item.senderName.charAt(0)}
             style={styles.avatar}
-            color={COLORS.primary}
+            color={themeColors.primary}
             labelStyle={styles.avatarLabel}
           />
         )} */}
         <View
           style={[
-            styles.messageBubble,
-            isMyMessage && styles.myMessageBubble,
+            dynamicStyles.messageBubble,
+            isMyMessage && dynamicStyles.myMessageBubble,
           ]}
         >
           {/* Bubble tails - WhatsApp/Telegram style (rounded) */}
           {!isMyMessage ? (
             <>
-              <View style={styles.tailLeftBubble} />
-              <View style={styles.tailLeftMask} />
+              <View style={dynamicStyles.tailLeftBubble} />
+              <View style={[styles.tailLeftMask, { backgroundColor: themeColors.background }]} />
             </>
           ) : (
             <>
-              <View style={styles.tailRightBubble} />
-              <View style={styles.tailRightMask} />
+                <View style={dynamicStyles.tailRightBubble} />
+                <View style={[styles.tailRightMask, { backgroundColor: themeColors.background }]} />
             </>
           )}
 
           {!isMyMessage && (
-            <Text style={styles.senderName}>{item.senderName}</Text>
+            <Text style={[styles.senderName, { color: themeColors.textSecondary }]}>{item.senderName}</Text>
           )}
           {(item.message && item.message.trim() !== '') && (
             <Text
               style={[
                 styles.messageText,
-                isMyMessage && styles.myMessageText,
+                { color: themeColors.text },
+                isMyMessage && [styles.myMessageText, { color: themeColors.surface }],
                 item.status === 'pending' && styles.pendingMessageText,
                 item.status === 'failed' && styles.failedMessageText,
               ]}
@@ -698,20 +717,22 @@ const handlePickFile = useCallback(async () => {
                   key={idx}
                   style={[
                     styles.attachmentCard,
-                    isMyMessage && styles.myAttachmentCard,
+                    { backgroundColor: themeColors.surface },
+                    isMyMessage && [styles.myAttachmentCard, { backgroundColor: themeColors.primary + '20' }],
                   ]}
                   onPress={() => handleDownloadAttachment(attachment)}
                 >
                   <MaterialCommunityIcons
                     name={getFileIconForMimeType(attachment.type) as any}
                     size={32}
-                    color={isMyMessage ? COLORS.surface : COLORS.primary}
+                    color={isMyMessage ? themeColors.surface : themeColors.primary}
                   />
                   <View style={styles.attachmentInfo}>
                     <Text
                       style={[
                         styles.attachmentName,
-                        isMyMessage && styles.myAttachmentName,
+                        { color: themeColors.text },
+                        isMyMessage && [styles.myAttachmentName, { color: themeColors.surface }],
                       ]}
                       numberOfLines={1}
                     >
@@ -720,7 +741,8 @@ const handlePickFile = useCallback(async () => {
                     <Text
                       style={[
                         styles.attachmentSize,
-                        isMyMessage && styles.myAttachmentSize,
+                        { color: themeColors.textSecondary },
+                        isMyMessage && [styles.myAttachmentSize, { color: themeColors.surface, opacity: 0.8 }],
                       ]}
                     >
                       {formatFileSize(attachment.size)}
@@ -729,7 +751,7 @@ const handlePickFile = useCallback(async () => {
                   <MaterialCommunityIcons
                     name="download"
                     size={20}
-                    color={isMyMessage ? COLORS.surface : COLORS.primary}
+                    color={isMyMessage ? themeColors.surface : themeColors.primary}
                   />
                 </TouchableOpacity>
               ))}
@@ -738,7 +760,11 @@ const handlePickFile = useCallback(async () => {
 
           {/* Timestamp and Status Indicators */}
           <View style={styles.messageFooter}>
-            <Text style={[styles.timestamp, isMyMessage && styles.myTimestamp]}>
+            <Text style={[
+              styles.timestamp,
+              { color: themeColors.textSecondary },
+              isMyMessage && [styles.myTimestamp, { color: themeColors.surface, opacity: 0.8 }],
+            ]}>
               {formatMessageTime(item.timestamp)}
             </Text>
 
@@ -749,21 +775,21 @@ const handlePickFile = useCallback(async () => {
                   <MaterialCommunityIcons
                     name="clock-outline"
                     size={14}
-                    color={COLORS.textSecondary}
+                    color={themeColors.textSecondary}
                   />
                 )}
                 {item.status === 'sent' && (
                   <MaterialCommunityIcons
                     name="check"
                     size={14}
-                    color={COLORS.success}
+                    color={themeColors.success}
                   />
                 )}
                 {item.status === 'failed' && (
                   <MaterialCommunityIcons
                     name="alert-circle"
                     size={14}
-                    color={COLORS.error}
+                    color={themeColors.error}
                   />
                 )}
               </View>
@@ -781,7 +807,7 @@ const handlePickFile = useCallback(async () => {
                 <MaterialCommunityIcons
                   name="refresh"
                   size={16}
-                  color={COLORS.primary}
+                  color={themeColors.primary}
                 />
                 <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
@@ -793,7 +819,7 @@ const handlePickFile = useCallback(async () => {
                 <MaterialCommunityIcons
                   name="delete"
                   size={16}
-                  color={COLORS.error}
+                  color={themeColors.error}
                 />
                 <Text style={styles.deleteButtonText}>Delete</Text>
               </TouchableOpacity>
@@ -818,15 +844,7 @@ const handlePickFile = useCallback(async () => {
     }
   );
 
-  // Memoized renderItem to keep stable reference
-  const renderMessage = useCallback(
-    ({ item, index }: { item: ChatMessage; index: number }) => (
-      <MessageRow item={item} index={index} />
-    ),
-    []
-  );
   // Memoize key extractor with unique key generation
- // Memoize key extractor with unique key generation
  const keyExtractor = useCallback((item: ChatMessage, index: number) => {
   // Use tempId for optimistic messages, otherwise use id with index for uniqueness
   return item.tempId || `${item.id}-${index}`;
@@ -855,12 +873,133 @@ const handleRefresh = useCallback(() => {
  // Dynamically measure input container height (includes safe area) to avoid overlap
  const [inputHeight, setInputHeight] = useState(0);
 
+  // Dynamic theme-aware styles for input area
+  const dynamicStyles = useMemo(() => ({
+    inputContainer: {
+      ...styles.inputContainer,
+      backgroundColor: isDark ? '#1E2329' : themeColors.surface,
+      borderTopColor: themeColors.border,
+    },
+    inputWrapper: {
+      ...styles.inputWrapper,
+      backgroundColor: isDark ? '#2A3038' : '#FFFFFF',
+      borderColor: themeColors.border,
+    },
+    input: {
+      ...styles.input,
+      color: isDark ? '#E8EAED' : themeColors.text,
+    },
+    selectedAttachment: {
+      ...styles.selectedAttachment,
+      backgroundColor: themeColors.primary + '15',
+    },
+    selectedAttachmentName: {
+      ...styles.selectedAttachmentName,
+      color: themeColors.text,
+    },
+    progressBar: {
+      ...styles.progressBar,
+      backgroundColor: themeColors.border,
+    },
+    progressFill: {
+      ...styles.progressFill,
+      backgroundColor: themeColors.primary,
+    },
+    uploadProgressText: {
+      ...styles.uploadProgressText,
+      color: themeColors.textSecondary,
+    },
+    loadingText: {
+      ...styles.loadingText,
+      color: themeColors.textSecondary,
+    },
+    // Message bubble styles
+    messageBubble: {
+      ...styles.messageBubble,
+      backgroundColor: isDark ? '#252A31' : themeColors.surface,
+    },
+    myMessageBubble: {
+      ...styles.myMessageBubble,
+      backgroundColor: isDark ? '#5A9BC8' : themeColors.primary,
+    },
+    tailLeftBubble: {
+      ...styles.tailLeftBubble,
+      backgroundColor: isDark ? '#252A31' : themeColors.surface,
+    },
+    tailRightBubble: {
+      ...styles.tailRightBubble,
+      backgroundColor: isDark ? '#5A9BC8' : themeColors.primary,
+    },
+    tailLeftMask: {
+      ...styles.tailLeftMask,
+      backgroundColor: themeColors.background,
+    },
+    tailRightMask: {
+      ...styles.tailRightMask,
+      backgroundColor: themeColors.background,
+    },
+    senderName: {
+      ...styles.senderName,
+      color: themeColors.textSecondary,
+    },
+    messageText: {
+      ...styles.messageText,
+      color: isDark ? '#E8EAED' : themeColors.text,
+    },
+    myMessageText: {
+      ...styles.myMessageText,
+      color: isDark ? '#E8EAED' : '#FFFFFF',
+    },
+    timestamp: {
+      ...styles.timestamp,
+      color: themeColors.textSecondary,
+    },
+    myTimestamp: {
+      ...styles.myTimestamp,
+      color: isDark ? '#A8B2BD' : '#FFFFFF',
+      opacity: 0.8,
+    },
+    attachmentCard: {
+      ...styles.attachmentCard,
+      backgroundColor: isDark ? '#2A3038' : themeColors.surface,
+    },
+    myAttachmentCard: {
+      ...styles.myAttachmentCard,
+      backgroundColor: isDark ? 'rgba(13, 115, 119, 0.2)' : themeColors.primary + '20',
+    },
+    attachmentName: {
+      ...styles.attachmentName,
+      color: themeColors.text,
+    },
+    myAttachmentName: {
+      ...styles.myAttachmentName,
+      color: isDark ? '#E8EAED' : '#FFFFFF',
+    },
+    attachmentSize: {
+      ...styles.attachmentSize,
+      color: themeColors.textSecondary,
+    },
+    myAttachmentSize: {
+      ...styles.myAttachmentSize,
+      color: isDark ? '#A8B2BD' : '#FFFFFF',
+      opacity: 0.8,
+    },
+  }), [themeColors, isDark]);
+
+  // Memoized renderItem to keep stable reference
+  const renderMessage = useCallback(
+    ({ item, index }: { item: ChatMessage; index: number }) => (
+      <MessageRow item={item} index={index} themeColors={themeColors} dynamicStyles={dynamicStyles} />
+    ),
+    [themeColors, dynamicStyles]
+  );
+
   const inputContainerStyle = useMemo(
     () => [
-      styles.inputContainer,
+      dynamicStyles.inputContainer,
       { paddingBottom: keyboardHeight > 0 ? keyboardHeight + insets.bottom : insets.bottom }
     ],
-    [keyboardHeight, insets.bottom]
+    [dynamicStyles.inputContainer, keyboardHeight, insets.bottom]
   );
 
   const flatListContentStyle = useMemo(() => ({
@@ -874,10 +1013,10 @@ const ListHeaderComponent = useMemo(() => {
   if (!isLoadingMore) return null;
   return (
     <View style={styles.loadingIndicator}>
-      <Text style={styles.loadingText}>{t('common.loading')}...</Text>
+      <Text style={dynamicStyles.loadingText}>{t('common.loading')}...</Text>
     </View>
   );
-}, [isLoadingMore, t]);
+}, [isLoadingMore, t, dynamicStyles.loadingText]);
 
 // Memoize FlatList props
 const flatListProps = useMemo(() => ({
@@ -903,36 +1042,63 @@ const flatListProps = useMemo(() => ({
 return (
   // <TouchDetector>
     <KeyboardAvoidingView
-      style={[styles.container, ]}
+    style={[styles.container, { backgroundColor: themeColors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
     {/* Header consistent with profile page, with WhatsApp-like agent info */}
     <ModernHeader
       title={agentInfo?.name || (t('messages.chat') as string) || 'Chat'}
-      subtitle={(t('messages.online') as string) || 'online'}
+      subtitle={agentInfo?.isOnline ? (t('messages.online') as string) || 'online' : (t('messages.offline') as string) || 'offline'}
       showBackButton
       leftActions={(
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={styles.headerAvatar}>
-            <Text style={styles.headerAvatarLabel}>
-              {(agentInfo?.name || 'A').charAt(0).toUpperCase()}
-            </Text>
+          <View style={styles.headerAvatarContainer}>
+            {agentInfo?.profilePicture ? (
+              <Avatar.Image
+                size={36}
+                source={{ uri: agentInfo.profilePicture }}
+                style={styles.headerAvatar}
+              />
+            ) : (
+                <View style={styles.headerAvatar}>
+                  <Text style={styles.headerAvatarLabel}>
+                    {(agentInfo?.name || 'A').charAt(0).toUpperCase()}
+                  </Text>
+              </View>
+            )}
+            {/* Online/Offline Status Badge */}
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: agentInfo?.isOnline ? '#4CAF50' : '#F44336' }
+            ]} />
           </View>
         </View>
       )}
       rightActions={(
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={{ paddingHorizontal: 8 }}>
+          <TouchableOpacity
+            style={{ paddingHorizontal: 8 }}
+            onPress={() => Alert.alert(t('common.comingSoon') || 'Coming Soon', t('messages.videoCallComingSoon') || 'Video call feature coming soon!')}
+          >
             <MaterialCommunityIcons name="video" size={22} color={'#FFF'} />
           </TouchableOpacity>
-          <TouchableOpacity style={{ paddingHorizontal: 4 }}>
+          <TouchableOpacity
+            style={{ paddingHorizontal: 8 }}
+            onPress={() => Alert.alert(t('common.comingSoon') || 'Coming Soon', t('messages.voiceCallComingSoon') || 'Voice call feature coming soon!')}
+          >
             <MaterialCommunityIcons name="phone" size={22} color={'#FFF'} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ paddingHorizontal: 8 }}
+            onPress={() => router.push('/profile/settings')}
+          >
+            <MaterialCommunityIcons name="cog-outline" size={22} color={'#FFF'} />
           </TouchableOpacity>
         </View>
       )}
       variant="gradient"
-      gradientColors={[COLORS.primary, '#1D4ED8']}
+      gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
     />
       <FlatList
         ref={flatListRef}
@@ -958,13 +1124,13 @@ return (
         {selectedAttachments.length > 0 && (
           <View style={styles.selectedAttachmentsContainer}>
             {selectedAttachments.map((attachment, index) => (
-              <View key={index} style={styles.selectedAttachment}>
+              <View key={index} style={dynamicStyles.selectedAttachment}>
                 <MaterialCommunityIcons
                   name={getFileIconForMimeType(attachment.type) as any}
                   size={18}
-                  color="#1F7CE6"
+                  color={themeColors.primary}
                 />
-                <Text style={styles.selectedAttachmentName} numberOfLines={1}>
+                <Text style={dynamicStyles.selectedAttachmentName} numberOfLines={1}>
                   {attachment.name}
                 </Text>
                 <TouchableOpacity
@@ -980,10 +1146,10 @@ return (
 
         {isUploading && (
           <View style={styles.uploadProgressContainer}>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+          <View style={dynamicStyles.progressBar}>
+            <View style={[dynamicStyles.progressFill, { width: `${uploadProgress}%` }]} />
             </View>
-            <Text style={styles.uploadProgressText}>
+          <Text style={dynamicStyles.uploadProgressText}>
               {t('common.uploading')} {Math.round(uploadProgress)}%
             </Text>
           </View>
@@ -998,16 +1164,18 @@ return (
             <MaterialCommunityIcons
               name="attachment"
               size={24}
-              color={isUploading ? '#9CA3AF' : '#6B7280'}
+            color={isUploading ? themeColors.disabled : themeColors.textSecondary}
             />
           </TouchableOpacity>
 
-          <View style={styles.inputWrapper}>
+        <View style={dynamicStyles.inputWrapper}>
             <ChatInput
               value={newMessage}
               onChangeText={setNewMessage}
               placeholder={t('messages.typeMessage') || 'Type your message...'}
               editable={!isUploading}
+            placeholderTextColor={themeColors.textSecondary}
+            textColor={themeColors.text}
             />
           </View>
 
@@ -1034,7 +1202,7 @@ return (
 const styles = StyleSheet.create({
 container: {
   flex: 1,
-  backgroundColor: '#E5DDD5',
+    // backgroundColor will be set dynamically by theme
 },
 
   headerContainer: {
@@ -1043,11 +1211,15 @@ container: {
     paddingHorizontal: 12,
     paddingBottom: 8,
     paddingTop: 8,
-    backgroundColor: COLORS.primary,
+    // backgroundColor will be set by ModernHeader gradient
   },
   headerBackBtn: {
     padding: 4,
     marginRight: 4,
+  },
+  headerAvatarContainer: {
+    marginRight: 8,
+    position: 'relative',
   },
   headerAvatar: {
     width: 36,
@@ -1056,12 +1228,21 @@ container: {
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
   },
   headerAvatarLabel: {
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 16,
+  },
+  statusBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   headerInfo: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, FlatList, Text, Platform, TouchableOpacity, DeviceEventEmitter, ScrollView } from 'react-native';
 import { Avatar, Badge } from 'react-native-paper';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -14,7 +14,8 @@ import { Notification, NotificationType, Message } from '../../lib/types';
 import { EmptyState } from '../../components/ui';
 import { ModernHeader } from '../../components/ui/ModernHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { getInitials, getConversationTitle, getNotificationBadgeColor, getNotificationIcon, getNotificationPriority, formatTime, formatEmailDate } from '../../lib/utils/notifications';
 import { logger } from '../../lib/utils/logger';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
@@ -25,6 +26,7 @@ export default function NotificationsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const themeColors = useThemeColors();
   const scrollProps = useTabBarScroll();
   const [activeTab, setActiveTab] = useState<TabType>('notifications');
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -51,8 +53,7 @@ export default function NotificationsScreen() {
             return { success: true, data: [] };
           })
         ]);
-        
-        console.log("\n\n the conversations info: ", { conversationsData });
+
         setConversations(conversationsData);
         
         if (notificationsResponse.success && notificationsResponse.data) {
@@ -308,7 +309,7 @@ export default function NotificationsScreen() {
                 label={initials}
                 style={[styles.avatar, hasUnread && styles.avatarUnread]}
                 labelStyle={styles.avatarLabel}
-                color={hasUnread ? COLORS.surface : COLORS.primary}
+                color={hasUnread ? themeColors.surface : themeColors.primary}
               />
               {hasUnread && (
                 <View style={styles.unreadBadge}>
@@ -342,7 +343,7 @@ export default function NotificationsScreen() {
                   <MaterialCommunityIcons
                     name="account-supervisor"
                     size={12}
-                    color={COLORS.textSecondary}
+                    color={themeColors.textSecondary}
                   />
                   <Text style={styles.advisorName}>Your Advisor</Text>
                 </View>
@@ -427,8 +428,6 @@ export default function NotificationsScreen() {
   const inboxEmails = emails.filter((email) => email.senderId !== user?.id);
   const sentEmails = emails.filter((email) => email.senderId === user?.id);
 
-  console.warn("\n\n the email info: ", { emails })
-
   // Format email date via utils
   const formatEmailDateMemo = useCallback((date: Date) => {
     return formatEmailDate(date, t);
@@ -466,605 +465,605 @@ export default function NotificationsScreen() {
     );
   }, [user, formatEmailDateMemo, router, t]);
 
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.background,
+    },
+    tabContainer: {
+      flexDirection: 'row',
+      backgroundColor: themeColors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+      paddingHorizontal: SPACING.xs,
+      paddingTop: SPACING.xs,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    tab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: SPACING.md,
+      paddingHorizontal: SPACING.xs,
+      gap: SPACING.xs,
+      borderBottomWidth: 3,
+      borderBottomColor: 'transparent',
+      marginHorizontal: SPACING.xs,
+      borderRadius: 8,
+      borderTopLeftRadius: 8,
+      borderTopRightRadius: 8,
+      position: 'relative',
+    },
+    activeTab: {
+      borderBottomColor: themeColors.primary,
+      backgroundColor: themeColors.primary + '08',
+    },
+    tabText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: themeColors.textSecondary,
+      letterSpacing: 0.2,
+    },
+    activeTabText: {
+      color: themeColors.primary,
+      fontWeight: '700',
+    },
+    tabBadge: {
+      backgroundColor: themeColors.error,
+      borderRadius: 12,
+      minWidth: 20,
+      height: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+      marginLeft: -4,
+    },
+    tabBadgeText: {
+      color: '#FFF',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    contentContainer: {
+      flex: 1,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.sm,
+    },
+    markAllButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: SPACING.sm,
+      paddingVertical: SPACING.xs,
+      borderRadius: 8,
+      backgroundColor: themeColors.primary + '10',
+      gap: SPACING.xs,
+    },
+    markAllText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: themeColors.primary,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: SPACING.sm,
+    },
+    headerAction: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: SPACING.sm,
+    },
+    list: {
+      paddingHorizontal: 0,
+    },
+    conversationItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: SPACING.md,
+      paddingVertical: SPACING.md,
+      backgroundColor: themeColors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+      minHeight: 80,
+    },
+    avatarContainer: {
+      position: 'relative',
+      marginRight: SPACING.md,
+    },
+    avatarContainerUnread: {
+      opacity: 1,
+    },
+    avatar: {
+      backgroundColor: themeColors.primary + '15',
+    },
+    avatarUnread: {
+      backgroundColor: themeColors.primary,
+    },
+    avatarLabel: {
+      fontSize: 20,
+      fontWeight: '700',
+    },
+    unreadBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      backgroundColor: themeColors.error,
+      borderRadius: 10,
+      minWidth: 20,
+      height: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+      borderWidth: 2,
+      borderColor: themeColors.surface,
+    },
+    unreadBadgeText: {
+      color: themeColors.surface,
+      fontSize: 10,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    messageContent: {
+      flex: 1,
+      marginRight: SPACING.sm,
+    },
+    messageHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    conversationTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: themeColors.text,
+      flex: 1,
+      marginRight: SPACING.xs,
+    },
+    unreadTitle: {
+      fontWeight: '700',
+    },
+    timestamp: {
+      fontSize: 13,
+      color: themeColors.textSecondary,
+      fontWeight: '500',
+    },
+    unreadTimestamp: {
+      fontWeight: '600',
+    },
+    advisorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 3,
+    },
+    advisorName: {
+      fontSize: 12,
+      color: themeColors.textSecondary,
+      marginLeft: 4,
+      fontWeight: '500',
+    },
+    lastMessage: {
+      fontSize: 14,
+      lineHeight: 18,
+      color: themeColors.textSecondary,
+      marginTop: 2,
+    },
+    unreadMessage: {
+      color: themeColors.text,
+      fontWeight: '600',
+    },
+    unreadIndicator: {
+      width: 10,
+      height: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: themeColors.primary,
+    },
+    section: {
+      marginBottom: SPACING.lg,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: SPACING.md,
+      marginHorizontal: SPACING.lg,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: themeColors.text,
+      flex: 1,
+    },
+    notificationItem: {
+      backgroundColor: themeColors.surface,
+      marginHorizontal: SPACING.lg,
+      marginBottom: SPACING.sm,
+      borderRadius: 12,
+      padding: SPACING.md,
+      borderLeftWidth: 4,
+      borderLeftColor: themeColors.border,
+    },
+    unreadNotification: {
+      backgroundColor: themeColors.primary + '08',
+      borderLeftColor: themeColors.primary,
+    },
+    emailItem: {
+      backgroundColor: themeColors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+      paddingHorizontal: SPACING.lg,
+      paddingVertical: SPACING.md,
+    },
+    unreadEmail: {
+      backgroundColor: themeColors.primary + '05',
+    },
+    emailContent: {
+      flex: 1,
+      position: 'relative',
+    },
+    emailHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: SPACING.xs,
+    },
+    emailSubject: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '500',
+      color: themeColors.text,
+      marginRight: SPACING.md,
+    },
+    emailDate: {
+      fontSize: 12,
+      color: themeColors.textSecondary,
+    },
+    emailPreview: {
+      fontSize: 14,
+      color: themeColors.textSecondary,
+      lineHeight: 20,
+    },
+    notificationContent: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+    },
+    notificationIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: SPACING.md,
+    },
+    notificationText: {
+      flex: 1,
+    },
+    notificationHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: SPACING.xs,
+    },
+    notificationTitle: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: themeColors.text,
+      flex: 1,
+      marginRight: SPACING.sm,
+    },
+    notificationMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.xs,
+    },
+    priorityBadge: {
+      paddingHorizontal: SPACING.xs,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    priorityText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: 'white',
+    },
+    notificationTime: {
+      fontSize: 12,
+      color: themeColors.textSecondary,
+    },
+    notificationMessage: {
+      fontSize: 14,
+      color: themeColors.textSecondary,
+      lineHeight: 20,
+      marginBottom: SPACING.xs,
+    },
+    caseReference: {
+      fontSize: 12,
+      color: themeColors.primary,
+      fontWeight: '500',
+    },
+    unreadText: {
+      fontWeight: '600',
+    },
+  }), [themeColors]);
+
   return (
     <TouchDetector>
       <View style={styles.container}>
-      {/* Modern Gradient Header */}
-      <ModernHeader
-        variant="gradient"
-        gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
-        title={t('notifications.title') || 'Notifications'}
-        subtitle={t('notifications.subtitle') || 'Stay updated with your cases'}
-        showBackButton
-      />
+        {/* Modern Gradient Header */}
+        <ModernHeader
+          variant="gradient"
+          gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
+          title={t('notifications.title') || 'Notifications'}
+          subtitle={t('notifications.subtitle') || 'Stay updated with your cases'}
+          showBackButton
+        />
 
-      {/* Tab Navigation */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'notifications' && styles.activeTab]}
-          onPress={() => setActiveTab('notifications')}
-        >
-          <MaterialCommunityIcons
-            name="bell"
-            size={18}
-            color={activeTab === 'notifications' ? COLORS.primary : COLORS.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'notifications' && styles.activeTabText]}>
-            {t('notifications.tab') || 'Notifications'}
-          </Text>
-          {unreadCount > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{unreadCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'notifications' && styles.activeTab]}
+            onPress={() => setActiveTab('notifications')}
+          >
+            <MaterialCommunityIcons
+              name="bell"
+              size={18}
+              color={activeTab === 'notifications' ? themeColors.primary : themeColors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'notifications' && styles.activeTabText]}>
+              {t('notifications.tab') || 'Notifications'}
+            </Text>
+            {unreadCount > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'messages' && styles.activeTab]}
-          onPress={() => setActiveTab('messages')}
-        >
-          <MaterialCommunityIcons
-            name="message-text"
-            size={18}
-            color={activeTab === 'messages' ? COLORS.primary : COLORS.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'messages' && styles.activeTabText]}>
-            {t('messages.tab') || 'Messages'}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'messages' && styles.activeTab]}
+            onPress={() => setActiveTab('messages')}
+          >
+            <MaterialCommunityIcons
+              name="message-text"
+              size={18}
+              color={activeTab === 'messages' ? themeColors.primary : themeColors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'messages' && styles.activeTabText]}>
+              {t('messages.tab') || 'Messages'}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'inbox' && styles.activeTab]}
-          onPress={() => setActiveTab('inbox')}
-        >
-          <MaterialCommunityIcons
-            name="email"
-            size={18}
-            color={activeTab === 'inbox' ? COLORS.primary : COLORS.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'inbox' && styles.activeTabText]}>
-            {t('email.inbox') || 'Inbox'}
-          </Text>
-          {inboxEmails.filter(e => !e.isRead).length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{inboxEmails.filter(e => !e.isRead).length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'inbox' && styles.activeTab]}
+            onPress={() => setActiveTab('inbox')}
+          >
+            <MaterialCommunityIcons
+              name="email"
+              size={18}
+              color={activeTab === 'inbox' ? themeColors.primary : themeColors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'inbox' && styles.activeTabText]}>
+              {t('email.inbox') || 'Inbox'}
+            </Text>
+            {inboxEmails.filter(e => !e.isRead).length > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{inboxEmails.filter(e => !e.isRead).length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'sent' && styles.activeTab]}
-          onPress={() => setActiveTab('sent')}
-        >
-          <MaterialCommunityIcons
-            name="send"
-            size={18}
-            color={activeTab === 'sent' ? COLORS.primary : COLORS.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'sent' && styles.activeTabText]}>
-            {t('email.sent') || 'Sent'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'sent' && styles.activeTab]}
+            onPress={() => setActiveTab('sent')}
+          >
+            <MaterialCommunityIcons
+              name="send"
+              size={18}
+              color={activeTab === 'sent' ? themeColors.primary : themeColors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'sent' && styles.activeTabText]}>
+              {t('email.sent') || 'Sent'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Tab Content */}
+        {/* Tab Content */}
         <ScrollView
           style={styles.contentContainer}
           onScroll={scrollProps.onScroll}
           scrollEventThrottle={scrollProps.scrollEventThrottle}
           showsVerticalScrollIndicator={false}
         >
-        {/* Notifications Tab */}
-        {activeTab === 'notifications' && (
-          <>
-            {combinedNotifications.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
+          {/* Notifications Tab */}
+          {activeTab === 'notifications' && (
+            <>
+              {combinedNotifications.length > 0 ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
                     {/* <Text style={styles.sectionTitle}>
                     {t('notifications.emailNotifications') || 'Notifications'}
                     </Text> */}
 
-                  {unreadCount > 0 && (
-                    <TouchableOpacity
-                      style={styles.markAllButton}
-                      onPress={markAllAsRead}
-                    >
-                      <MaterialCommunityIcons
-                        name="check-all"
-                        size={16}
-                        color={COLORS.primary}
-                      />
-                      <Text style={styles.markAllText}>
-                        {t('notifications.markAllRead') || 'Mark All Read'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <FlatList
-                  data={combinedNotifications}
-                  renderItem={({ item, index }) => {
-                    // Reuse existing renderer for Notification shape by adapting item
-                    if (item._source === 'notification') {
-                      return renderNotificationItem({ item: (notifications.find(n => `notif-${n.id}` === item.id) as any) || notifications[0], index } as any);
-                    }
-                    // Conversation item: render a simple unified tile
-                    const badgeColor = getNotificationBadgeColor(NotificationType.NEW_MESSAGE);
-                    return (
-                      <Animated.View entering={FadeInDown.delay(index * 30).springify()}>
-                        <TouchableOpacity
-                          style={[styles.notificationItem, !item.isRead && styles.unreadNotification]}
-                          onPress={() => {
-                            if (item.caseId) {
-                              router.push(`/message/${item.caseId}`);
-                            } else if (item.actionUrl) {
-                              router.push(item.actionUrl as Href);
-                            }
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <View style={styles.notificationContent}>
-                            <View style={[styles.notificationIcon, { backgroundColor: badgeColor + '15' }]}>
-                              <MaterialCommunityIcons name="message-text" size={20} color={badgeColor} />
-                            </View>
-                            <View style={styles.notificationText}>
-                              <View style={styles.notificationHeader}>
-                                <Text style={[styles.notificationTitle, !item.isRead && styles.unreadText]}>
-                                  {item.title}
-                                </Text>
-                                <Text style={styles.notificationTime}>
-                                  {formatTime(item.createdAt)}
+                    {unreadCount > 0 && (
+                      <TouchableOpacity
+                        style={styles.markAllButton}
+                        onPress={markAllAsRead}
+                      >
+                        <MaterialCommunityIcons
+                          name="check-all"
+                          size={16}
+                          color={themeColors.primary}
+                        />
+                        <Text style={styles.markAllText}>
+                          {t('notifications.markAllRead') || 'Mark All Read'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <FlatList
+                    data={combinedNotifications}
+                    renderItem={({ item, index }) => {
+                      // Reuse existing renderer for Notification shape by adapting item
+                      if (item._source === 'notification') {
+                        return renderNotificationItem({ item: (notifications.find(n => `notif-${n.id}` === item.id) as any) || notifications[0], index } as any);
+                      }
+                      // Conversation item: render a simple unified tile
+                      const badgeColor = getNotificationBadgeColor(NotificationType.NEW_MESSAGE);
+                      return (
+                        <Animated.View entering={FadeInDown.delay(index * 30).springify()}>
+                          <TouchableOpacity
+                            style={[styles.notificationItem, !item.isRead && styles.unreadNotification]}
+                            onPress={() => {
+                              if (item.caseId) {
+                                router.push(`/message/${item.caseId}`);
+                              } else if (item.actionUrl) {
+                                router.push(item.actionUrl as Href);
+                              }
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.notificationContent}>
+                              <View style={[styles.notificationIcon, { backgroundColor: badgeColor + '15' }]}>
+                                <MaterialCommunityIcons name="message-text" size={20} color={badgeColor} />
+                              </View>
+                              <View style={styles.notificationText}>
+                                <View style={styles.notificationHeader}>
+                                  <Text style={[styles.notificationTitle, !item.isRead && styles.unreadText]}>
+                                    {item.title}
+                                  </Text>
+                                  <Text style={styles.notificationTime}>
+                                    {formatTime(item.createdAt)}
+                                  </Text>
+                                </View>
+                                <Text numberOfLines={2} style={[styles.notificationMessage, !item.isRead && styles.unreadText]}>
+                                  {item.message}
                                 </Text>
                               </View>
-                              <Text numberOfLines={2} style={[styles.notificationMessage, !item.isRead && styles.unreadText]}>
-                                {item.message}
-                              </Text>
+                              {!item.isRead && (
+                                <View style={[styles.unreadDot, { backgroundColor: badgeColor }]} />
+                              )}
                             </View>
-                            {!item.isRead && (
-                              <View style={[styles.unreadDot, { backgroundColor: badgeColor }]} />
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      </Animated.View>
-                    );
-                  }}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
-                />
-              </View>
-            ) : (
-              <EmptyState
-                icon="bell-outline"
-                title={t('notifications.noNotifications') || 'No Notifications'}
-                description={t('notifications.noNotificationsDesc') || 'You\'re all caught up! New notifications will appear here.'}
-              />
-            )}
-          </>
-        )}
-
-        {/* Messages Tab */}
-        {activeTab === 'messages' && (
-          <>
-            {conversations.length > 0 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  {t('notifications.chatMessages') || 'Chat Messages'}
-                </Text>
-                <FlatList
-                  data={conversations}
-                  renderItem={renderConversationItem}
-                  keyExtractor={keyExtractor}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
-                />
-              </View>
-            ) : (
-              <EmptyState
-                icon="message-outline"
-                title={t('messages.noMessages') || 'No Messages'}
-                description={t('messages.noMessagesDesc') || 'Start a conversation with your advisor.'}
-              />
-            )}
-          </>
-        )}
-
-        {/* Inbox Tab */}
-        {activeTab === 'inbox' && (
-          <>
-            {inboxEmails.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>
-                    {t('email.inbox') || 'Inbox'} ({inboxEmails.length})
-                  </Text>
+                          </TouchableOpacity>
+                        </Animated.View>
+                      );
+                    }}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
                 </View>
-                <FlatList
-                  data={inboxEmails}
-                  renderItem={renderEmailItem}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
+              ) : (
+                <EmptyState
+                  icon="bell-outline"
+                  title={t('notifications.noNotifications') || 'No Notifications'}
+                  description={t('notifications.noNotificationsDesc') || 'You\'re all caught up! New notifications will appear here.'}
                 />
-              </View>
-            ) : (
-              <EmptyState
-                icon="email-outline"
-                title={t('email.noInboxEmails') || 'No Inbox Emails'}
-                description={t('email.noInboxEmailsDesc') || 'You don\'t have any received emails yet.'}
-              />
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
 
-        {/* Sent Tab */}
-        {activeTab === 'sent' && (
-          <>
-            {sentEmails.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
+          {/* Messages Tab */}
+          {activeTab === 'messages' && (
+            <>
+              {conversations.length > 0 ? (
+                <View style={styles.section}>
                   <Text style={styles.sectionTitle}>
-                    {t('email.sent') || 'Sent'} ({sentEmails.length})
+                    {t('notifications.chatMessages') || 'Chat Messages'}
                   </Text>
+                  <FlatList
+                    data={conversations}
+                    renderItem={renderConversationItem}
+                    keyExtractor={keyExtractor}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
                 </View>
-                <FlatList
-                  data={sentEmails}
-                  renderItem={renderEmailItem}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
+              ) : (
+                <EmptyState
+                  icon="message-outline"
+                  title={t('messages.noMessages') || 'No Messages'}
+                  description={t('messages.noMessagesDesc') || 'Start a conversation with your advisor.'}
                 />
-              </View>
-            ) : (
-              <EmptyState
-                icon="send-outline"
-                title={t('email.noSentEmails') || 'No Sent Emails'}
-                description={t('email.noSentEmailsDesc') || 'You haven\'t sent any emails yet.'}
-              />
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
+
+          {/* Inbox Tab */}
+          {activeTab === 'inbox' && (
+            <>
+              {inboxEmails.length > 0 ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>
+                      {t('email.inbox') || 'Inbox'} ({inboxEmails.length})
+                    </Text>
+                  </View>
+                  <FlatList
+                    data={inboxEmails}
+                    renderItem={renderEmailItem}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
+                </View>
+              ) : (
+                <EmptyState
+                  icon="email-outline"
+                  title={t('email.noInboxEmails') || 'No Inbox Emails'}
+                  description={t('email.noInboxEmailsDesc') || 'You don\'t have any received emails yet.'}
+                />
+              )}
+            </>
+          )}
+
+          {/* Sent Tab */}
+          {activeTab === 'sent' && (
+            <>
+              {sentEmails.length > 0 ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>
+                      {t('email.sent') || 'Sent'} ({sentEmails.length})
+                    </Text>
+                  </View>
+                  <FlatList
+                    data={sentEmails}
+                    renderItem={renderEmailItem}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
+                </View>
+              ) : (
+                <EmptyState
+                  icon="send-outline"
+                  title={t('email.noSentEmails') || 'No Sent Emails'}
+                  description={t('email.noSentEmailsDesc') || 'You haven\'t sent any emails yet.'}
+                />
+              )}
+            </>
+          )}
         </ScrollView>
-    </View>
+      </View>
     </TouchDetector>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    paddingHorizontal: SPACING.xs,
-    paddingTop: SPACING.xs,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xs,
-    gap: SPACING.xs,
-    borderBottomWidth: 3,
-    borderBottomColor: 'transparent',
-    marginHorizontal: SPACING.xs,
-    borderRadius: 8,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    position: 'relative',
-  },
-  activeTab: {
-    borderBottomColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '08',
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.textSecondary,
-    letterSpacing: 0.2,
-  },
-  activeTabText: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  tabBadge: {
-    backgroundColor: COLORS.error,
-    borderRadius: 12,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    marginLeft: -4,
-  },
-  tabBadgeText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  markAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary + '10',
-    gap: SPACING.xs,
-  },
-  markAllText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.sm,
-  },
-  headerAction: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: SPACING.sm,
-  },
-  list: {
-    paddingHorizontal: 0,
-  },
-  conversationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    minHeight: 80,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginRight: SPACING.md,
-  },
-  avatarContainerUnread: {
-    opacity: 1,
-  },
-  avatar: {
-    backgroundColor: COLORS.primary + '15',
-  },
-  avatarUnread: {
-    backgroundColor: COLORS.primary,
-  },
-  avatarLabel: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  unreadBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: COLORS.error,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    borderWidth: 2,
-    borderColor: COLORS.surface,
-  },
-  unreadBadgeText: {
-    color: COLORS.surface,
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  messageContent: {
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  messageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  conversationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    flex: 1,
-    marginRight: SPACING.xs,
-  },
-  unreadTitle: {
-    fontWeight: '700',
-  },
-  timestamp: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  unreadTimestamp: {
-    fontWeight: '600',
-  },
-  advisorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 3,
-  },
-  advisorName: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  lastMessage: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  unreadMessage: {
-    color: COLORS.text,
-    fontWeight: '600',
-  },
-  unreadIndicator: {
-    width: 10,
-    height: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-  section: {
-    marginBottom: SPACING.lg,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-    marginHorizontal: SPACING.lg,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    flex: 1,
-  },
-  notificationItem: {
-    backgroundColor: COLORS.surface,
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.sm,
-    borderRadius: 12,
-    padding: SPACING.md,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.border,
-  },
-  unreadNotification: {
-    backgroundColor: COLORS.primary + '08',
-    borderLeftColor: COLORS.primary,
-  },
-  emailItem: {
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-  },
-  unreadEmail: {
-    backgroundColor: COLORS.primary + '05',
-  },
-  emailContent: {
-    flex: 1,
-    position: 'relative',
-  },
-  emailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.xs,
-  },
-  emailSubject: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.text,
-    marginRight: SPACING.md,
-  },
-  emailDate: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  emailPreview: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-  },
-  notificationContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  notificationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  notificationText: {
-    flex: 1,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.xs,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.text,
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  notificationMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  priorityBadge: {
-    paddingHorizontal: SPACING.xs,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  priorityText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'white',
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-    marginBottom: SPACING.xs,
-  },
-  caseReference: {
-    fontSize: 12,
-    color: COLORS.primary,
-    fontWeight: '500',
-  },
-  unreadText: {
-    fontWeight: '600',
-  },
-});

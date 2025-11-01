@@ -41,7 +41,6 @@ export const messagesApi = {
         return { success: true, data: cached } as ApiResponse<Message>;
       }
       const response = await apiClient.get<ApiResponse<{ email: Message }>>(`/emails/${id}`);
-      console.log("\n\n the email info: ", { response });
       if (response.data.success && response.data.data?.email) {
         this._setCachedEmail(id, response.data.data.email);
       }
@@ -104,11 +103,7 @@ export const messagesApi = {
       if (filters?.isRead !== undefined) params.append('isRead', filters.isRead.toString());
 
       const response = await apiClient.get<ApiResponse<{ emails: Message[] }>>(`/emails?${params}`);
-      console.log("\n\n the get emails info: ", {
-        success: response.data.success,
-        data: response.data.data?.emails || [],
-        error: response.data.error,
-      });
+
       return {
         success: response.data.success,
         data: response.data.data?.emails || [],
@@ -162,6 +157,8 @@ export const messagesApi = {
 
   async markChatMessageAsRead(id: string): Promise<ApiResponse<void>> {
     try {
+      // Note: baseURL already includes /api, so this resolves to:
+      // /api/chat/messages/{id}/read (matches web API spec)
       const response = await apiClient.put<ApiResponse<void>>(`/chat/messages/${id}/read`);
       console.log("\n\n the mark chat message as read info: ", { response });
       return response.data;
@@ -176,6 +173,8 @@ export const messagesApi = {
 
   async markChatMessagesAsRead(messageIds: string[], chatRoomId?: string): Promise<ApiResponse<void>> {
     try {
+      // Note: baseURL already includes /api, so this resolves to:
+      // /api/chat/messages/mark-read (matches web API spec)
       const response = await apiClient.put<ApiResponse<void>>('/chat/messages/mark-read', {
         messageIds,
         chatRoomId,

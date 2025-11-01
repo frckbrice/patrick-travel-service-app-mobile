@@ -500,7 +500,7 @@
 
 
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -681,13 +681,53 @@ export default function HomeScreen() {
     router.push('/document/upload');
   }, [router]);
 
+  // Dynamic theme-aware styles
+  const dynamicStyles = useMemo(() => ({
+    container: {
+      ...styles.container,
+      backgroundColor: COLORS.background,
+    },
+    statCard: {
+      ...styles.statCard,
+      backgroundColor: COLORS.surface,
+    },
+    statValue: {
+      ...styles.statValue,
+      color: COLORS.text,
+    },
+    statTitle: {
+      ...styles.statTitle,
+      color: COLORS.textSecondary,
+    },
+    sectionTitle: {
+      ...styles.sectionTitle,
+      color: COLORS.text,
+    },
+    actionGroup: {
+      ...styles.actionGroup,
+      backgroundColor: COLORS.surface,
+    },
+    actionGroupTitle: {
+      ...styles.actionGroupTitle,
+      color: COLORS.text,
+    },
+    actionButton: {
+      ...styles.actionButton,
+      borderBottomColor: COLORS.border,
+    },
+    actionButtonText: {
+      ...styles.actionButtonText,
+      color: COLORS.text,
+    },
+  }), [COLORS]);
+
   return (
     <TouchDetector>
-      <View style={styles.container}>
+      <View style={[dynamicStyles.container, { backgroundColor: COLORS.background, paddingBottom: SPACING.lg }]}>
         {/* Gradient Header like Profile Page */}
         <ModernHeader
           variant="gradient"
-          gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
+          gradientColors={[COLORS.primary, COLORS.secondary, COLORS.accent]}
           title={getGreeting()}
           subtitle={t('dashboard.welcomeBack', { name: user?.firstName || '' }) || `Welcome back, ${user?.firstName || ''}`}
           showNotificationButton
@@ -734,12 +774,12 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(100).springify()} style={{ flex: 1 }}>
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/cases')}
-                  style={styles.statCard}
+                  style={dynamicStyles.statCard}
                   activeOpacity={0.7}
                 >
                   <View style={styles.statCardContent}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statIconContainer, { backgroundColor: '#5B8BA8' }]}>
+                      <View style={[styles.statIconContainer, { backgroundColor: COLORS.primary }]}>
                         <MaterialCommunityIcons
                           name="briefcase"
                           size={26}
@@ -748,10 +788,10 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <View style={styles.statCardBody}>
-                      <Text style={styles.statValue}>
+                      <Text style={dynamicStyles.statValue}>
                         {stats.totalCases}
                       </Text>
-                      <Text style={styles.statTitle}>
+                      <Text style={dynamicStyles.statTitle}>
                         {t('dashboard.stats.totalCases') || 'Total Cases'}
                       </Text>
                     </View>
@@ -762,12 +802,12 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(150).springify()} style={{ flex: 1 }}>
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/cases')}
-                  style={styles.statCard}
+                  style={dynamicStyles.statCard}
                   activeOpacity={0.7}
                 >
                   <View style={styles.statCardContent}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statIconContainer, { backgroundColor: '#7ABD96' }]}>
+                      <View style={[styles.statIconContainer, { backgroundColor: COLORS.success }]}>
                         <MaterialCommunityIcons
                           name="briefcase-check"
                           size={26}
@@ -776,10 +816,10 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <View style={styles.statCardBody}>
-                      <Text style={styles.statValue}>
+                      <Text style={dynamicStyles.statValue}>
                         {stats.activeCases}
                       </Text>
-                      <Text style={styles.statTitle}>
+                      <Text style={dynamicStyles.statTitle}>
                         {t('dashboard.stats.activeCases') || 'Active'}
                       </Text>
                     </View>
@@ -792,12 +832,12 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(200).springify()} style={{ flex: 1 }}>
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/documents')}
-                  style={styles.statCard}
+                  style={dynamicStyles.statCard}
                   activeOpacity={0.7}
                 >
                   <View style={styles.statCardContent}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statIconContainer, { backgroundColor: '#F4A460' }]}>
+                      <View style={[styles.statIconContainer, { backgroundColor: COLORS.warning }]}>
                         <MaterialCommunityIcons
                           name="file-document-multiple"
                           size={26}
@@ -806,10 +846,10 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <View style={styles.statCardBody}>
-                      <Text style={styles.statValue}>
+                      <Text style={dynamicStyles.statValue}>
                         {stats.pendingDocuments}
                       </Text>
-                      <Text style={styles.statTitle}>
+                      <Text style={dynamicStyles.statTitle}>
                         {t('dashboard.stats.documents') || 'Documents'}
                       </Text>
                     </View>
@@ -820,12 +860,12 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(250).springify()} style={{ flex: 1 }}>
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/notifications')}
-                  style={styles.statCard}
+                  style={dynamicStyles.statCard}
                   activeOpacity={0.7}
                 >
                   <View style={styles.statCardContent}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statIconContainer, { backgroundColor: '#7A9BB8' }]}>
+                      <View style={[styles.statIconContainer, { backgroundColor: COLORS.info }]}>
                         <MaterialCommunityIcons
                           name="bell"
                           size={26}
@@ -834,10 +874,10 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <View style={styles.statCardBody}>
-                      <Text style={styles.statValue}>
+                      <Text style={dynamicStyles.statValue}>
                         {totalUnreadCount}
                       </Text>
-                      <Text style={styles.statTitle}>
+                      <Text style={dynamicStyles.statTitle}>
                         {t('dashboard.stats.notifications') || 'Notifications'}
                       </Text>
                     </View>
@@ -849,61 +889,61 @@ export default function HomeScreen() {
 
           {/* Quick Actions Section - Grouped */}
           <View style={styles.actionsSection}>
-            <Text style={styles.sectionTitle}>
+            <Text style={dynamicStyles.sectionTitle}>
               {t('dashboard.actions.title') || 'Quick Actions'}
             </Text>
 
             {/* Case Management Group */}
             <Animated.View entering={FadeInUp.delay(300).springify()}>
-              <View style={styles.actionGroup}>
-                <Text style={styles.actionGroupTitle}>
+              <View style={dynamicStyles.actionGroup}>
+                <Text style={dynamicStyles.actionGroupTitle}>
                   {t('dashboard.actions.caseManagement') || 'Case Management'}
                 </Text>
                 
                 <TouchableOpacity 
                   onPress={() => router.push('/case/new')}
-                  style={styles.actionButton}
+                  style={dynamicStyles.actionButton}
                   activeOpacity={0.6}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#5B8BA8' }]}>
+                    <View style={[styles.actionIconContainer, { backgroundColor: COLORS.primary }]}>
                       <MaterialCommunityIcons
                         name="plus-circle-outline"
                         size={24}
                         color="#FFFFFF"
                       />
                     </View>
-                    <Text style={styles.actionButtonText}>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.newCase') || 'Submit New Case'}
                     </Text>
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={22}
-                      color="#C5CDD4"
+                      color={COLORS.textSecondary}
                     />
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
                   onPress={handleUploadPress}
-                  style={[styles.actionButton, styles.actionButtonLast]}
+                  style={[dynamicStyles.actionButton, styles.actionButtonLast]}
                   activeOpacity={0.6}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#7A9BB8' }]}>
+                    <View style={[styles.actionIconContainer, { backgroundColor: COLORS.accent }]}>
                       <MaterialCommunityIcons
                         name="cloud-upload-outline"
                         size={24}
                         color="#FFFFFF"
                       />
                     </View>
-                    <Text style={styles.actionButtonText}>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.uploadDocument') || 'Upload Document'}
                     </Text>
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={22}
-                      color="#C5CDD4"
+                      color={COLORS.textSecondary}
                     />
                   </View>
                 </TouchableOpacity>
@@ -912,79 +952,79 @@ export default function HomeScreen() {
 
             {/* Support & Resources Group */}
             <Animated.View entering={FadeInUp.delay(350).springify()}>
-              <View style={styles.actionGroup}>
-                <Text style={styles.actionGroupTitle}>
+              <View style={dynamicStyles.actionGroup}>
+                <Text style={dynamicStyles.actionGroupTitle}>
                   {t('dashboard.actions.supportResources') || 'Support & Resources'}
                 </Text>
                 
                 <TouchableOpacity 
                   onPress={() => router.push('/help/contact')}
-                  style={styles.actionButton}
+                  style={dynamicStyles.actionButton}
                   activeOpacity={0.6}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#94B5A0' }]}>
+                    <View style={[styles.actionIconContainer, { backgroundColor: COLORS.secondary }]}>
                       <MaterialCommunityIcons
                         name="headset"
                         size={24}
                         color="#FFFFFF"
                       />
                     </View>
-                    <Text style={styles.actionButtonText}>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.contactSupport') || 'Contact Support'}
                     </Text>
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={22}
-                      color="#C5CDD4"
+                      color={COLORS.textSecondary}
                     />
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
                   onPress={() => router.push('/help/faq')}
-                  style={styles.actionButton}
+                  style={dynamicStyles.actionButton}
                   activeOpacity={0.6}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#7ABD96' }]}>
+                    <View style={[styles.actionIconContainer, { backgroundColor: COLORS.success }]}>
                       <MaterialCommunityIcons
                         name="help-circle-outline"
                         size={24}
                         color="#FFFFFF"
                       />
                     </View>
-                    <Text style={styles.actionButtonText}>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.viewFAQs') || 'View FAQs'}
                     </Text>
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={22}
-                      color="#C5CDD4"
+                      color={COLORS.textSecondary}
                     />
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/documents?tab=templates')}
-                  style={[styles.actionButton, styles.actionButtonLast]}
+                  style={[dynamicStyles.actionButton, styles.actionButtonLast]}
                   activeOpacity={0.6}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#F4A460' }]}>
+                    <View style={[styles.actionIconContainer, { backgroundColor: COLORS.warning }]}>
                       <MaterialCommunityIcons
                         name="file-download-outline"
                         size={24}
                         color="#FFFFFF"
                       />
                     </View>
-                    <Text style={styles.actionButtonText}>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.downloadTemplates') || 'Download Templates'}
                     </Text>
                     <MaterialCommunityIcons
                       name="chevron-right"
                       size={22}
-                      color="#C5CDD4"
+                      color={COLORS.textSecondary}
                     />
                   </View>
                 </TouchableOpacity>

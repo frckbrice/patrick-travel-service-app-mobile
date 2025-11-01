@@ -230,7 +230,7 @@ export const handleNotificationNavigation = (data: NotificationData) => {
 
       default:
         // Default to home screen
-        router.push('/(tabs)/');
+        router.push('/(tabs)');
     }
   } catch (error) {
     logger.error('Error handling notification navigation', error);

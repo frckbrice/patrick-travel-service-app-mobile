@@ -129,6 +129,13 @@ export const casesApi = {
       const response = await apiClient.get<ApiResponse<StatusHistory[]>>(
         `/cases/${id}/history`
       );
+      // Handle both { success, data: StatusHistory[] } and { success, data: { history: StatusHistory[] } }
+      if (response.data.success && response.data.data) {
+        const data = response.data.data;
+        if ('history' in data && typeof data === 'object') {
+          return { ...response.data, data: (data as any).history };
+        }
+      }
       return response.data;
     } catch (error: any) {
       // Error already sanitized by interceptor - safe to use

@@ -130,7 +130,7 @@ export default function CasesScreen() {
                   color={colors.primary}
                   style={styles.icon}
                 />
-                <PaperText style={styles.reference}>{item.referenceNumber}</PaperText>
+                <PaperText style={[styles.reference, { color: colors.text }]}>{item.referenceNumber}</PaperText>
               </View>
               <StatusBadge status={item.status} />
             </View>
@@ -154,7 +154,7 @@ export default function CasesScreen() {
                   color={colors.textSecondary}
                   style={styles.serviceIcon}
                 />
-                <PaperText style={styles.serviceTypeText}>
+                <PaperText style={[styles.serviceTypeText, { color: colors.textSecondary }]}>
                   {SERVICE_TYPE_LABELS[item.serviceType]}
                 </PaperText>
               </View>
@@ -168,7 +168,7 @@ export default function CasesScreen() {
                   size={14}
                   color={colors.textSecondary}
                 />
-                <PaperText style={styles.infoText}>
+                <PaperText style={[styles.infoText, { color: colors.textSecondary }]}>
                   {format(new Date(item.submissionDate), 'MMM dd, yyyy')}
                 </PaperText>
               </View>
@@ -180,7 +180,7 @@ export default function CasesScreen() {
                     size={14}
                     color={colors.textSecondary}
                   />
-                  <PaperText style={styles.infoText} numberOfLines={1}>
+                  <PaperText style={[styles.infoText, { color: colors.textSecondary }]} numberOfLines={1}>
                     {item.assignedAgent.firstName} {item.assignedAgent.lastName}
                   </PaperText>
                 </View>
@@ -198,7 +198,7 @@ export default function CasesScreen() {
         </Card>
       </Animated.View>
     ),
-    [router]
+    [router, colors]
   );
 
 
@@ -208,7 +208,7 @@ export default function CasesScreen() {
       {/* Modern Gradient Header */}
       <ModernHeader
         variant="gradient"
-        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title="Cases"
         subtitle="Manage your legal cases"
         showBackButton

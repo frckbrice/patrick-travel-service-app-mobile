@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo, useState, useCallback } from 'react';
 import { useTabBarVisibility } from '../hooks/useTabBarVisibility';
 
 interface TabBarContextType {
@@ -6,6 +6,8 @@ interface TabBarContextType {
   showTabBar: () => void;
   hideTabBar: () => void;
   toggleTabBar: () => void;
+  tabBarHeight: number;
+  setTabBarHeight: (height: number) => void;
 }
 
 const TabBarContext = createContext<TabBarContextType | undefined>(undefined);
@@ -16,9 +18,29 @@ interface TabBarProviderProps {
 
 export const TabBarProvider: React.FC<TabBarProviderProps> = ({ children }) => {
   const tabBarVisibility = useTabBarVisibility();
+  const [tabBarHeight, setTabBarHeight] = useState(0);
+
+  // Memoize setTabBarHeight to ensure stable reference
+  const handleSetTabBarHeight = useCallback((height: number) => {
+    setTabBarHeight(height);
+  }, []);
+
+  // Memoize context value - functions are stable (useCallback), only visibility state changes
+  // This prevents unnecessary re-renders of all context consumers
+  const contextValue = useMemo(() => ({
+    ...tabBarVisibility,
+    tabBarHeight,
+    setTabBarHeight: handleSetTabBarHeight,
+  }), [
+    tabBarVisibility.isTabBarVisible,
+    tabBarHeight,
+    handleSetTabBarHeight,
+    // Functions are already memoized with useCallback and won't change
+    // but we reference them to ensure proper memoization
+  ]);
 
   return (
-    <TabBarContext.Provider value={tabBarVisibility}>
+    <TabBarContext.Provider value={contextValue}>
       {children}
     </TabBarContext.Provider>
   );

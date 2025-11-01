@@ -7,10 +7,11 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { casesApi } from '../../lib/api/cases.api';
 import { Case, StatusHistory } from '../../lib/types';
-import { TouchDetector } from '../../components/ui/TouchDetector';
 import { ModernHeader } from '../../components/ui/ModernHeader';
 import { LoadingSpinner, Button, Card, StatusBadge } from '../../components/ui';
 import { useTabBarContext } from '../../lib/context/TabBarContext';
+import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 import {
   COLORS,
   SPACING,
@@ -18,13 +19,18 @@ import {
   CASE_STATUS_COLORS,
   SERVICE_TYPE_LABELS,
 } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format } from 'date-fns';
+import { toast } from '../../lib/services/toast';
 
 export default function CaseDetailsScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
-  const { hideTabBar, showTabBar } = useTabBarContext();
+  // const { hideTabBar, showTabBar } = useTabBarContext();
+  const tabBarPadding = useTabBarPadding();
+  const scrollProps = useTabBarScroll();
+  const themeColors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [history, setHistory] = useState<StatusHistory[]>([]);
@@ -44,7 +50,13 @@ export default function CaseDetailsScreen() {
     }
 
     if (historyResponse.success && historyResponse.data) {
-      setHistory(historyResponse.data);
+      // Deduplicate history by ID only
+      const uniqueHistory = Array.from(
+        new Map(historyResponse.data.map(item => [item.id, item])).values()
+      );
+      // Sort by timestamp ascending (oldest first) for timeline display
+      uniqueHistory.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      setHistory(uniqueHistory);
     }
 
     setIsLoading(false);
@@ -54,13 +66,6 @@ export default function CaseDetailsScreen() {
     fetchCaseDetails();
   }, [fetchCaseDetails]);
 
-  // Hide tab bar when this screen mounts (stack screen)
-  useEffect(() => {
-    hideTabBar();
-    return () => {
-      showTabBar();
-    };
-  }, [hideTabBar, showTabBar]);
 
   if (isLoading) {
     return <LoadingSpinner fullScreen text={t('common.loading')} />;
@@ -84,13 +89,17 @@ export default function CaseDetailsScreen() {
     );
   }
 
+  const handleRedirectToUpload = () => {
+    router.push('/(tabs)/documents?tab=documents');
+    // router.push(`/document/upload?caseId=${caseData.id}`);
+  };
+
   return (
-    <TouchDetector>
       <View style={styles.container}>
         {/* Modern Gradient Header */}
         <ModernHeader
           variant="gradient"
-          gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
           title="Case Details"
           subtitle={caseData?.referenceNumber || 'Loading...'}
           showBackButton
@@ -108,7 +117,15 @@ export default function CaseDetailsScreen() {
           }
         />
         
-        <ScrollView style={styles.scrollContainer}>
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: SPACING.xl + tabBarPadding }
+        ]}
+        onScroll={scrollProps.onScroll}
+        scrollEventThrottle={scrollProps.scrollEventThrottle}
+      >
           <Animated.View entering={FadeInUp.duration(400)}>
             <Card style={styles.card}>
           <View style={styles.cardContent}>
@@ -120,7 +137,7 @@ export default function CaseDetailsScreen() {
                   color={COLORS.primary}
                   style={styles.headerIcon}
                 />
-                <Text style={styles.reference}>{caseData.referenceNumber}</Text>
+                  <Text style={styles.reference} numberOfLines={1}>{caseData.referenceNumber}</Text>
               </View>
               <StatusBadge status={caseData.status} />
             </View>
@@ -248,14 +265,16 @@ export default function CaseDetailsScreen() {
           </View>
         )}
 
-        <Button
-          title={t('documents.uploadDocument')}
-          icon="upload"
-          variant="secondary"
-          onPress={() => router.push(`/document/upload?caseId=${id}`)}
-          fullWidth
-          style={styles.actionButton}
-        />
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.uploadButton, { backgroundColor: COLORS.primary, padding: SPACING.sm + 4 }]}
+            onPress={handleRedirectToUpload}
+          >
+            <MaterialCommunityIcons name="upload" size={20} color="white" />
+            <Text style={styles.uploadButtonText}>
+              {t('documents.uploadDocument')}
+            </Text>
+          </TouchableOpacity>
       </Animated.View>
 
       {history.length > 0 && (
@@ -294,8 +313,7 @@ export default function CaseDetailsScreen() {
         </Animated.View>
         )}
         </ScrollView>
-      </View>
-    </TouchDetector>
+    </View>
   );
 }
 
@@ -303,9 +321,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingBottom: SPACING.xl,
   },
   scrollContainer: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: SPACING.xl,
   },
   headerAction: {
     width: 40,
@@ -335,7 +357,7 @@ const styles = StyleSheet.create({
     margin: SPACING.md,
   },
   cardContent: {
-    padding: SPACING.md,
+    // No padding needed - Card component already provides it
   },
   header: {
     flexDirection: 'row',
@@ -347,6 +369,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginRight: SPACING.sm,
   },
   headerIcon: {
     marginRight: SPACING.sm,
@@ -508,5 +531,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
     lineHeight: 20,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    padding: SPACING.sm,
+    borderRadius: 12,
+    marginBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  uploadButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: "white",
   },
 });

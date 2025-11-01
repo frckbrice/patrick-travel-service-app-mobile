@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { AppState, AppStateStatus, Platform, InteractionManager, View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import Toast from 'react-native-toast-message';
+import Toast, { BaseToast } from 'react-native-toast-message';
 import { useAuthStore } from '../stores/auth/authStore';
 import { ThemeProvider, useTheme } from '../lib/theme/ThemeContext';
 import { TabBarProvider } from '../lib/context/TabBarContext';
@@ -42,6 +42,15 @@ function AppContent() {
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const [isAppReady, setIsAppReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+
+  // Memoize visibility change handler to prevent re-renders
+  const handleVisibilityChange = useCallback((visible: boolean) => {
+    if (visible) {
+      showTabBar();
+    } else {
+      hideTabBar();
+    }
+  }, [showTabBar, hideTabBar]);
 
   // Initialize global Alert API
   useEffect(() => {
@@ -267,16 +276,43 @@ function AppContent() {
             }}
           />
         </Stack>
-        <Toast />
+        <Toast
+          config={{
+            success: ({ text1, text2 }) => (
+              <BaseToast
+                text1={text1}
+                text2={text2}
+                style={styles.successToast}
+                contentContainerStyle={styles.toastContent}
+                text1Style={styles.toastTitle}
+                text2Style={styles.toastMessage}
+              />
+            ),
+            error: ({ text1, text2 }) => (
+              <BaseToast
+                text1={text1}
+                text2={text2}
+                style={styles.errorToast}
+                contentContainerStyle={styles.toastContent}
+                text1Style={styles.toastTitle}
+                text2Style={styles.toastMessage}
+              />
+            ),
+            info: ({ text1, text2 }) => (
+              <BaseToast
+                text1={text1}
+                text2={text2}
+                style={styles.infoToast}
+                contentContainerStyle={styles.toastContent}
+                text1Style={styles.toastTitle}
+                text2Style={styles.toastMessage}
+              />
+            ),
+          }}
+        />
         <DynamicTabBar 
           visible={isTabBarVisible} 
-          onVisibilityChange={(visible) => {
-            if (visible) {
-              showTabBar();
-            } else {
-              hideTabBar();
-            }
-          }} 
+          onVisibilityChange={handleVisibilityChange} 
         />
       </PaperProvider>
     </SafeAreaProvider>
@@ -312,5 +348,70 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     textAlign: 'center',
     paddingHorizontal: SPACING.lg,
+  },
+  // Toast Styles - Modern Mobile Standards (2025 Mobile Market Standards)
+  successToast: {
+    height: 72,
+    borderLeftWidth: 5,
+    borderLeftColor: '#10B981',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    backgroundColor: '#FFFFFF',
+    minWidth: '90%',
+    maxWidth: '95%',
+  },
+  errorToast: {
+    height: 72,
+    borderLeftWidth: 5,
+    borderLeftColor: '#EF4444',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    backgroundColor: '#FFFFFF',
+    minWidth: '90%',
+    maxWidth: '95%',
+  },
+  infoToast: {
+    height: 72,
+    borderLeftWidth: 5,
+    borderLeftColor: '#3B82F6',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    backgroundColor: '#FFFFFF',
+    minWidth: '90%',
+    maxWidth: '95%',
+  },
+  toastContent: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  toastTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  toastMessage: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: '#6B7280',
+    lineHeight: 20,
   },
 });

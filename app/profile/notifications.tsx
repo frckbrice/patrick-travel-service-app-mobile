@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,7 +13,9 @@ import { useRouter } from 'expo-router';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { notificationService } from '../../lib/services/notifications';
 import { secureStorage } from '../../lib/storage/secureStorage';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
+import { ModernHeader } from '../../components/ui/ModernHeader';
 import { toast } from '../../lib/services/toast';
 
 interface NotificationPreferences {
@@ -29,6 +31,7 @@ export default function NotificationPreferencesScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const colors = useThemeColors();
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     pushEnabled: false,
     emailEnabled: true,
@@ -38,6 +41,126 @@ export default function NotificationPreferencesScreen() {
     marketing: false,
   });
   const [pushToken, setPushToken] = useState<string | null>(null);
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollContainer: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingTop: SPACING.lg,
+    },
+    section: {
+      marginBottom: SPACING.lg,
+      paddingHorizontal: SPACING.md,
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      textTransform: 'uppercase',
+      marginBottom: SPACING.sm,
+      marginLeft: SPACING.xs,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+    },
+    listItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: SPACING.md,
+    },
+    listItemLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      marginRight: SPACING.md,
+    },
+    iconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      backgroundColor: colors.primary + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: SPACING.md,
+    },
+    listItemContent: {
+      flex: 1,
+    },
+    listItemTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 2,
+    },
+    listItemDescription: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
+    divider: {
+      marginLeft: SPACING.md + 40 + SPACING.md,
+      backgroundColor: colors.border,
+    },
+    testSection: {
+      paddingHorizontal: SPACING.lg,
+      marginTop: SPACING.md,
+    },
+    testButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      borderRadius: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+    },
+    testButtonText: {
+      marginLeft: 8,
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    tokenInfo: {
+      padding: SPACING.md,
+      backgroundColor: colors.surface,
+      margin: SPACING.lg,
+      marginTop: SPACING.md,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    tokenLabel: {
+      fontWeight: 'bold',
+      marginBottom: SPACING.xs,
+      color: colors.text,
+      fontSize: 13,
+    },
+    tokenText: {
+      color: colors.textSecondary,
+      fontFamily: 'monospace',
+      fontSize: 11,
+    },
+  }), [colors]);
 
   useEffect(() => {
     loadPreferences();
@@ -93,31 +216,18 @@ export default function NotificationPreferencesScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <MaterialCommunityIcons
-              name="arrow-left"
-              size={24}
-              color={COLORS.text}
-            />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text variant="headlineMedium" style={styles.title}>
-              {t('profile.notificationPreferences')}
-            </Text>
-            <Text variant="bodyLarge" style={styles.subtitle}>
-              {t('profile.manageNotifications')}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.content}>
+    <View style={styles.container}>
+      <ModernHeader
+        variant="gradient"
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
+        title={t('profile.notificationPreferences')}
+        subtitle={t('profile.manageNotifications')}
+        showBackButton
+      />
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('notifications.channels')}</Text>
 
@@ -128,7 +238,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="cellphone"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -145,7 +255,7 @@ export default function NotificationPreferencesScreen() {
               <Switch
                 value={preferences.pushEnabled}
                 onValueChange={handleTogglePush}
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
 
@@ -157,7 +267,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="email"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -174,7 +284,7 @@ export default function NotificationPreferencesScreen() {
                 onValueChange={(value) =>
                   savePreferences({ ...preferences, emailEnabled: value })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
           </View>
@@ -190,7 +300,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="briefcase"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -207,7 +317,7 @@ export default function NotificationPreferencesScreen() {
                 onValueChange={(value) =>
                   savePreferences({ ...preferences, caseUpdates: value })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
 
@@ -219,7 +329,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="file-document"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -236,7 +346,7 @@ export default function NotificationPreferencesScreen() {
                 onValueChange={(value) =>
                   savePreferences({ ...preferences, documentUpdates: value })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
 
@@ -248,7 +358,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="message"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -268,7 +378,7 @@ export default function NotificationPreferencesScreen() {
                     messageNotifications: value,
                   })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
 
@@ -280,7 +390,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="bullhorn"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -297,7 +407,7 @@ export default function NotificationPreferencesScreen() {
                 onValueChange={(value) =>
                   savePreferences({ ...preferences, marketing: value })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
           </View>
@@ -313,7 +423,7 @@ export default function NotificationPreferencesScreen() {
               <MaterialCommunityIcons
                 name="bell-ring"
                 size={20}
-                color={COLORS.primary}
+                color={colors.primary}
               />
               <Text style={styles.testButtonText}>
                 {t('notifications.testNotification')}
@@ -336,158 +446,7 @@ export default function NotificationPreferencesScreen() {
             </Text>
           </View>
         )}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingTop: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.lg,
-    backgroundColor: COLORS.surface,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-    marginTop: SPACING.xs,
-  },
-  headerContent: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  title: {
-    fontWeight: 'bold',
-    marginBottom: SPACING.sm,
-    color: COLORS.primary,
-  },
-  subtitle: {
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  content: {
-    flex: 1,
-    paddingTop: SPACING.lg,
-  },
-  section: {
-    marginBottom: SPACING.lg,
-    paddingHorizontal: SPACING.md,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    textTransform: 'uppercase',
-    marginBottom: SPACING.sm,
-    marginLeft: SPACING.xs,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: SPACING.md,
-  },
-  listItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: SPACING.md,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: COLORS.primary + '15',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  listItemContent: {
-    flex: 1,
-  },
-  listItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 2,
-  },
-  listItemDescription: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-  },
-  divider: {
-    marginLeft: SPACING.md + 40 + SPACING.md,
-    backgroundColor: COLORS.border,
-  },
-  testSection: {
-    paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
-  },
-  testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  testButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  tokenInfo: {
-    padding: SPACING.md,
-    backgroundColor: COLORS.surface,
-    margin: SPACING.lg,
-    marginTop: SPACING.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  tokenLabel: {
-    fontWeight: 'bold',
-    marginBottom: SPACING.xs,
-    color: COLORS.text,
-    fontSize: 13,
-  },
-  tokenText: {
-    color: COLORS.textSecondary,
-    fontFamily: 'monospace',
-    fontSize: 11,
-  },
-});

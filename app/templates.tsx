@@ -272,7 +272,7 @@ export default function TemplatesScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ModernHeader
         variant="gradient"
-        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={t('templates.title') || 'Templates'}
         subtitle={t('templates.subtitle') || 'Download and fill required documents'}
         showBackButton

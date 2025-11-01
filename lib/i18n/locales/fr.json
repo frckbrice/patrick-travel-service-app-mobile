@@ -1,5 +1,7 @@
 {
   "common": {
+    "comingSoon": "Bientôt disponible",
+    "voiceCallComingSoonDesc": "Cette fonctionnalité sera bientôt disponible",
     "continue": "Continuer",
     "welcome": "Bienvenue",
     "welcomeBack": "Bon retour",
@@ -30,7 +32,9 @@
     "close": "Fermer",
     "goBack": "Retour",
     "noActiveCase": "Aucun cas actif",
-    "noActiveCaseDesc": "Vous devez avoir un cas actif pour effectuer cette action. Voulez-vous en créer un maintenant?"
+    "noActiveCaseDesc": "Vous devez avoir un cas actif pour effectuer cette action. Voulez-vous en créer un maintenant?",
+    "featureComingSoon": "Fonctionnalité à venir",
+    "featureComingSoonDesc": "Cette fonctionnalité sera bientôt disponible"
   },
   "auth": {
     "email": "Email",
@@ -188,6 +192,10 @@
     "draftRestoredMessage": "Votre brouillon précédent a été restauré",
     "savingDraft": "Sauvegarde du brouillon...",
     "draftSaved": "Brouillon sauvegardé",
+    "draftSavedSilently": "Votre brouillon a été sauvegardé automatiquement",
+    "draftSaveFailed": "Échec de la sauvegarde du brouillon",
+    "draftSaveFailedMessage": "Impossible de sauvegarder votre brouillon. Veuillez réessayer.",
+    "submitted": "Cas soumis",
     "processingInBackground": "Traitement en arrière-plan",
     "submissionFailed": "Échec de la soumission"
   },
@@ -221,7 +229,9 @@
     "status": "Statut:",
     "rejectionReason": "Raison du rejet:",
     "uploadSuccess": "Document téléversé avec succès",
+    "uploadSuccessMessage": "Votre document a été téléversé et est en cours de traitement",
     "downloadSuccess": "Document téléchargé avec succès",
+    "documentDeleted": "Document supprimé avec succès",
     "deleteDocument": "Supprimer le document",
     "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce document?",
     "previewNotAvailable": "Aperçu non disponible",
@@ -236,6 +246,7 @@
     "tapToViewPDF": "Appuyez pour voir le PDF"
   },
   "messages": {
+    "voiceCallComingSoon": "Appel vocal bientôt disponible",
     "online": "En ligne",
     "conversations": "Conversations",
     "chat": "Discussion",
@@ -280,6 +291,8 @@
     "confirmDelete": "Êtes-vous sûr de vouloir supprimer votre compte? Cette action est irréversible.",
     "emailCannotChange": "L'email ne peut pas être modifié",
     "profileUpdated": "Profil mis à jour avec succès",
+    "photoUpdated": "Photo de profil mise à jour avec succès",
+    "changesWillSync": "Vos modifications seront synchronisées automatiquement",
     "passwordChanged": "Mot de passe changé avec succès"
   },
   "notifications": {
@@ -301,6 +314,9 @@
     "testNotification": "Envoyer une notification de test",
     "pushToken": "Jeton push (pour le débogage):",
     "notificationsSaved": "Préférences de notification enregistrées",
+    "pushNotificationsEnabled": "Notifications push activées",
+    "pushNotificationsEnableFailed": "Échec de l'activation des notifications push. Veuillez vérifier les paramètres de votre appareil.",
+    "testNotificationSent": "Notification de test envoyée",
     "markAllRead": "Tout marquer comme lu",
     "subtitle": "Gérez comment vous recevez les notifications",
     "title": "Notifications",
@@ -365,6 +381,7 @@
     "storage": "Stockage",
     "clearCache": "Vider le cache",
     "clearCacheDesc": "Libérer de l'espace",
+    "cacheCleared": "Cache vidé avec succès",
     "about": "À propos",
     "version": "Version de l'app",
     "checkUpdates": "Vérifier les mises à jour",

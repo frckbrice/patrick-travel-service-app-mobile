@@ -18,12 +18,15 @@ import { Message, MessageType } from '../../lib/types';
 import { messagesApi } from '../../lib/api/messages.api';
 import { notificationsApi } from '../../lib/api/notifications.api';
 import { COLORS, SPACING } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { ModernHeader } from '../../components/ui/ModernHeader';
 import { NotFound } from '../../components/ui/NotFound';
 import { Alert } from '../../lib/utils/alert';
+import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 
 interface EmailReaderProps {
   emailId: string;
@@ -33,6 +36,9 @@ export default function EmailReaderScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const tabBarPadding = useTabBarPadding();
+  const scrollProps = useTabBarScroll();
+  const themeColors = useThemeColors();
   const { id: emailId } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
 
@@ -232,11 +238,10 @@ export default function EmailReaderScreen() {
   }
 
   return (
-    <TouchDetector>
       <View style={styles.container}>
         <ModernHeader
           variant="gradient"
-          gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
           title={t('email.reader') || 'Email'}
           subtitle={email.subject || t('email.noSubject') || 'No Subject'}
           showBackButton
@@ -260,7 +265,13 @@ export default function EmailReaderScreen() {
           }
         />
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: SPACING.xl + tabBarPadding }}
+        onScroll={scrollProps.onScroll}
+        scrollEventThrottle={scrollProps.scrollEventThrottle}
+      >
           {/* Email Header */}
           <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.emailHeader}>
             <View style={styles.senderInfo}>
@@ -388,8 +399,7 @@ export default function EmailReaderScreen() {
           {/* Bottom spacing */}
           <View style={styles.bottomSpacing} />
         </ScrollView>
-      </View>
-    </TouchDetector>
+    </View>
   );
 }
 

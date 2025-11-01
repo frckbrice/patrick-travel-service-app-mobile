@@ -168,7 +168,7 @@ export default function UploadDocumentScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ModernHeader
         variant="gradient"
-        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={t('documents.uploadDocument') || 'Upload Document'}
         subtitle={
           t('documents.selectCaseAndFile') ||

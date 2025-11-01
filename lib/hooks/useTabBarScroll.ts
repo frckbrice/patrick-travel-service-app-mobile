@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { useTabBarContext } from '../context/TabBarContext';
 
@@ -19,13 +19,102 @@ interface UseTabBarScrollOptions {
 export const useTabBarScroll = (options: UseTabBarScrollOptions = {}) => {
   const { showTabBar, hideTabBar, isTabBarVisible } = useTabBarContext();
   const {
-    threshold = 10,
-    bottomThreshold = 150, // Increased for easier bottom touch detection
+    threshold = 30, // Increased threshold significantly to prevent bouncing
+    bottomThreshold = 100, // Increased to show tab bar earlier when approaching bottom
   } = options;
 
   const lastScrollY = useRef(0);
   const lastScrollDirection = useRef<'up' | 'down' | null>(null);
   const scrollAccumulator = useRef(0); // Accumulate small scrolls to prevent flickering
+  // Use ref to track visibility without causing re-renders in scroll handler
+  const isTabBarVisibleRef = useRef(isTabBarVisible);
+  
+  // Cooldown period to prevent rapid visibility changes
+  const lastVisibilityChangeRef = useRef<number>(0);
+  const VISIBILITY_COOLDOWN = 300; // ms - minimum time between visibility changes
+  
+  // Pending action ref to debounce state changes
+  const pendingActionRef = useRef<'show' | 'hide' | null>(null);
+  const actionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync ref with actual state when it changes (from external sources)
+  useEffect(() => {
+    isTabBarVisibleRef.current = isTabBarVisible;
+  }, [isTabBarVisible]);
+
+  // Stable references to functions - these shouldn't change but we'll use refs to be safe
+  const showTabBarRef = useRef(showTabBar);
+  const hideTabBarRef = useRef(hideTabBar);
+
+  useEffect(() => {
+    showTabBarRef.current = showTabBar;
+    hideTabBarRef.current = hideTabBar;
+  }, [showTabBar, hideTabBar]);
+
+  // Clear pending actions on unmount
+  useEffect(() => {
+    return () => {
+      if (actionTimeoutRef.current) {
+        clearTimeout(actionTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const executeVisibilityChange = useCallback((action: 'show' | 'hide') => {
+    const now = Date.now();
+    
+    // Check cooldown period
+    if (now - lastVisibilityChangeRef.current < VISIBILITY_COOLDOWN) {
+      // Still in cooldown, schedule action if different from current pending
+      if (pendingActionRef.current !== action) {
+        pendingActionRef.current = action;
+        // Clear existing timeout
+        if (actionTimeoutRef.current) {
+          clearTimeout(actionTimeoutRef.current);
+        }
+        // Schedule action after cooldown using a closure-safe approach
+        const remainingCooldown = VISIBILITY_COOLDOWN - (now - lastVisibilityChangeRef.current);
+        actionTimeoutRef.current = setTimeout(() => {
+          const executeAction = () => {
+            const actionNow = Date.now();
+            // Final check before executing
+            if (actionNow - lastVisibilityChangeRef.current >= VISIBILITY_COOLDOWN) {
+              pendingActionRef.current = null;
+              if (action === 'show' && !isTabBarVisibleRef.current) {
+                isTabBarVisibleRef.current = true;
+                lastVisibilityChangeRef.current = actionNow;
+                showTabBarRef.current();
+              } else if (action === 'hide' && isTabBarVisibleRef.current) {
+                isTabBarVisibleRef.current = false;
+                lastVisibilityChangeRef.current = actionNow;
+                hideTabBarRef.current();
+              }
+            }
+          };
+          executeAction();
+        }, remainingCooldown);
+      }
+      return;
+    }
+
+    // Clear any pending actions
+    pendingActionRef.current = null;
+    if (actionTimeoutRef.current) {
+      clearTimeout(actionTimeoutRef.current);
+      actionTimeoutRef.current = null;
+    }
+
+    // Execute the action
+    if (action === 'show' && !isTabBarVisibleRef.current) {
+      isTabBarVisibleRef.current = true;
+      lastVisibilityChangeRef.current = now;
+      showTabBarRef.current();
+    } else if (action === 'hide' && isTabBarVisibleRef.current) {
+      isTabBarVisibleRef.current = false;
+      lastVisibilityChangeRef.current = now;
+      hideTabBarRef.current();
+    }
+  }, []);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -39,12 +128,18 @@ export const useTabBarScroll = (options: UseTabBarScrollOptions = {}) => {
 
       // Calculate scroll delta (positive = scrolling down, negative = scrolling up)
       const scrollDelta = currentScrollY - lastScrollY.current;
+      
+      // Ignore very small movements that could be bounce/elastic scrolling
+      if (Math.abs(scrollDelta) < 1) {
+        return;
+      }
+      
       scrollAccumulator.current += scrollDelta;
 
       // Priority 1: If at/near bottom, always show tab bar (Facebook behavior)
       if (isNearBottom) {
-        if (!isTabBarVisible) {
-          showTabBar();
+        if (!isTabBarVisibleRef.current) {
+          executeVisibilityChange('show');
         }
         // Reset direction tracking when at bottom
         lastScrollDirection.current = null;
@@ -60,9 +155,7 @@ export const useTabBarScroll = (options: UseTabBarScrollOptions = {}) => {
             if (lastScrollDirection.current !== 'down') {
               // Direction changed to down - hide tab bar
               lastScrollDirection.current = 'down';
-              if (isTabBarVisible) {
-                hideTabBar();
-              }
+              executeVisibilityChange('hide');
             }
             // Reset accumulator (whether direction changed or continuing down)
             scrollAccumulator.current = 0;
@@ -71,9 +164,7 @@ export const useTabBarScroll = (options: UseTabBarScrollOptions = {}) => {
             if (lastScrollDirection.current !== 'up') {
               // Direction changed to up - show tab bar
               lastScrollDirection.current = 'up';
-              if (!isTabBarVisible) {
-                showTabBar();
-              }
+              executeVisibilityChange('show');
             }
             // Reset accumulator (whether direction changed or continuing up)
             scrollAccumulator.current = 0;
@@ -84,12 +175,12 @@ export const useTabBarScroll = (options: UseTabBarScrollOptions = {}) => {
       // Update last scroll position
       lastScrollY.current = currentScrollY;
     },
-    [threshold, bottomThreshold, showTabBar, hideTabBar, isTabBarVisible]
+    [threshold, bottomThreshold, executeVisibilityChange]
   );
 
   return {
     onScroll: handleScroll,
-    scrollEventThrottle: 16, // Throttle scroll events for better performance
+    scrollEventThrottle: 100, // Increased throttle to reduce frequency and prevent bouncing
   };
 };
 

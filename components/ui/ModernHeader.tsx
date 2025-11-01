@@ -25,7 +25,7 @@ export interface ModernHeaderProps {
   searchValue?: string;
   onSearchChange?: (text: string) => void;
   showAddButton?: boolean;
-  addButtonIcon?: string;
+  addButtonIcon?: keyof typeof MaterialCommunityIcons.glyphMap;
   onAddPress?: () => void;
   showFilterButton?: boolean;
   onFilterPress?: () => void;
@@ -77,13 +77,74 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
     }
   };
 
+  // Helper function to darken a hex color
+  const darkenColor = (hex: string, percent: number): string => {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const amt = Math.round(2.55 * percent * -1);
+    const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+    const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00FF) + amt));
+    const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
+    return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1).toUpperCase();
+  };
+
+  // Adjust gradient colors for better dark mode contrast
+  const getAdjustedGradientColors = () => {
+    if (!colors.isDark) return gradientColors;
+    
+    // Check if these are theme colors (light colors that need darkening in dark mode)
+    const lightThemeColors = ['#5B7C99', '#7C9885', '#9B8B7E']; // Light theme primary, secondary, tertiary
+    const darkThemeColors = ['#7A9BB8', '#94B5A0', '#B5A899']; // Dark theme primary, secondary, tertiary
+    
+    // If using theme colors in dark mode, darken them significantly for better contrast
+    const adjusted = gradientColors.map(color => {
+      const upperColor = color.toUpperCase();
+      
+      // If it's a dark theme color (which are too light), darken it significantly
+      if (darkThemeColors.includes(upperColor)) {
+        return darkenColor(color, 35); // Darken by 35%
+      }
+      
+      // If it's the default blue gradient, use darker blues
+      if (upperColor === '#3B82F6' || upperColor === '#1D4ED8') {
+        return darkenColor(color, 30);
+      }
+      
+      // For any other light-looking color in dark mode, darken it
+      // Check if color is relatively light (brightness > 50%)
+      const num = parseInt(color.replace('#', ''), 16);
+      const r = (num >> 16) & 255;
+      const g = (num >> 8) & 255;
+      const b = num & 255;
+      const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+      
+      if (brightness > 128) { // If color is light
+        return darkenColor(color, 40); // Darken significantly
+      }
+      
+      return color;
+    });
+    
+    return adjusted;
+  };
+
   const renderGradientHeader = () => {
     if (variant !== 'gradient') return null;
 
+    const adjustedGradientColors = getAdjustedGradientColors();
+
     return (
-      <Animated.View entering={FadeInDown.duration(600)} style={styles.gradientContainer}>
+      <Animated.View 
+        entering={FadeInDown.duration(600)} 
+        style={[
+          styles.gradientContainer,
+          {
+            shadowColor: '#000',
+            shadowOpacity: colors.isDark ? 0.3 : 0.1,
+          }
+        ]}
+      >
         <LinearGradient
-          colors={gradientColors}
+          colors={adjustedGradientColors as [string, string, ...string[]]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.gradientBackground}
@@ -121,13 +182,16 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
                     onPress={onNotificationPress}
                   >
                     <MaterialCommunityIcons name="bell" size={24} color="#FFF" />
-                    {notificationCount > 0 && (
-                      <View style={styles.notificationBadge}>
-                        <PaperText style={styles.notificationBadgeText}>
-                          {notificationCount > 99 ? '99+' : notificationCount}
-                        </PaperText>
-                      </View>
-                    )}
+                  {notificationCount > 0 && (
+                    <View style={[
+                      styles.notificationBadge,
+                      { borderColor: '#FFF' }
+                    ]}>
+                      <PaperText style={styles.notificationBadgeText}>
+                        {notificationCount > 99 ? '99+' : notificationCount}
+                      </PaperText>
+                    </View>
+                  )}
                   </TouchableOpacity>
                 )}
                 {showProfileButton && (
@@ -152,7 +216,16 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
     if (variant === 'gradient') return null;
 
     return (
-      <Animated.View entering={FadeInDown.duration(400)} style={styles.defaultContainer}>
+      <Animated.View 
+        entering={FadeInDown.duration(400)} 
+        style={[
+          styles.defaultContainer,
+          {
+            shadowColor: '#000',
+            shadowOpacity: colors.isDark ? 0.3 : 0.08,
+          }
+        ]}
+      >
         <View style={[
           styles.defaultHeader,
           { 
@@ -211,7 +284,10 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
                     color={variant === 'transparent' ? '#FFF' : colors.text} 
                   />
                   {notificationCount > 0 && (
-                    <View style={styles.notificationBadge}>
+                    <View style={[
+                      styles.notificationBadge,
+                      { borderColor: colors.isDark ? colors.surface : '#FFF' }
+                    ]}>
                       <PaperText style={styles.notificationBadgeText}>
                         {notificationCount > 99 ? '99+' : notificationCount}
                       </PaperText>
@@ -244,12 +320,20 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
     if (!showSearch) return null;
 
     return (
-      <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.searchContainer}>
+      <Animated.View entering={FadeInDown.delay(200).duration(400)} style={[styles.searchContainer, { paddingTop: SPACING.sm }]}>
         <View style={[
           styles.searchBar,
           { 
-            backgroundColor: variant === 'gradient' ? 'rgba(255,255,255,0.2)' : colors.background,
-            borderColor: variant === 'gradient' ? 'rgba(255,255,255,0.3)' : colors.border,
+            backgroundColor: variant === 'gradient' 
+              ? colors.isDark 
+                ? 'rgba(255,255,255,0.15)' 
+                : 'rgba(255,255,255,0.2)' 
+              : colors.background,
+            borderColor: variant === 'gradient' 
+              ? colors.isDark 
+                ? 'rgba(255,255,255,0.25)' 
+                : 'rgba(255,255,255,0.3)' 
+              : colors.border,
           }
         ]}>
           <MaterialCommunityIcons
@@ -260,7 +344,11 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
           />
           <TextInput
             placeholder={searchPlaceholder}
-            placeholderTextColor={variant === 'gradient' ? 'rgba(255,255,255,0.7)' : colors.textSecondary}
+            placeholderTextColor={variant === 'gradient' 
+              ? colors.isDark 
+                ? 'rgba(255,255,255,0.8)' 
+                : 'rgba(255,255,255,0.7)' 
+              : colors.textSecondary}
             value={searchValue}
             onChangeText={onSearchChange}
             style={[
@@ -273,7 +361,11 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
               <MaterialCommunityIcons
                 name="close-circle"
                 size={20}
-                color={variant === 'gradient' ? 'rgba(255,255,255,0.7)' : colors.textSecondary}
+                color={variant === 'gradient' 
+                  ? colors.isDark 
+                    ? 'rgba(255,255,255,0.8)' 
+                    : 'rgba(255,255,255,0.7)' 
+                  : colors.textSecondary}
               />
             </TouchableOpacity>
           )}
@@ -325,11 +417,20 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
     );
   };
 
+  // Get adjusted gradient colors for StatusBar
+  const adjustedGradientColors = variant === 'gradient' ? getAdjustedGradientColors() : gradientColors;
+
   return (
     <>
       <StatusBar
-        barStyle={variant === 'gradient' || variant === 'transparent' ? 'light-content' : 'dark-content'}
-        backgroundColor={variant === 'gradient' ? gradientColors[0] : 'transparent'}
+        barStyle={
+          variant === 'gradient' || variant === 'transparent' 
+            ? 'light-content' 
+            : colors.isDark 
+              ? 'light-content' 
+              : 'dark-content'
+        }
+        backgroundColor={variant === 'gradient' ? adjustedGradientColors[0] : 'transparent'}
       />
       {renderGradientHeader()}
       {renderDefaultHeader()}
@@ -475,7 +576,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: '#FFF',
   },
   notificationBadgeText: {
     color: '#FFF',

@@ -19,11 +19,17 @@ import { EmptyState, Card } from '../../components/ui';
 import { ModernHeader } from '../../components/ui/ModernHeader';
 import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
+import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function FAQScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const colors = useThemeColors();
+  const tabBarPadding = useTabBarPadding();
+  const scrollProps = useTabBarScroll();
+  const insets = useSafeAreaInsets();
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -100,7 +106,7 @@ export default function FAQScreen() {
         </View>
       </Animated.View>
     ),
-    [groupedFAQs, expandedId]
+    [groupedFAQs, expandedId, colors]
   );
 
   // Memoize key extractor
@@ -111,7 +117,7 @@ export default function FAQScreen() {
       {/* Modern Gradient Header */}
       <ModernHeader
         variant="gradient"
-        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title="FAQ"
         subtitle="Frequently Asked Questions"
         showBackButton
@@ -122,28 +128,36 @@ export default function FAQScreen() {
       />
       
       <View style={styles.content}>
-
-      <FlatList
-        data={Object.keys(groupedFAQs)}
-        renderItem={renderCategory}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={fetchFAQs} />
-        }
-        ListEmptyComponent={
-          <EmptyState
-            icon="help-circle-outline"
-            title={t('common.noResults')}
-            description={t('help.noFAQsFound')}
-          />
-        }
-        // Performance optimizations
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        initialNumToRender={5}
-        windowSize={5}
-      />
+        <FlatList
+          data={Object.keys(groupedFAQs)}
+          renderItem={renderCategory}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={[
+            styles.list,
+            {
+              paddingTop: SPACING.md,
+              paddingBottom: SPACING.xxl + tabBarPadding + SPACING.lg + insets?.bottom || 0
+            }
+          ]}
+          onScroll={scrollProps.onScroll}
+          scrollEventThrottle={scrollProps.scrollEventThrottle}
+          refreshControl={
+            <RefreshControl refreshing={isLoading} onRefresh={fetchFAQs} />
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon="help-circle-outline"
+              title={t('common.noResults')}
+              description={t('help.noFAQsFound')}
+            />
+          }
+          // Performance optimizations
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={5}
+          initialNumToRender={5}
+          windowSize={5}
+          showsVerticalScrollIndicator={true}
+        />
       </View>
     </View>
   );
@@ -156,7 +170,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: SPACING.md,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -174,7 +187,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   list: {
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    flexGrow: 1,
   },
   categoryContainer: {
     marginBottom: SPACING.lg,

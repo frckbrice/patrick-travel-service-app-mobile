@@ -1,5 +1,8 @@
 {
   "common": {
+    "comingSoon": "Coming Soon",
+    "voiceCallComingSoon": "Voice Call Coming Soon",
+    "voiceCallComingSoonDesc": "This feature will be available soon",
     "continue": "Continue",
     "welcome": "Welcome",
     "welcomeBack": "Welcome back",
@@ -30,7 +33,9 @@
     "close": "Close",
     "goBack": "Go Back",
     "noActiveCase": "No Active Case",
-    "noActiveCaseDesc": "You must have an active case to perform this action. Would you like to create one now?"
+    "noActiveCaseDesc": "You must have an active case to perform this action. Would you like to create one now?",
+    "featureComingSoon": "Feature Coming Soon",
+    "featureComingSoonDesc": "This feature will be available soon"
   },
   "auth": {
     "email": "Email",
@@ -188,6 +193,10 @@
     "draftRestoredMessage": "Your previous draft has been restored",
     "savingDraft": "Saving draft...",
     "draftSaved": "Draft saved",
+    "draftSavedSilently": "Your draft has been saved automatically",
+    "draftSaveFailed": "Failed to save draft",
+    "draftSaveFailedMessage": "Unable to save your draft. Please try again.",
+    "submitted": "Case Submitted",
     "processingInBackground": "Processing in background",
     "submissionFailed": "Submission Failed"
   },
@@ -222,7 +231,9 @@
     "status": "Status:",
     "rejectionReason": "Rejection Reason:",
     "uploadSuccess": "Document uploaded successfully",
+    "uploadSuccessMessage": "Your document has been uploaded and is being processed",
     "downloadSuccess": "Document downloaded successfully",
+    "documentDeleted": "Document deleted successfully",
     "deleteDocument": "Delete Document",
     "confirmDelete": "Are you sure you want to delete this document?",
     "previewNotAvailable": "Preview not available",
@@ -253,7 +264,8 @@
     "messageFailed": "Failed to send",
     "tab": "Messages",
     "noMessages": "No Messages",
-    "noMessagesDesc": "Start a conversation with your advisor."
+    "noMessagesDesc": "Start a conversation with your advisor.",
+    "voiceCallComingSoon": "Voice Call Coming Soon"
   },
   "profile": {
     "profile": "Profile",
@@ -281,6 +293,8 @@
     "confirmDelete": "Are you sure you want to delete your account? This action cannot be undone.",
     "emailCannotChange": "Email cannot be changed",
     "profileUpdated": "Profile updated successfully",
+    "photoUpdated": "Profile photo updated successfully",
+    "changesWillSync": "Your changes will sync automatically",
     "passwordChanged": "Password changed successfully"
   },
   "notifications": {
@@ -302,6 +316,9 @@
     "testNotification": "Send Test Notification",
     "pushToken": "Push Token (for debugging):",
     "notificationsSaved": "Notification preferences saved",
+    "pushNotificationsEnabled": "Push notifications enabled",
+    "pushNotificationsEnableFailed": "Failed to enable push notifications. Please check your device settings.",
+    "testNotificationSent": "Test notification sent",
     "markAllRead": "Mark All Read",
     "subtitle": "Manage how your receive notifications",
     "title": "Notifications",
@@ -366,6 +383,7 @@
     "storage": "Storage",
     "clearCache": "Clear Cache",
     "clearCacheDesc": "Free up storage space",
+    "cacheCleared": "Cache cleared successfully",
     "about": "About",
     "version": "App Version",
     "checkUpdates": "Check for Updates",

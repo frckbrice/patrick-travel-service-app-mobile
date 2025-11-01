@@ -1,8 +1,9 @@
 // Firebase configuration
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
   apiKey: Constants.expoConfig?.extra?.firebaseApiKey,
@@ -29,9 +30,20 @@ let database: ReturnType<typeof getDatabase>;
 
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
-  // getAuth handles persistence automatically on React Native
-  // No need to use initializeAuth with getReactNativePersistence in Firebase v12
-  auth = getAuth(app);
+  // Initialize Auth with AsyncStorage persistence for React Native
+  // This ensures auth state persists between app sessions
+  try {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch (error: any) {
+    // If auth already initialized (e.g., hot reload), use getAuth instead
+    if (error.code === 'auth/already-initialized') {
+      auth = getAuth(app);
+    } else {
+      throw error;
+    }
+  }
   database = getDatabase(app);
 } else {
   app = getApps()[0];

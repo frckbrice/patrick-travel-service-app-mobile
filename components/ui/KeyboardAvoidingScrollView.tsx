@@ -13,6 +13,8 @@ interface KeyboardAvoidingScrollViewProps {
   contentContainerStyle?: ViewStyle;
   keyboardVerticalOffset?: number;
   showsVerticalScrollIndicator?: boolean;
+  onScroll?: any;
+  scrollEventThrottle?: number;
 }
 
 export function KeyboardAvoidingScrollView({
@@ -21,6 +23,8 @@ export function KeyboardAvoidingScrollView({
   contentContainerStyle,
   keyboardVerticalOffset = Platform.OS === 'ios' ? 64 : 0,
   showsVerticalScrollIndicator = false,
+  onScroll,
+  scrollEventThrottle,
 }: KeyboardAvoidingScrollViewProps) {
   return (
     <KeyboardAvoidingView
@@ -33,6 +37,8 @@ export function KeyboardAvoidingScrollView({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={showsVerticalScrollIndicator}
         bounces={true}
+        onScroll={onScroll}
+        scrollEventThrottle={scrollEventThrottle}
       >
         {children}
       </ScrollView>

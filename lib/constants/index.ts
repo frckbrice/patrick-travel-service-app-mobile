@@ -1,15 +1,15 @@
-// Constants - Muted Professional Color Palette
+// Constants - Professional Color Palette
 export const COLORS = {
-  // Primary Palette (Muted Blue-Grey)
-  primary: '#5B7C99', // Muted slate blue
-  secondary: '#7C9885', // Muted sage green
-  accent: '#9B8B7E', // Muted taupe
+  // Primary Palette
+  primary: '#2563EB', // Vibrant blue
+  secondary: '#22C55E', // Vibrant green
+  accent: '#F97316', // Vibrant orange
 
   // Status Colors (Modern, User-Friendly)
-  error: '#F87171', // Soft red (modern validation standard)
-  success: '#6B9E78', // Muted green
-  warning: '#FBBF24', // Warm amber (modern warning standard)
-  info: '#60A5FA', // Bright blue (modern info standard)
+  error: '#EF4444', // Vibrant red
+  success: '#22C55E', // Vibrant green
+  warning: '#F59E0B', // Vibrant amber
+  info: '#3B82F6', // Vibrant blue
 
   // Neutral Palette
   background: '#F5F6F7', // Soft off-white

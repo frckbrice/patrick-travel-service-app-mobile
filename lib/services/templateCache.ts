@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CachedTemplate } from '../types';
 import { logger } from '../utils/logger';
 import * as FileSystem from 'expo-file-system';
@@ -6,6 +7,44 @@ import * as FileSystem from 'expo-file-system';
 class TemplateCache {
   private readonly CACHE_PREFIX = 'template_cache_';
   private readonly CACHE_VERSION = '1.0';
+  private readonly KEYS_LIST_KEY = 'template_cache_keys';
+
+  /**
+   * Maintain a list of cache keys in AsyncStorage
+   */
+  private async addToKeysList(key: string): Promise<void> {
+    try {
+      const keysStr = await AsyncStorage.getItem(this.KEYS_LIST_KEY);
+      const keys = keysStr ? JSON.parse(keysStr) : [];
+      if (!keys.includes(key)) {
+        keys.push(key);
+        await AsyncStorage.setItem(this.KEYS_LIST_KEY, JSON.stringify(keys));
+      }
+    } catch (error) {
+      logger.warn('Error adding key to list', { key, error });
+    }
+  }
+
+  private async removeFromKeysList(key: string): Promise<void> {
+    try {
+      const keysStr = await AsyncStorage.getItem(this.KEYS_LIST_KEY);
+      const keys = keysStr ? JSON.parse(keysStr) : [];
+      const newKeys = keys.filter((k: string) => k !== key);
+      await AsyncStorage.setItem(this.KEYS_LIST_KEY, JSON.stringify(newKeys));
+    } catch (error) {
+      logger.warn('Error removing key from list', { key, error });
+    }
+  }
+
+  private async getAllCacheKeys(): Promise<string[]> {
+    try {
+      const keysStr = await AsyncStorage.getItem(this.KEYS_LIST_KEY);
+      return keysStr ? JSON.parse(keysStr) : [];
+    } catch (error) {
+      logger.warn('Error getting cache keys list', { error });
+      return [];
+    }
+  }
 
   /**
    * Get cached template information
@@ -27,6 +66,7 @@ class TemplateCache {
       if (!fileInfo.exists) {
         logger.warn('Cached file no longer exists, clearing cache', { templateId });
         await SecureStore.deleteItemAsync(cacheKey);
+        await this.removeFromKeysList(cacheKey);
         return null;
       }
 
@@ -57,6 +97,7 @@ class TemplateCache {
       };
 
       await SecureStore.setItemAsync(cacheKey, JSON.stringify(cached));
+      await this.addToKeysList(cacheKey);
       logger.info('Template cached successfully', { templateId, version });
     } catch (error) {
       logger.error('Error caching template', { templateId, error });
@@ -79,6 +120,7 @@ class TemplateCache {
         // Delete cache metadata
         const cacheKey = `${this.CACHE_PREFIX}${templateId}`;
         await SecureStore.deleteItemAsync(cacheKey);
+        await this.removeFromKeysList(cacheKey);
         
         logger.info('Template cache cleared', { templateId });
       }
@@ -92,8 +134,7 @@ class TemplateCache {
    */
   async clearAll(): Promise<void> {
     try {
-      const allKeys = await SecureStore.getAllKeysAsync();
-      const templateKeys = allKeys.filter(key => key.startsWith(this.CACHE_PREFIX));
+      const templateKeys = await this.getAllCacheKeys();
       
       for (const key of templateKeys) {
         try {
@@ -112,6 +153,9 @@ class TemplateCache {
         }
       }
       
+      // Clear the keys list
+      await AsyncStorage.removeItem(this.KEYS_LIST_KEY);
+
       logger.info('All template caches cleared', { count: templateKeys.length });
     } catch (error) {
       logger.error('Error clearing all template caches', { error });
@@ -123,8 +167,7 @@ class TemplateCache {
    */
   async getAll(): Promise<CachedTemplate[]> {
     try {
-      const allKeys = await SecureStore.getAllKeysAsync();
-      const templateKeys = allKeys.filter(key => key.startsWith(this.CACHE_PREFIX));
+      const templateKeys = await this.getAllCacheKeys();
       
       const cachedTemplates: CachedTemplate[] = [];
       
@@ -183,8 +226,7 @@ class TemplateCache {
     let cleanedCount = 0;
     
     try {
-      const allKeys = await SecureStore.getAllKeysAsync();
-      const templateKeys = allKeys.filter(key => key.startsWith(this.CACHE_PREFIX));
+      const templateKeys = await this.getAllCacheKeys();
       
       for (const key of templateKeys) {
         try {
@@ -195,12 +237,14 @@ class TemplateCache {
             
             if (!fileInfo.exists) {
               await SecureStore.deleteItemAsync(key);
+              await this.removeFromKeysList(key);
               cleanedCount++;
             }
           }
         } catch (error) {
           // Delete the key if there's an error reading it
           await SecureStore.deleteItemAsync(key);
+          await this.removeFromKeysList(key);
           cleanedCount++;
         }
       }

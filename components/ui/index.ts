@@ -31,3 +31,5 @@ export { ImageZoomViewer } from './ImageZoomViewer';
 export { LanguageSwitcher } from './LanguageSwitcher';
 export { ThemeSwitcher } from './ThemeSwitcher';
 export { NotFound } from './NotFound';
+export { ModernHeader } from './ModernHeader';
+export type { ModernHeaderProps } from './ModernHeader';

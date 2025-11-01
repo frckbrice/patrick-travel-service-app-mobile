@@ -979,13 +979,34 @@ class ChatService {
   /**
    * Mark a single chat message as read via API
    * This updates both Firebase (real-time) and PostgreSQL (persistent)
+   * Matches web API pattern: validates user is recipient, checks if already read (idempotent)
    */
-  async markMessageAsReadApi(messageId: string): Promise<boolean> {
+  async markMessageAsReadApi(messageId: string, chatRoomId?: string): Promise<boolean> {
     try {
       const result = await messagesApi.markChatMessageAsRead(messageId);
       
       if (result.success) {
         logger.info('Message marked as read via API', { messageId });
+
+        // Also update Firebase for immediate UI consistency (non-blocking)
+        if (chatRoomId) {
+          try {
+            const readAt = Date.now();
+            const messageRef = ref(database, `chats/${chatRoomId}/messages/${messageId}`);
+            await update(messageRef, {
+              isRead: true,
+              readAt: readAt
+            }).catch((err: any) => {
+              if (err.code !== 'PERMISSION_DENIED') {
+                logger.error(`Failed to update Firebase for message ${messageId}`, err);
+              }
+            });
+          } catch (firebaseError) {
+            // Don't fail if Firebase update fails - API update is the source of truth
+            logger.error('Failed to update Firebase for read status', firebaseError);
+          }
+        }
+
         return true;
       } else {
         logger.error('Failed to mark message as read via API', result.error);
@@ -1000,21 +1021,66 @@ class ChatService {
   /**
    * Mark multiple chat messages as read via API
    * This updates both Firebase (real-time) and PostgreSQL (persistent)
+   * Matches web API pattern: updates PostgreSQL first, then syncs to Firebase
    */
   async markMessagesAsReadApi(messageIds: string[], chatRoomId?: string): Promise<boolean> {
     try {
-      const result = await messagesApi.markChatMessagesAsRead(messageIds, chatRoomId);
-      
-      if (result.success) {
-        logger.info('Messages marked as read via API', { 
-          messageCount: messageIds.length, 
-          chatRoomId 
-        });
-        return true;
-      } else {
-        logger.error('Failed to mark messages as read via API', result.error);
-        return false;
+      // Limit batch size to 100 (matching web API behavior)
+      const batchLimit = 100;
+      const batches: string[][] = [];
+
+      for (let i = 0; i < messageIds.length; i += batchLimit) {
+        batches.push(messageIds.slice(i, i + batchLimit));
       }
+
+      const readAt = Date.now();
+      let allSuccess = true;
+
+      // Process each batch
+      for (const batch of batches) {
+        const result = await messagesApi.markChatMessagesAsRead(batch, chatRoomId);
+
+        if (result.success) {
+          logger.info('Messages marked as read via API', { 
+            messageCount: batch.length,
+            chatRoomId,
+            batchNumber: batches.indexOf(batch) + 1,
+            totalBatches: batches.length
+          });
+
+          // Update Firebase directly for immediate UI consistency
+          // This mirrors the web API's non-blocking Firebase sync
+          if (chatRoomId && batch.length > 0) {
+            try {
+              const updatePromises = batch.map(messageId => {
+                const messageRef = ref(database, `chats/${chatRoomId}/messages/${messageId}`);
+                return update(messageRef, {
+                  isRead: true,
+                  readAt: readAt
+                }).catch((err: any) => {
+                  if (err.code !== 'PERMISSION_DENIED') {
+                    logger.error(`Failed to update Firebase for message ${messageId}`, err);
+                  }
+                });
+              });
+
+              await Promise.all(updatePromises);
+              logger.info('Firebase updated with read status', {
+                messageCount: batch.length,
+                chatRoomId
+              });
+            } catch (firebaseError) {
+              // Don't fail if Firebase update fails - API update is the source of truth
+              logger.error('Failed to update Firebase for read status', firebaseError);
+            }
+          }
+        } else {
+          logger.error('Failed to mark messages as read via API', result.error);
+          allSuccess = false;
+        }
+      }
+
+      return allSuccess;
     } catch (error) {
       logger.error('Error marking messages as read via API', error);
       return false;
@@ -1070,20 +1136,23 @@ class ChatService {
   /**
    * Mark all messages in a chat room as read
    * This is useful when a user opens a chat conversation
+   * Matches web API pattern: filters only unread messages for the recipient
    */
   async markChatRoomAsRead(caseId: string, userId: string): Promise<boolean> {
     try {
-      // Get all unread messages for this case/user
+      // Get all unread messages for this case/user (idempotent check)
       const messagesRef = ref(database, `chats/${caseId}/messages`);
       const snapshot = await get(messagesRef);
       
       if (!snapshot.exists()) {
+        logger.info('No messages found to mark as read', { caseId, userId });
         return true; // No messages to mark as read
       }
 
       const messages: ChatMessage[] = [];
       snapshot.forEach((childSnapshot) => {
         const message = childSnapshot.val();
+        // Only mark messages as read if they weren't sent by the current user and aren't already read
         if (message.senderId !== userId && !message.isRead) {
           messages.push({
             ...message,
@@ -1093,13 +1162,21 @@ class ChatService {
       });
 
       if (messages.length === 0) {
+        logger.info('No unread messages to mark', { caseId, userId });
         return true; // No unread messages
       }
 
       // Extract message IDs for API call
       const messageIds = messages.map(msg => msg.id);
       
+      logger.info('Marking messages as read', {
+        caseId,
+        userId,
+        messageCount: messageIds.length
+      });
+
       // Mark as read via API (this will sync to Firebase)
+      // API handles batching and Firebase sync automatically
       return await this.markMessagesAsReadApi(messageIds, caseId);
     } catch (error) {
       logger.error('Error marking chat room as read', error);

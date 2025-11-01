@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,7 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { userApi, ChangePasswordRequest } from '../../lib/api/user.api';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
-import { COLORS, SPACING } from '../../lib/constants';
+import { ModernHeader } from '../../components/ui/ModernHeader';
+import { SPACING } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { toast } from '../../lib/services/toast';
 
 interface PasswordFormData extends ChangePasswordRequest {
@@ -24,6 +26,7 @@ export default function ChangePasswordScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const colors = useThemeColors();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -38,6 +41,93 @@ export default function ChangePasswordScreen() {
 
   const newPassword = watch('newPassword');
   const insets = useSafeAreaInsets();
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollContainer: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      padding: SPACING.lg,
+    },
+    header: {
+      marginBottom: SPACING.xl,
+      alignItems: 'center',
+    },
+    title: {
+      fontWeight: 'bold',
+      marginBottom: SPACING.sm,
+      color: colors.primary,
+    },
+    subtitle: {
+      color: colors.textSecondary,
+      textAlign: 'center',
+    },
+    form: {
+      marginTop: SPACING.lg,
+    },
+    input: {
+      marginBottom: SPACING.sm,
+      backgroundColor: colors.surface,
+    },
+    inputOutline: {
+      borderRadius: 12,
+      borderWidth: 1.5,
+    },
+    fieldError: {
+      color: colors.error,
+      fontSize: 12,
+      marginBottom: SPACING.sm,
+      marginTop: -4,
+    },
+    requirements: {
+      backgroundColor: colors.surface,
+      padding: SPACING.md,
+      borderRadius: 12,
+      marginBottom: SPACING.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    requirementsTitle: {
+      fontWeight: 'bold',
+      marginBottom: SPACING.xs,
+      color: colors.text,
+      fontSize: 13,
+    },
+    requirement: {
+      color: colors.textSecondary,
+      marginTop: SPACING.xs,
+      fontSize: 12,
+    },
+    button: {
+      marginTop: SPACING.md,
+      borderRadius: 12,
+      backgroundColor: colors.primary,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    buttonLabel: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.surface,
+    },
+    buttonLoading: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+  }), [colors]);
 
   const onSubmit = async (data: PasswordFormData) => {
     if (data.newPassword !== data.confirmNewPassword) {
@@ -77,21 +167,21 @@ export default function ChangePasswordScreen() {
   };
 
   return (
-    <KeyboardAvoidingScrollView
-      style={styles.container}
-      contentContainerStyle={{
-        ...styles.scrollContent,
-        paddingBottom: insets.bottom + SPACING.lg,
-      }}
-    >
-      <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>
-          {t('profile.changePassword')}
-        </Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>
-          {t('profile.updatePassword')}
-        </Text>
-      </View>
+    <View style={styles.container}>
+      <ModernHeader
+        variant="gradient"
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
+        title={t('profile.changePassword')}
+        subtitle={t('profile.updatePassword')}
+        showBackButton
+      />
+      <KeyboardAvoidingScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={{
+          ...styles.scrollContent,
+          paddingBottom: insets.bottom + SPACING.lg,
+        }}
+      >
 
       <View style={styles.form}>
         <Controller
@@ -109,19 +199,19 @@ export default function ChangePasswordScreen() {
               error={!!errors.currentPassword}
               style={styles.input}
               outlineStyle={styles.inputOutline}
-              textColor={COLORS.text}
-              placeholderTextColor={COLORS.textSecondary}
+              textColor={colors.text}
+              placeholderTextColor={colors.textSecondary}
               theme={{
                 colors: {
-                  onSurfaceVariant: COLORS.textSecondary,
-                  onSurface: COLORS.text,
+                  onSurfaceVariant: colors.textSecondary,
+                  onSurface: colors.text,
                 },
               }}
               right={
                 <TextInput.Icon
                   icon={showCurrentPassword ? 'eye-off' : 'eye'}
                   onPress={() => setShowCurrentPassword(!showCurrentPassword)}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                 />
               }
             />
@@ -158,19 +248,19 @@ export default function ChangePasswordScreen() {
               error={!!errors.newPassword}
               style={styles.input}
               outlineStyle={styles.inputOutline}
-              textColor={COLORS.text}
-              placeholderTextColor={COLORS.textSecondary}
+              textColor={colors.text}
+              placeholderTextColor={colors.textSecondary}
               theme={{
                 colors: {
-                  onSurfaceVariant: COLORS.textSecondary,
-                  onSurface: COLORS.text,
+                  onSurfaceVariant: colors.textSecondary,
+                  onSurface: colors.text,
                 },
               }}
               right={
                 <TextInput.Icon
                   icon={showNewPassword ? 'eye-off' : 'eye'}
                   onPress={() => setShowNewPassword(!showNewPassword)}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                 />
               }
             />
@@ -199,19 +289,19 @@ export default function ChangePasswordScreen() {
               error={!!errors.confirmNewPassword}
               style={styles.input}
               outlineStyle={styles.inputOutline}
-              textColor={COLORS.text}
-              placeholderTextColor={COLORS.textSecondary}
+              textColor={colors.text}
+              placeholderTextColor={colors.textSecondary}
               theme={{
                 colors: {
-                  onSurfaceVariant: COLORS.textSecondary,
-                  onSurface: COLORS.text,
+                  onSurfaceVariant: colors.textSecondary,
+                  onSurface: colors.text,
                 },
               }}
               right={
                 <TextInput.Icon
                   icon={showConfirmPassword ? 'eye-off' : 'eye'}
                   onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  color={COLORS.textSecondary}
+                  color={colors.textSecondary}
                 />
               }
             />
@@ -251,7 +341,7 @@ export default function ChangePasswordScreen() {
         >
           {isSubmitting ? (
             <View style={styles.buttonLoading}>
-              <ActivityIndicator color={COLORS.surface} size="small" />
+              <ActivityIndicator color={colors.surface} size="small" />
               <Text style={styles.buttonLabel}>
                 {t('profile.changePassword')}
               </Text>
@@ -263,90 +353,7 @@ export default function ChangePasswordScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingScrollView>
+      </KeyboardAvoidingScrollView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: SPACING.lg,
-  },
-  header: {
-    marginBottom: SPACING.xl,
-    alignItems: 'center',
-  },
-  title: {
-    fontWeight: 'bold',
-    marginBottom: SPACING.sm,
-    color: COLORS.primary,
-  },
-  subtitle: {
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  form: {
-    marginTop: SPACING.lg,
-  },
-  input: {
-    marginBottom: SPACING.sm,
-    backgroundColor: COLORS.surface,
-  },
-  inputOutline: {
-    borderRadius: 12,
-    borderWidth: 1.5,
-  },
-  fieldError: {
-    color: COLORS.error,
-    fontSize: 12,
-    marginBottom: SPACING.sm,
-    marginTop: -4,
-  },
-  requirements: {
-    backgroundColor: COLORS.surface,
-    padding: SPACING.md,
-    borderRadius: 12,
-    marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  requirementsTitle: {
-    fontWeight: 'bold',
-    marginBottom: SPACING.xs,
-    color: COLORS.text,
-    fontSize: 13,
-  },
-  requirement: {
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    fontSize: 12,
-  },
-  button: {
-    marginTop: SPACING.md,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.surface,
-  },
-  buttonLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-});

@@ -88,7 +88,7 @@ export default function EditProfileScreen() {
       {/* Modern Gradient Header */}
       <ModernHeader
         variant="gradient"
-        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={t('profile.editProfile')}
         subtitle={t('profile.updateInfo')}
         showBackButton
