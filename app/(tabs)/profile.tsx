@@ -1085,14 +1085,14 @@ export default function ProfileScreen() {
         // Show error toast if deletion failed
         toast.error({
           title: t('common.error'),
-          message: t('profile.deleteAccountFailed') || 'Failed to delete account. Please try again.',
+          message: t('profile.deleteAccountFailed'),
         });
       }
     } catch (error) {
       logger.error('Delete account error in profile', error);
       toast.error({
         title: t('common.error'),
-        message: t('profile.deleteAccountFailed') || 'Failed to delete account. Please try again.',
+        message: t('profile.deleteAccountFailed'),
       });
     }
   }, [deleteAccount, router, t]);
@@ -1168,7 +1168,7 @@ export default function ProfileScreen() {
       logger.error('Failed to upload profile image', error);
       toast.error({
         title: t('common.error'),
-        message: error.message || 'Failed to update profile photo. Please try again.',
+        message: error.message || t('profile.failedToChangePhoto'),
       });
     } finally {
       setIsUploadingImage(false);
@@ -1178,23 +1178,23 @@ export default function ProfileScreen() {
   const handleChangeProfilePhoto = useCallback(async () => {
     try {
       Alert.alert(
-        'Change Profile Photo',
-        'Choose an option',
+        t('profile.changeProfilePhoto'),
+        t('profile.choosePhotoOption'),
         [
           { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Take Photo',
+            text: t('profile.takePhoto'),
             onPress: async () => {
               try {
                 // Request camera permissions
                 const { status } = await ImagePicker.requestCameraPermissionsAsync();
                 if (status !== 'granted') {
                   Alert.alert(
-                    'No Permissions',
-                    'You need to grant permission to your Camera',
+                    t('profile.noPermissions'),
+                    t('profile.cameraPermissionNeeded'),
                     [
-                      { text: 'Dismiss' },
-                      { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                      { text: t('profile.dismiss') },
+                      { text: t('profile.openSettings'), onPress: () => Linking.openSettings() },
                     ]
                   );
                   return;
@@ -1215,23 +1215,23 @@ export default function ProfileScreen() {
                 await handleImageUpload(result.assets[0]);
               } catch (error: any) {
                 logger.error('Error taking photo', error);
-                Alert.alert(t('common.error'), error.message || 'Failed to take photo');
+                Alert.alert(t('common.error'), error.message || t('profile.failedToTakePhoto'));
               }
             },
           },
           {
-            text: 'Choose from Library',
+            text: t('profile.chooseFromLibrary'),
             onPress: async () => {
               try {
                 // Request media library permissions
                 const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                 if (status !== 'granted') {
                   Alert.alert(
-                    'No Permissions',
-                    'You need to grant permission to your Photos',
+                    t('profile.noPermissions'),
+                    t('profile.photosPermissionNeeded'),
                     [
-                      { text: 'Dismiss' },
-                      { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                      { text: t('profile.dismiss') },
+                      { text: t('profile.openSettings'), onPress: () => Linking.openSettings() },
                     ]
                   );
                   return;
@@ -1252,7 +1252,7 @@ export default function ProfileScreen() {
                 await handleImageUpload(result.assets[0]);
               } catch (error: any) {
                 logger.error('Error picking image', error);
-                Alert.alert(t('common.error'), error.message || 'Failed to pick image');
+                Alert.alert(t('common.error'), error.message || t('profile.failedToPickImage'));
               }
             },
           },
@@ -1260,7 +1260,7 @@ export default function ProfileScreen() {
       );
     } catch (error) {
       logger.error('Error changing profile photo', error);
-      Alert.alert(t('common.error'), 'Failed to change profile photo. Please try again.');
+      Alert.alert(t('common.error'), t('profile.failedToChangePhoto'));
     }
   }, [t, handleImageUpload]);
 
@@ -1471,21 +1471,27 @@ export default function ProfileScreen() {
                   <Text style={[styles.statValue, { color: colors.primary }]}>
                     {stats.totalCases}
                   </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Cases</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                    {t('profile.stats.cases')}
+                  </Text>
                 </View>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.statItem}>
                   <Text style={[styles.statValue, { color: colors.success }]}>
                     {stats.activeCases}
                   </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                    {t('profile.stats.active')}
+                  </Text>
                 </View>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.statItem}>
                   <Text style={[styles.statValue, { color: colors.warning }]}>
                     {stats.pendingDocuments}
                   </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pending</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                    {t('profile.stats.pending')}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -1559,16 +1565,16 @@ export default function ProfileScreen() {
             <Animated.View entering={FadeInDown.delay(500).duration(400)}>
               <MenuCard
                 icon="shield-check"
-                title="Privacy Policy"
-                description="View our privacy policy and data protection"
+                title={t('profile.privacyPolicy')}
+                description={t('profile.privacyPolicyDesc')}
                 onPress={handleNavigateToPrivacyPolicy}
               />
             </Animated.View>
             <Animated.View entering={FadeInDown.delay(525).duration(400)}>
               <MenuCard
                 icon="file-document"
-                title="Terms & Conditions"
-                description="View our terms of service"
+                title={t('profile.termsAndConditions')}
+                description={t('profile.termsAndConditionsDesc')}
                 onPress={handleNavigateToTerms}
               />
             </Animated.View>

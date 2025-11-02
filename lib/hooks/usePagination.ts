@@ -71,7 +71,16 @@ export function usePagination<T>(
         });
         return !existingHasSameId;
       });
-      return [...uniqueNewData, ...existing];
+
+      // Combine and sort chronologically (oldest → newest)
+      const combined = [...uniqueNewData, ...existing];
+      const sorted = combined.sort((a, b) => {
+        const aTimestamp = (a as any).timestamp || 0;
+        const bTimestamp = (b as any).timestamp || 0;
+        return aTimestamp - bTimestamp;
+      });
+
+      return sorted;
     });
   }, []);
 
@@ -87,7 +96,16 @@ export function usePagination<T>(
         });
         return !existingHasSameId;
       });
-      return [...existing, ...uniqueNewData];
+
+      // Combine and sort chronologically (oldest → newest)
+      const combined = [...existing, ...uniqueNewData];
+      const sorted = combined.sort((a, b) => {
+        const aTimestamp = (a as any).timestamp || 0;
+        const bTimestamp = (b as any).timestamp || 0;
+        return aTimestamp - bTimestamp;
+      });
+
+      return sorted;
     });
   }, []);
 
@@ -106,7 +124,14 @@ export function usePagination<T>(
       // Ensure result.data is an array
       const dataArray = Array.isArray(result.data) ? result.data : [];
       
-      setData(dataArray);
+      // Sort chronologically (oldest → newest) before setting
+      const sortedData = dataArray.sort((a, b) => {
+        const aTimestamp = (a as any).timestamp || 0;
+        const bTimestamp = (b as any).timestamp || 0;
+        return aTimestamp - bTimestamp;
+      });
+
+      setData(sortedData);
       setHasMore(result.hasMore || false);
       setTotalCount(result.totalCount || 0);
       hasMoreRef.current = result.hasMore || false;
@@ -127,10 +152,16 @@ export function usePagination<T>(
     }
   }, [loadInitialFn, onError]);
 
+  const isLoadingMoreRef = useRef(false);
+
   const loadMore = useCallback(async () => {
-    if (!hasMoreRef.current || isLoadingRef.current || !data || data.length === 0) return;
+    // Prevent duplicate calls
+    if (isLoadingMoreRef.current || !hasMoreRef.current || isLoadingRef.current || !data || data.length === 0) {
+      return;
+    }
 
     try {
+      isLoadingMoreRef.current = true;
       setIsLoadingMore(true);
       
       // Get the oldest timestamp from current data
@@ -161,6 +192,10 @@ export function usePagination<T>(
       onError?.(err as Error);
     } finally {
       setIsLoadingMore(false);
+      // Reset ref after a delay to prevent rapid re-triggering
+      setTimeout(() => {
+        isLoadingMoreRef.current = false;
+      }, 300);
     }
   }, [data, loadMoreFn, getTimestamp, prependData, onError]);
 
@@ -208,12 +243,12 @@ export function useChatPagination<T extends { timestamp: number; id?: string; te
   return usePagination<T>(
     async () => {
       const result = await loadInitialMessages(caseId);
-      logger.info('\n\n loadInitialMessages result', {
-        result,
-        messages: result.messages,
-        hasMore: result.hasMore,
-        totalCount: result.totalCount,
-      });
+      // logger.info('\n\n loadInitialMessages result', {
+      //   result,
+      //   messages: result.messages,
+      //   hasMore: result.hasMore,
+      //   totalCount: result.totalCount,
+      // });
       return {
         data: Array.isArray(result.messages) ? result.messages : [],
         hasMore: !!result.hasMore,

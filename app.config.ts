@@ -29,11 +29,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#0066CC',
     },
+    googleServicesFile: './google-services.json',
     package: 'com.unidov.patricktravel',
     permissions: [
       'android.permission.CAMERA',
       'android.permission.READ_EXTERNAL_STORAGE',
       'android.permission.WRITE_EXTERNAL_STORAGE',
+      'android.permission.POST_NOTIFICATIONS', // Required for FCM on Android 13+
+      'android.permission.RECEIVE_BOOT_COMPLETED', // For notification scheduling
+      'com.google.android.c2dm.permission.RECEIVE', // FCM permission
     ],
   },
   web: {

@@ -154,42 +154,60 @@ apiClient.interceptors.response.use(
         // Try to refresh token from Firebase first
         const user = auth.currentUser;
         if (user) {
-          const token = await user.getIdToken(true); // Force refresh
-          originalRequest.headers.Authorization = `Bearer ${token}`;
-          
-          // Retry the request with new token
           try {
-            return await apiClient(originalRequest);
-          } catch (retryError: any) {
-            // If retry also returns 401, try refreshAuth before giving up
-            if (retryError?.response?.status === 401 && !isAuthEndpoint) {
-              logger.warn('401 persisted after token refresh - trying refreshAuth');
-              const authStore = getAuthStore().getState();
-              try {
-                await authStore.refreshAuth();
-                // Try one more time with refreshed auth
-                const refreshedUser = auth.currentUser;
-                if (refreshedUser) {
-                  const newToken = await refreshedUser.getIdToken(true);
-                  originalRequest.headers.Authorization = `Bearer ${newToken}`;
-                  originalRequest._retryCount = 0; // Reset count
-                  return await apiClient(originalRequest);
+            const token = await user.getIdToken(true); // Force refresh
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+
+            // Retry the request with new token
+            try {
+              return await apiClient(originalRequest);
+            } catch (retryError: any) {
+              // If retry also returns 401, try refreshAuth before giving up
+              if (retryError?.response?.status === 401 && !isAuthEndpoint) {
+                logger.warn('401 persisted after token refresh - trying refreshAuth');
+                const authStore = getAuthStore().getState();
+                try {
+                  await authStore.refreshAuth();
+                  // Try one more time with refreshed auth
+                  const refreshedUser = auth.currentUser;
+                  if (refreshedUser) {
+                    try {
+                      const newToken = await refreshedUser.getIdToken(true);
+                      originalRequest.headers.Authorization = `Bearer ${newToken}`;
+                      originalRequest._retryCount = 0; // Reset count
+                      return await apiClient(originalRequest);
+                    } catch (getIdTokenError: any) {
+                      // Firebase network error - don't retry, just fail
+                      if (getIdTokenError?.code === 'auth/network-request-failed') {
+                        logger.error('Firebase network error after refreshAuth retry - not retrying', getIdTokenError);
+                        return Promise.reject(error);
+                      }
+                      throw getIdTokenError;
+                    }
+                  }
+                } catch (refreshError: any) {
+                  logger.warn('refreshAuth failed after retry 401 - will logout if retry count exceeded', refreshError);
+                  // Continue to check retry count
                 }
-              } catch (refreshError) {
-                logger.warn('refreshAuth failed after retry 401 - will logout if retry count exceeded', refreshError);
-                // Continue to check retry count
+
+                // Only logout if we've exhausted all retries
+                if (originalRequest._retryCount >= 2 && !isAuthEndpoint) {
+                  logger.warn('401 persisted after all retries - logging out user');
+                  const logout = authStore.logout;
+                  await logout();
+                }
+              } else if (retryError?.response?.status === 401 && isAuthEndpoint) {
+                logger.warn('401 received after token refresh retry on auth endpoint - skipping logout to prevent loop');
               }
-              
-              // Only logout if we've exhausted all retries
-              if (originalRequest._retryCount >= 2 && !isAuthEndpoint) {
-                logger.warn('401 persisted after all retries - logging out user');
-                const logout = authStore.logout;
-                await logout();
-              }
-            } else if (retryError?.response?.status === 401 && isAuthEndpoint) {
-              logger.warn('401 received after token refresh retry on auth endpoint - skipping logout to prevent loop');
+              return Promise.reject(retryError);
             }
-            return Promise.reject(retryError);
+          } catch (getIdTokenError: any) {
+            // Firebase network error - don't retry, just fail fast
+            if (getIdTokenError?.code === 'auth/network-request-failed') {
+              logger.error('Firebase network error during token refresh - not retrying', getIdTokenError);
+              return Promise.reject(error);
+            }
+            throw getIdTokenError;
           }
         } else {
           // No Firebase user - try refreshAuth to restore from storage
@@ -203,19 +221,28 @@ apiClient.interceptors.response.use(
             
             if (refreshedUser) {
               // Got Firebase user after refreshAuth - retry request
-              const token = await refreshedUser.getIdToken(true);
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              originalRequest._retryCount = 0; // Reset count
-              
               try {
-                return await apiClient(originalRequest);
-              } catch (retryError: any) {
-                if (retryError?.response?.status === 401 && !isAuthEndpoint && originalRequest._retryCount >= 2) {
-                  logger.warn('401 persisted after refreshAuth - logging out user');
-                  const logout = authStore.logout;
-                  await logout();
+                const token = await refreshedUser.getIdToken(true);
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+                originalRequest._retryCount = 0; // Reset count
+
+                try {
+                  return await apiClient(originalRequest);
+                } catch (retryError: any) {
+                  if (retryError?.response?.status === 401 && !isAuthEndpoint && originalRequest._retryCount >= 2) {
+                    logger.warn('401 persisted after refreshAuth - logging out user');
+                    const logout = authStore.logout;
+                    await logout();
+                  }
+                  return Promise.reject(retryError);
                 }
-                return Promise.reject(retryError);
+              } catch (getIdTokenError: any) {
+                // Firebase network error - don't retry, just fail fast
+                if (getIdTokenError?.code === 'auth/network-request-failed') {
+                  logger.error('Firebase network error after refreshAuth - not retrying', getIdTokenError);
+                  return Promise.reject(error);
+                }
+                throw getIdTokenError;
               }
             } else if (authStore.user && authStore.token) {
               // refreshAuth restored user but no Firebase user - use stored token
@@ -267,10 +294,17 @@ apiClient.interceptors.response.use(
             // If refreshAuth succeeded, try one more time
             const refreshedUser = auth.currentUser;
             if (refreshedUser) {
-              const token = await refreshedUser.getIdToken(true);
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              originalRequest._retryCount = 0;
-              return await apiClient(originalRequest);
+              try {
+                const token = await refreshedUser.getIdToken(true);
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+                originalRequest._retryCount = 0;
+                return await apiClient(originalRequest);
+              } catch (getIdTokenError: any) {
+                // Firebase network error - don't retry, just fail
+                if (getIdTokenError?.code === 'auth/network-request-failed') {
+                  logger.error('Firebase network error in final refresh attempt - not retrying', getIdTokenError);
+                }
+              }
             } else if (authStore.user && authStore.token && originalRequest._retryCount < 2) {
               // Use stored token for one more try
               originalRequest.headers.Authorization = `Bearer ${authStore.token}`;

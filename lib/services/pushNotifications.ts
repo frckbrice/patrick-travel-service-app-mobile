@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { logger } from '../utils/logger';
 import { router } from 'expo-router';
+import { initializeFCM, isFCMConfigured, getFCMStatus } from './fcm';
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -39,14 +40,25 @@ export interface PushNotificationToken {
 
 /**
  * Register for push notifications and get Expo push token
+ * Integrates with FCM for Android and APNs for iOS
  */
 export const registerForPushNotifications =
   async (): Promise<PushNotificationToken | null> => {
     try {
+      // Check FCM configuration status
+      const fcmStatus = getFCMStatus();
+      logger.info('FCM Status:', fcmStatus);
+
       // Check if running on physical device
       if (!Device.isDevice) {
         logger.info('Push notifications require physical device');
         return null;
+      }
+
+      // Validate FCM configuration
+      if (!isFCMConfigured()) {
+        logger.warn('FCM not fully configured', fcmStatus);
+        // Continue anyway - may work if credentials are set up in EAS
       }
 
       logger.info('Starting push notification registration...');
@@ -70,7 +82,7 @@ export const registerForPushNotifications =
 
       logger.info('Notification permission granted');
 
-      // Get Expo push token
+      // Get Expo push token (which uses FCM on Android)
       const projectId = Constants.expoConfig?.extra?.eas?.projectId;
 
       if (!projectId) {
@@ -78,15 +90,16 @@ export const registerForPushNotifications =
         return null;
       }
 
-      logger.info('Getting Expo push token...', { projectId });
+      logger.info('Getting Expo push token (FCM-enabled)...', { projectId });
 
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId,
       });
 
-      logger.info('✅ Push notification token obtained successfully', {
+      logger.info('✅ Push notification token obtained successfully (FCM ready)', {
         token: tokenData.data.substring(0, 50) + '...',
         platform: Platform.OS,
+        fcmConfigured: isFCMConfigured(),
       });
 
       // Configure Android notification channels AFTER getting token (avoids Firebase error)
@@ -146,17 +159,23 @@ export const registerForPushNotifications =
       const errorCode = error?.code || '';
       
       // Firebase initialization errors are non-critical
+      // This happens when FCM credentials aren't configured via EAS
       if (
         errorMessage.includes('FirebaseApp is not initialized') ||
+        errorMessage.includes('FirebaseApp.initializeApp') ||
         errorMessage.includes('firebase') ||
         errorMessage.includes('FCM') ||
-        errorCode === 'messaging/failed-to-get-fcm-token'
+        errorCode === 'messaging/failed-to-get-fcm-token' ||
+        errorCode === 'E_REGISTRATION_FAILED' ||
+        errorMessage.includes('fcm-credentials')
       ) {
-        logger.warn('⚠️ Push notifications need FCM setup', {
+        logger.warn('⚠️ Push notifications require EAS credentials setup', {
           status: 'Registration skipped',
-          reason: 'Firebase/FCM not fully configured',
-          impact: 'App works normally without push',
-          fix: 'Build with EAS credentials to test',
+          reason: 'FCM credentials must be configured via EAS',
+          impact: 'App works normally without push notifications',
+          fix: 'Run: eas credentials (Android → Push Notifications)',
+          guide: 'https://docs.expo.dev/push-notifications/fcm-credentials/',
+          note: 'This is expected in development. Build with EAS to enable push notifications.',
         });
         return null;
       }

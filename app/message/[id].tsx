@@ -107,6 +107,17 @@ export default function ChatScreen() {
   const chatInitializedRef = useRef(false);
   const [agentInfo, setAgentInfo] = useState<{ id?: string; name?: string; profilePicture?: string; isOnline?: boolean } | null>(null);
 
+  // Track user scroll state to prevent auto-scroll when user is manually scrolling
+  const isUserScrollingRef = useRef(false);
+  const scrollPositionRef = useRef(0);
+  const scrollOffsetYRef = useRef(0); // Track scroll offset from top
+  const previousScrollOffsetRef = useRef(0); // Track previous scroll position to detect direction
+  const lastContentHeightRef = useRef(0);
+  const shouldAutoScrollRef = useRef(true); // Only auto-scroll if user is near bottom
+  const userScrollStartTimeRef = useRef<number | null>(null); // Track when user started scrolling
+  const isLoadingMoreRef = useRef(false); // Prevent multiple simultaneous load requests
+  const hasTriggeredLoadAtTopRef = useRef(false); // Prevent multiple triggers when at top
+
   useEffect(() => {
     const onShow = (e: KeyboardEvent) => {
       const height = (e as any)?.endCoordinates?.height ?? 0;
@@ -160,6 +171,10 @@ export default function ChatScreen() {
 
     // Clear processed messages ref for new chat
     processedMessagesRef.current.clear();
+    // Reset scroll state for new chat
+    hasInitialScrolledRef.current = false;
+    shouldAutoScrollRef.current = true;
+    isUserScrollingRef.current = false;
 
     // Load initial messages using pagination hook
     const initializeChat = async () => {
@@ -169,7 +184,12 @@ export default function ChatScreen() {
         
         console.log("\n\n messages: ", result);
         // Note: messages state updates asynchronously after loadInitial
-        // latestTimestampRef will be updated in the messages effect
+        // Scroll to bottom after initial load completes
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: false });
+          shouldAutoScrollRef.current = true;
+          isUserScrollingRef.current = false;
+        }, 300);
         logger.info('Chat initialization completed', { caseId });
       } catch (error) {
         logger.error('Failed to initialize chat', error);
@@ -239,13 +259,18 @@ export default function ChatScreen() {
         // Append via pagination hook helper to avoid unnecessary re-renders
         appendMessages(deduped as any);
 
-        // Defer scroll to next frame for layout to settle
-        if (scrollToEndTimeoutRef.current) {
-          clearTimeout(scrollToEndTimeoutRef.current);
+        // Only auto-scroll if user is near bottom (within 300px) and not actively scrolling
+        if (shouldAutoScrollRef.current && !isUserScrollingRef.current && scrollPositionRef.current < 300) {
+          if (scrollToEndTimeoutRef.current) {
+            clearTimeout(scrollToEndTimeoutRef.current);
+          }
+          scrollToEndTimeoutRef.current = setTimeout(() => {
+            // Double-check user hasn't started scrolling
+            if (shouldAutoScrollRef.current && !isUserScrollingRef.current && scrollPositionRef.current < 300) {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }
+          }, 100);
         }
-        scrollToEndTimeoutRef.current = setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 16);
       },
       50
     );
@@ -257,20 +282,83 @@ export default function ChatScreen() {
     };
   }, [caseId, user]);
 
+  // Sort messages chronologically to ensure correct display order
+  const sortedMessages = useMemo(() => {
+    if (!messages || messages.length === 0) return [];
+    return [...messages].sort((a, b) => {
+      // Sort by timestamp (oldest first)
+      const timestampA = a.timestamp || 0;
+      const timestampB = b.timestamp || 0;
+      return timestampA - timestampB;
+    });
+  }, [messages]);
+
+  // Track if initial scroll has happened
+  const hasInitialScrolledRef = useRef(false);
+
   // Update latest timestamp ref when messages change and ensure auto-scroll on growth
+  // Only auto-scroll if user is near bottom and not actively scrolling
   const messageCountRef = useRef(0);
   useEffect(() => {
-    if (messages.length > 0) {
-      latestTimestampRef.current = messages[messages.length - 1].timestamp;
+    if (sortedMessages.length > 0) {
+      latestTimestampRef.current = sortedMessages[sortedMessages.length - 1].timestamp;
     }
-    // Auto-scroll only when list grows
-    if (messages.length > messageCountRef.current) {
-      requestAnimationFrame(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      });
+
+    // Handle initial scroll on first load - scroll to show last messages
+    if (!hasInitialScrolledRef.current && sortedMessages.length > 0) {
+      hasInitialScrolledRef.current = true;
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+        shouldAutoScrollRef.current = true;
+        isUserScrollingRef.current = false;
+      }, 100);
+      messageCountRef.current = sortedMessages.length;
+      return;
     }
-    messageCountRef.current = messages.length;
-  }, [messages]);
+
+    // WhatsApp-like: Auto-scroll to bottom only when:
+    // 1. List grows (new messages added)
+    // 2. User is NOT scrolling (not viewing older messages)
+    // 3. User is near bottom (within 300px from end)
+    // 4. User hasn't scrolled recently (at least 500ms since last manual scroll)
+    const isGrowing = sortedMessages.length > messageCountRef.current;
+    const timeSinceLastScroll = userScrollStartTimeRef.current
+      ? Date.now() - userScrollStartTimeRef.current
+      : Infinity;
+    const canAutoScroll = !isUserScrollingRef.current &&
+      shouldAutoScrollRef.current &&
+      scrollPositionRef.current <= 300 && // Within 300px of bottom
+      timeSinceLastScroll > 500; // Wait 500ms after user scrolls
+
+    if (isGrowing && canAutoScroll) {
+      // Clear any pending scroll
+      if (scrollToEndTimeoutRef.current) {
+        clearTimeout(scrollToEndTimeoutRef.current);
+      }
+      // Delay slightly to batch layout updates
+      scrollToEndTimeoutRef.current = setTimeout(() => {
+        // Double-check conditions haven't changed
+        const timeSinceLastScrollNow = userScrollStartTimeRef.current
+          ? Date.now() - userScrollStartTimeRef.current
+          : Infinity;
+        if (!isUserScrollingRef.current &&
+          shouldAutoScrollRef.current &&
+          scrollPositionRef.current <= 300 &&
+          timeSinceLastScrollNow > 500) {
+          // Scroll to bottom to show new messages (WhatsApp behavior)
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }
+      }, 100);
+    }
+
+    messageCountRef.current = sortedMessages.length;
+
+    return () => {
+      if (scrollToEndTimeoutRef.current) {
+        clearTimeout(scrollToEndTimeoutRef.current);
+      }
+    };
+  }, [sortedMessages]);
 
 
 
@@ -315,10 +403,26 @@ export default function ChatScreen() {
     setNewMessage('');
     setSelectedAttachments([]);
 
-    // 3. Scroll to bottom immediately to show new message
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: false });
-    }, 50);
+    // 3. WhatsApp-like: Scroll to bottom when sending message (if user is near bottom)
+    const timeSinceLastScroll = userScrollStartTimeRef.current
+      ? Date.now() - userScrollStartTimeRef.current
+      : Infinity;
+    if (shouldAutoScrollRef.current &&
+      scrollPositionRef.current <= 300 && // Within 300px of bottom
+      !isUserScrollingRef.current &&
+      timeSinceLastScroll > 500) {
+      setTimeout(() => {
+        const timeSinceLastScrollNow = userScrollStartTimeRef.current
+          ? Date.now() - userScrollStartTimeRef.current
+          : Infinity;
+        if (shouldAutoScrollRef.current &&
+          !isUserScrollingRef.current &&
+          timeSinceLastScrollNow > 500) {
+        // Scroll to bottom to show sent message (WhatsApp behavior)
+          flatListRef.current?.scrollToEnd({ animated: false });
+        }
+      }, 50);
+    }
 
     try {
       // 4. Send to server in background
@@ -384,7 +488,7 @@ useEffect(() => {
       logger.info('Ensuring conversation exists', { caseId, userId: user.id });
       // Resolve true case reference via chat metadata (Firebase chat ID -> caseReference)
       const metadata = await chatService.getChatMetadata(caseId);
-      const trueCaseId = metadata?.caseReference || caseId;
+      const trueCaseId = metadata?.caseReferences?.[0]?.caseId || caseId;
       logger.info('Case metadata retrieved', { metadata, trueCaseId });
       // Prefer agent info from metadata if present
       if (metadata?.participants?.agentId || metadata?.participants?.agentName) {
@@ -481,14 +585,14 @@ useEffect(() => {
           updated[index] = {
             ...updated[index],
             status: 'failed',
-            error: error.message || 'Failed to send'
+            error: error.message || 'Failed'
           };
           setMessages(updated);
         }
       }
     }
   },
-  [user, caseId]
+   [user, caseId, messages, setMessages]
 );
 
  // DELETE: Remove a failed message
@@ -510,7 +614,7 @@ useEffect(() => {
       ]
     );
   },
-  [t]
+   [t, messages, setMessages]
 );
 
 
@@ -649,8 +753,28 @@ const handlePickFile = useCallback(async () => {
 
   // Message row (memoized) to reduce re-renders when typing/sending
   const MessageRow = memo(
-    ({ item, index, themeColors, dynamicStyles }: { item: ChatMessage; index: number; themeColors: ReturnType<typeof useThemeColors>; dynamicStyles: any }) => {
-    const isMyMessage = item.senderId === user?.id;
+    ({
+      item,
+      index,
+      themeColors,
+      dynamicStyles,
+      currentUserId,
+      onDownloadAttachment,
+      onRetryMessage,
+      onDeleteFailedMessage,
+      formatTime,
+    }: {
+      item: ChatMessage;
+      index: number;
+      themeColors: ReturnType<typeof useThemeColors>;
+      dynamicStyles: any;
+      currentUserId?: string;
+      onDownloadAttachment: (attachment: any) => void;
+      onRetryMessage: (message: ChatMessage) => void;
+      onDeleteFailedMessage: (messageId: string) => void;
+      formatTime: (timestamp: number) => string;
+    }) => {
+      const isMyMessage = item.senderId === currentUserId;
     const AnimatedView = isMyMessage
       ? Animated.createAnimatedComponent(View)
       : Animated.createAnimatedComponent(View);
@@ -720,7 +844,7 @@ const handlePickFile = useCallback(async () => {
                     { backgroundColor: themeColors.surface },
                     isMyMessage && [styles.myAttachmentCard, { backgroundColor: themeColors.primary + '20' }],
                   ]}
-                  onPress={() => handleDownloadAttachment(attachment)}
+                  onPress={() => onDownloadAttachment(attachment)}
                 >
                   <MaterialCommunityIcons
                     name={getFileIconForMimeType(attachment.type) as any}
@@ -765,7 +889,7 @@ const handlePickFile = useCallback(async () => {
               { color: themeColors.textSecondary },
               isMyMessage && [styles.myTimestamp, { color: themeColors.surface, opacity: 0.8 }],
             ]}>
-              {formatMessageTime(item.timestamp)}
+              {formatTime(item.timestamp)}
             </Text>
 
             {/* Status Indicator for My Messages */}
@@ -801,7 +925,7 @@ const handlePickFile = useCallback(async () => {
             <View style={styles.failedActions}>
               <TouchableOpacity
                 style={styles.retryButton}
-                onPress={() => handleRetryMessage(item)}
+                onPress={() => onRetryMessage(item)}
                 activeOpacity={0.7}
               >
                 <MaterialCommunityIcons
@@ -813,7 +937,7 @@ const handlePickFile = useCallback(async () => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteButton}
-                onPress={() => handleDeleteFailedMessage(item.id)}
+                onPress={() => onDeleteFailedMessage(item.id)}
                 activeOpacity={0.7}
               >
                 <MaterialCommunityIcons
@@ -839,7 +963,10 @@ const handlePickFile = useCallback(async () => {
         p.status === n.status &&
         p.message === n.message &&
         p.timestamp === n.timestamp &&
-        (p.attachments?.length || 0) === (n.attachments?.length || 0)
+        p.senderId === n.senderId &&
+        p.senderName === n.senderName &&
+        (p.attachments?.length || 0) === (n.attachments?.length || 0) &&
+        prevProps.currentUserId === nextProps.currentUserId
       );
     }
   );
@@ -850,17 +977,62 @@ const handlePickFile = useCallback(async () => {
   return item.tempId || `${item.id}-${index}`;
 }, []);
 
-  // Throttled scroll to end for performance
-  const scrollToEnd = useThrottle(() => {
-    flatListRef.current?.scrollToEnd({ animated: false });
-  }, 200);
+  // Smart content size change handler - only scrolls if user is near bottom
+  const handleContentSizeChange = useCallback((width: number, height: number) => {
+    // Only update ref, don't trigger scroll - let useEffect handle it
+    // This prevents bouncing when content size changes due to keyboard/layout
+    const heightChanged = height !== lastContentHeightRef.current;
+    lastContentHeightRef.current = height;
 
-  // Handle load more (pull to refresh for older messages)
+    // WhatsApp-like: Auto-scroll only if:
+    // 1. Content grew (new message added)
+    // 2. User is near bottom (within 300px from end)
+    // 3. Not currently loading more messages
+    // 4. User is not actively scrolling
+    // 5. User hasn't scrolled recently (at least 500ms since last manual scroll)
+    const timeSinceLastScroll = userScrollStartTimeRef.current
+      ? Date.now() - userScrollStartTimeRef.current
+      : Infinity;
+    const canAutoScroll = !isUserScrollingRef.current &&
+      shouldAutoScrollRef.current &&
+      scrollPositionRef.current <= 300 && // Within 300px of bottom
+      timeSinceLastScroll > 500;
+
+    if (heightChanged && canAutoScroll) {
+      // Small delay to prevent bouncing during layout
+      if (scrollToEndTimeoutRef.current) {
+        clearTimeout(scrollToEndTimeoutRef.current);
+      }
+      scrollToEndTimeoutRef.current = setTimeout(() => {
+        const timeSinceLastScrollNow = userScrollStartTimeRef.current
+          ? Date.now() - userScrollStartTimeRef.current
+          : Infinity;
+        if (!isUserScrollingRef.current &&
+          shouldAutoScrollRef.current &&
+          scrollPositionRef.current <= 300 &&
+          timeSinceLastScrollNow > 500) {
+          // Scroll to bottom to show new message (WhatsApp behavior)
+          flatListRef.current?.scrollToEnd({ animated: false });
+        }
+      }, 50);
+    }
+  }, []);
+
+  // Handle load more (load older messages when scrolling to top)
+  // Note: This is now called directly from handleScrollData when user scrolls up to top
   const handleLoadMore = useCallback(() => {
-    if (hasMore && !isLoadingMore && messages.length > 0) {
+    if (hasMore && !isLoadingMore && messages.length > 0 && !isLoadingMoreRef.current) {
+      isLoadingMoreRef.current = true;
       const oldestMessage = messages[messages.length - 1];
       if (oldestMessage) {
-        loadMore();
+        loadMore().finally(() => {
+          // Reset loading flag after a delay to prevent rapid-fire requests
+          setTimeout(() => {
+            isLoadingMoreRef.current = false;
+          }, 1000);
+        });
+      } else {
+        isLoadingMoreRef.current = false;
       }
     }
   }, [hasMore, isLoadingMore, messages.length, loadMore]);
@@ -989,9 +1161,19 @@ const handleRefresh = useCallback(() => {
   // Memoized renderItem to keep stable reference
   const renderMessage = useCallback(
     ({ item, index }: { item: ChatMessage; index: number }) => (
-      <MessageRow item={item} index={index} themeColors={themeColors} dynamicStyles={dynamicStyles} />
+      <MessageRow
+        item={item}
+        index={index}
+        themeColors={themeColors}
+        dynamicStyles={dynamicStyles}
+        currentUserId={user?.id}
+        onDownloadAttachment={handleDownloadAttachment}
+        onRetryMessage={handleRetryMessage}
+        onDeleteFailedMessage={handleDeleteFailedMessage}
+        formatTime={formatMessageTime}
+      />
     ),
-    [themeColors, dynamicStyles]
+    [themeColors, dynamicStyles, user?.id, handleDownloadAttachment, handleRetryMessage, handleDeleteFailedMessage, formatMessageTime]
   );
 
   const inputContainerStyle = useMemo(
@@ -1002,10 +1184,13 @@ const handleRefresh = useCallback(() => {
     [dynamicStyles.inputContainer, keyboardHeight, insets.bottom]
   );
 
+  // WhatsApp-like: Ensure messages are always visible above input container
+  // Add extra padding to ensure no message is hidden behind input
   const flatListContentStyle = useMemo(() => ({
-    paddingBottom: inputHeight + (keyboardHeight > 0 ? 12 : insets.bottom) + 12,
+    paddingBottom: Math.max(inputHeight + (keyboardHeight > 0 ? 0 : insets.bottom) + 20, 100),
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
+    flexGrow: 1,
   }), [inputHeight, keyboardHeight, insets.bottom]);
 
 // Memoize ListHeaderComponent to prevent re-renders
@@ -1018,25 +1203,116 @@ const ListHeaderComponent = useMemo(() => {
   );
 }, [isLoadingMore, t, dynamicStyles.loadingText]);
 
-// Memoize FlatList props
+  // Memoize FlatList props for better performance
 const flatListProps = useMemo(() => ({
   removeClippedSubviews: true,
-  maxToRenderPerBatch: 15,
-  initialNumToRender: 15,
-  windowSize: 10,
+  maxToRenderPerBatch: 10,
+  updateCellsBatchingPeriod: 50,
+  initialNumToRender: 10,
+  windowSize: 5,
   inverted: false,
   showsVerticalScrollIndicator: false,
   keyboardShouldPersistTaps: 'handled' as const,
-  onEndReachedThreshold: 0.1,
+  // Removed onEndReachedThreshold - loading at top is handled manually via scroll handler
+  maintainVisibleContentPosition: undefined,
 }), []);
+
+  // WhatsApp-like: Allow full scrolling, only prevent auto-scroll when user is viewing older messages
+
+  // Extract scroll data immediately (before event is pooled) then throttle the handler
+  const handleScrollData = useCallback((scrollData: {
+    offsetY: number;
+    contentHeight: number;
+    layoutHeight: number;
+  }) => {
+    const { offsetY, contentHeight, layoutHeight } = scrollData;
+    const distanceFromBottom = contentHeight - (offsetY + layoutHeight);
+    const distanceFromTop = offsetY;
+
+    // Detect scroll direction: scrolling up = offsetY increases, scrolling down = offsetY decreases
+    const isScrollingUp = offsetY > previousScrollOffsetRef.current;
+    const isScrollingDown = offsetY < previousScrollOffsetRef.current;
+
+    scrollPositionRef.current = distanceFromBottom;
+    scrollOffsetYRef.current = offsetY;
+    previousScrollOffsetRef.current = offsetY;
+
+    // WhatsApp-like behavior:
+    // 1. Load older messages when user scrolls UP and reaches top
+    // 2. Allow full scrolling - don't restrict scroll position
+    // 3. Only auto-scroll to bottom when new messages arrive AND user is near bottom
+
+    // Load older messages when scrolling UP to top (within 100px of top)
+    if (isScrollingUp &&
+      distanceFromTop <= 100 &&
+      hasMore &&
+      !isLoadingMoreRef.current &&
+      !isLoadingMore &&
+      messages.length > 0 &&
+      isUserScrollingRef.current &&
+      !hasTriggeredLoadAtTopRef.current) {
+      // User scrolled to top - load older messages
+      hasTriggeredLoadAtTopRef.current = true;
+      isLoadingMoreRef.current = true;
+      const oldestMessage = messages[messages.length - 1];
+      if (oldestMessage) {
+        loadMore().finally(() => {
+          // Reset flags after loading completes
+          setTimeout(() => {
+            isLoadingMoreRef.current = false;
+            // Allow another load after delay
+            setTimeout(() => {
+              hasTriggeredLoadAtTopRef.current = false;
+            }, 1500);
+          }, 300);
+        });
+      } else {
+        isLoadingMoreRef.current = false;
+        hasTriggeredLoadAtTopRef.current = false;
+      }
+    }
+
+    // Reset trigger flag when user scrolls away from top
+    if (distanceFromTop > 150) {
+      hasTriggeredLoadAtTopRef.current = false;
+    }
+
+    // WhatsApp-like: Only auto-scroll to bottom if:
+    // 1. User is already near bottom (within 300px)
+    // 2. User is NOT actively scrolling up to view older messages
+    // Don't restrict scroll position - allow full scrolling like WhatsApp
+    if (distanceFromBottom <= 300 && !isUserScrollingRef.current) {
+      // User is near bottom and not scrolling - enable auto-scroll for new messages
+      shouldAutoScrollRef.current = true;
+    } else if (distanceFromBottom > 300 || isUserScrollingRef.current) {
+      // User scrolled away from bottom - disable auto-scroll
+      shouldAutoScrollRef.current = false;
+    }
+  }, [hasMore, isLoadingMore, messages.length, loadMore]);
+
+  // Throttle the scroll data handler
+  const handleScrollThrottled = useThrottle(handleScrollData, 100);
+
+  // Scroll event handler - extracts data immediately before event is pooled
+  const handleScroll = useCallback((event: any) => {
+    // Extract values immediately before event is nullified
+    const nativeEvent = event.nativeEvent;
+    if (!nativeEvent) return;
+
+    const scrollData = {
+      offsetY: nativeEvent.contentOffset?.y ?? 0,
+      contentHeight: nativeEvent.contentSize?.height ?? 0,
+      layoutHeight: nativeEvent.layoutMeasurement?.height ?? 0,
+    };
+
+    // Pass extracted data to throttled handler
+    handleScrollThrottled(scrollData);
+  }, [handleScrollThrottled]);
 
   // Memoize attachment removal callback
   const removeAttachment = useCallback((index: number) => {
     setSelectedAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
-
-  console.log('keyboardHeight', keyboardHeight);
-
 
 
 return (
@@ -1102,15 +1378,79 @@ return (
     />
       <FlatList
         ref={flatListRef}
-        data={messages}
+      data={sortedMessages}
         renderItem={renderMessage}
         keyExtractor={keyExtractor}
         contentContainerStyle={flatListContentStyle}
-        onContentSizeChange={scrollToEnd}
-        onEndReached={handleLoadMore}
-        refreshing={isLoading}
-        onRefresh={handleRefresh}
-        ListHeaderComponent={ListHeaderComponent}
+      onContentSizeChange={handleContentSizeChange}
+      onScroll={handleScroll}
+      scrollEventThrottle={100}
+      ListHeaderComponent={ListHeaderComponent}
+      // Remove onEndReached - we handle loading at top via scroll handler
+      refreshing={isLoadingMore}
+      onRefresh={handleLoadMore}
+      {...flatListProps}
+      onScrollBeginDrag={() => {
+        // User started scrolling manually - immediately disable auto-scroll
+        userScrollStartTimeRef.current = Date.now();
+        isUserScrollingRef.current = true;
+        shouldAutoScrollRef.current = false;
+        // Reset trigger flag when user starts new scroll session
+        hasTriggeredLoadAtTopRef.current = false;
+
+        // Cancel any pending auto-scroll timeouts
+        if (scrollToEndTimeoutRef.current) {
+          clearTimeout(scrollToEndTimeoutRef.current);
+          scrollToEndTimeoutRef.current = null;
+        }
+      }}
+      onScrollEndDrag={(event) => {
+        const offsetY = event.nativeEvent.contentOffset.y;
+        const contentHeight = event.nativeEvent.contentSize.height;
+        const layoutHeight = event.nativeEvent.layoutMeasurement.height;
+        const distanceFromBottom = contentHeight - (offsetY + layoutHeight);
+        const distanceFromTop = offsetY;
+
+        scrollPositionRef.current = distanceFromBottom;
+
+        // WhatsApp-like: Update auto-scroll state based on position
+        // If user is near bottom, enable auto-scroll for new messages
+        // If user scrolled up to view older messages, disable auto-scroll
+        if (distanceFromBottom <= 300) {
+          // User ended near bottom - enable auto-scroll for new messages
+          shouldAutoScrollRef.current = true;
+          isUserScrollingRef.current = false;
+        } else {
+          // User scrolled up - disable auto-scroll (they're viewing older messages)
+          shouldAutoScrollRef.current = false;
+          isUserScrollingRef.current = false;
+        }
+      }}
+      onMomentumScrollEnd={(event) => {
+        const offsetY = event.nativeEvent.contentOffset.y;
+        const contentHeight = event.nativeEvent.contentSize.height;
+        const layoutHeight = event.nativeEvent.layoutMeasurement.height;
+        const distanceFromBottom = contentHeight - (offsetY + layoutHeight);
+
+        scrollPositionRef.current = distanceFromBottom;
+
+        // WhatsApp-like: Update state after momentum ends
+        setTimeout(() => {
+          if (distanceFromBottom <= 300) {
+            // User ended near bottom - re-enable auto-scroll for new messages
+            shouldAutoScrollRef.current = true;
+            isUserScrollingRef.current = false;
+            // Reset scroll start time after a delay
+            setTimeout(() => {
+              userScrollStartTimeRef.current = null;
+            }, 500);
+          } else {
+            // User is viewing older messages - keep auto-scroll disabled
+            isUserScrollingRef.current = false;
+            shouldAutoScrollRef.current = false;
+          }
+        }, 300); // Wait 300ms after momentum ends
+      }}
         {...flatListProps}
         removeClippedSubviews={
           Platform.OS === 'android' ? false : flatListProps.removeClippedSubviews

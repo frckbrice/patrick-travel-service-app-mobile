@@ -47,12 +47,19 @@ export interface ChatParticipants {
   agentName: string;
 }
 
-export interface ChatMetadata {
+export interface CaseReference {
+  caseId: string;
   caseReference: string;
+  assignedAt: number;
+}
+
+export interface ChatMetadata {
   participants: ChatParticipants;
+  caseReferences?: CaseReference[]; // Array of all cases for this client-agent pair
   createdAt: number;
   lastMessage: string | null;
   lastMessageTime: number | null;
+  updatedAt?: number;
 }
 
 // Local conversation type used within this service
@@ -95,25 +102,35 @@ interface ApiChatMessage {
   attachments?: ApiChatAttachment[];
 }
 
+/**
+ * Generate deterministic chat room ID from client-agent pair
+ * Always sorts IDs alphabetically to ensure consistency
+ */
+function getChatRoomId(clientId: string, agentId: string): string {
+  const sorted = [clientId, agentId].sort();
+  return `${sorted[0]}-${sorted[1]}`;
+}
+
 class ChatService {
-  // Fetch chat metadata (maps Firebase chat ID to true case reference and participants)
-  async getChatMetadata(caseId: string): Promise<ChatMetadata | null> {
+  // Fetch chat metadata (supports both old case-based and new client-agent pair room IDs)
+  async getChatMetadata(roomId: string): Promise<ChatMetadata | null> {
     try {
-      const metadataRef = ref(database, `chats/${caseId}/metadata`);
+      const metadataRef = ref(database, `chats/${roomId}/metadata`);
       const snap = await get(metadataRef);
       if (!snap.exists()) return null;
       const raw = snap.val();
       const metadata: ChatMetadata = {
-        caseReference: raw.caseReference || caseId,
         participants: raw.participants || {
           clientId: '',
           clientName: '',
           agentId: '',
           agentName: '',
         },
+        caseReferences: raw.caseReferences || [],
         createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : 0,
         lastMessage: raw.lastMessage ?? null,
         lastMessageTime: raw.lastMessageTime ?? null,
+        updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : undefined,
       };
       return metadata;
     } catch (error) {
@@ -121,21 +138,104 @@ class ChatService {
       return null;
     }
   }
-  // Send a message (aligned with web app)
+
+  // Helper method to get chat room ID from client-agent pair
+  getChatRoomIdFromPair(clientId: string, agentId: string): string {
+    return getChatRoomId(clientId, agentId);
+  }
+  // Helper method to resolve chat room ID from caseId
+  // Tries new format first (client-agent pair), then falls back to old format (caseId)
+  async resolveChatRoomIdFromCase(caseId: string, clientId?: string, agentId?: string): Promise<string | null> {
+    try {
+      // If we have both clientId and agentId, try new format first
+      if (clientId && agentId) {
+        const newRoomId = getChatRoomId(clientId, agentId);
+        const newMetadataRef = ref(database, `chats/${newRoomId}/metadata`);
+        const newMetadataSnap = await get(newMetadataRef);
+
+        if (newMetadataSnap.exists()) {
+          const metadata = newMetadataSnap.val();
+          // Check if this case is in the caseReferences array
+          const caseRefs = metadata.caseReferences || [];
+          if (caseRefs.some((ref: CaseReference) => ref.caseId === caseId)) {
+            return newRoomId;
+          }
+        }
+      }
+
+      // Fallback to old format (caseId as room ID)
+      const oldMetadataRef = ref(database, `chats/${caseId}/metadata`);
+      const oldMetadataSnap = await get(oldMetadataRef);
+      if (oldMetadataSnap.exists()) {
+        return caseId;
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('Failed to resolve chat room ID from case', error);
+      return null;
+    }
+  }
+
+  // Send a message (aligned with web app - uses client-agent pair room ID)
+  // Accepts either chatRoomId directly or caseId (for backward compatibility)
   async sendMessage(
-    caseId: string,
+    caseIdOrRoomId: string,
     senderId: string,
     senderName: string,
     senderRole: 'CLIENT' | 'AGENT' | 'ADMIN',
     message: string,
-    attachments?: ChatMessage['attachments']
+    attachments?: ChatMessage['attachments'],
+    clientId?: string,
+    agentId?: string
   ): Promise<boolean> {
     try {
-      const messagesRef = ref(database, `chats/${caseId}/messages`);
+      // Determine the chat room ID
+      let chatRoomId: string | null = null;
+
+      // Try to resolve as new format (client-agent pair room ID) if clientId and agentId provided
+      if (clientId && agentId) {
+        const resolvedRoomId = await this.resolveChatRoomIdFromCase(caseIdOrRoomId, clientId, agentId);
+        if (resolvedRoomId) {
+          chatRoomId = resolvedRoomId;
+        } else {
+          // Room doesn't exist yet, create it using new format
+          chatRoomId = getChatRoomId(clientId, agentId);
+        }
+      } else {
+        // Fallback: try old format (caseId as room ID) or assume caseIdOrRoomId is already a room ID
+        const caseMetadataRef = ref(database, `chats/${caseIdOrRoomId}/metadata`);
+        const caseMetadataSnap = await get(caseMetadataRef);
+
+        if (caseMetadataSnap.exists()) {
+          // Old format - room ID is the caseId
+          chatRoomId = caseIdOrRoomId;
+        } else {
+          logger.warn('Cannot resolve chat room ID', { caseIdOrRoomId });
+          return false;
+        }
+      }
+
+      const messagesRef = ref(database, `chats/${chatRoomId}/messages`);
       const newMessageRef = push(messagesRef);
       const messageId = newMessageRef.key!;
 
       const timestamp = Date.now();
+
+      // Ensure metadata exists before writing message (needed to get caseId)
+      const metadataRef = ref(database, `chats/${chatRoomId}/metadata`);
+      const existingMetadata = await get(metadataRef);
+
+      // Get caseId from metadata if available, otherwise use the parameter
+      let messageCaseId = caseIdOrRoomId;
+      if (existingMetadata.exists()) {
+        const metadata = existingMetadata.val();
+        // For new format, get the first caseId from caseReferences, or use the parameter
+        if (metadata.caseReferences && metadata.caseReferences.length > 0) {
+          messageCaseId = metadata.caseReferences[0].caseId;
+        }
+      }
+
       const messageData = {
         id: messageId,
         senderId,
@@ -143,34 +243,30 @@ class ChatService {
         content: message,
         sentAt: timestamp,
         isRead: false,
-        caseId,
+        caseId: messageCaseId, // Keep caseId in message for context
         attachments: attachments || [],
       };
 
-      // Ensure metadata exists before writing message
-      const metadataRef = ref(database, `chats/${caseId}/metadata`);
-      const existingMetadata = await get(metadataRef);
-
       if (!existingMetadata.exists()) {
-        logger.warn('Chat metadata not found, message may fail due to Firebase rules', { caseId });
+        logger.warn('Chat metadata not found, message may fail due to Firebase rules', { chatRoomId });
       } else {
         // Update metadata with new last message
         const currentData = existingMetadata.val();
         await update(metadataRef, {
-          participants: currentData.participants,
           lastMessage: message.substring(0, 100),
           lastMessageTime: timestamp,
         });
 
         // Update userChats index for both participants
-        const { agentId, clientId } = currentData.participants;
-        if (agentId && clientId) {
+        const { agentId: metadataAgentId, clientId: metadataClientId } = currentData.participants;
+        if (metadataAgentId && metadataClientId) {
+          const roomIdForUserChats = chatRoomId; // Use the actual room ID
           await Promise.all([
-            update(ref(database, `userChats/${agentId}/${caseId}`), {
+            update(ref(database, `userChats/${metadataAgentId}/${roomIdForUserChats}`), {
               lastMessage: message.substring(0, 100),
               lastMessageTime: timestamp,
             }),
-            update(ref(database, `userChats/${clientId}/${caseId}`), {
+            update(ref(database, `userChats/${metadataClientId}/${roomIdForUserChats}`), {
               lastMessage: message.substring(0, 100),
               lastMessageTime: timestamp,
             }),
@@ -181,10 +277,11 @@ class ChatService {
       // Write the message
       await set(newMessageRef, messageData);
 
-      // Update cache with the new message
+      // Update cache with the new message (use chatRoomId for cache key)
+
       const newMessage: ChatMessage = {
         id: messageId,
-        caseId,
+        caseId: messageCaseId,
         senderId,
         senderName,
         senderRole,
@@ -195,9 +292,9 @@ class ChatService {
         status: 'sent',
       };
       
-      await chatCacheService.addMessageToCache(caseId, newMessage);
+      await chatCacheService.addMessageToCache(chatRoomId, newMessage);
 
-      logger.info('Message sent successfully', { caseId, messageId });
+      logger.info('Message sent successfully', { caseIdOrRoomId, chatRoomId, messageId });
       return true;
     } catch (error) {
       logger.error('Failed to send message', error);
@@ -280,24 +377,130 @@ class ChatService {
     return () => off(q, 'child_added', listener);
   }
 
-  // Load initial messages (last 20) with caching
-  async loadInitialMessages(caseId: string): Promise<{
+  // Load and merge messages from both old (case-based) and new (client-agent pair) format rooms
+  async loadMergedMessages(
+    newRoomId: string,
+    oldRoomId: string | null,
+    limit: number = 50
+  ): Promise<{
     messages: ChatMessage[];
     hasMore: boolean;
     totalCount: number;
   }> {
     try {
-      logger.info('\n\n loadInitialMessages from chat service called', { caseId });
+      const allMessages: ChatMessage[] = [];
+      const roomsToCheck = [newRoomId];
+      if (oldRoomId && oldRoomId !== newRoomId) {
+        roomsToCheck.push(oldRoomId);
+      }
+
+      // Load messages from all relevant rooms
+      for (const roomId of roomsToCheck) {
+        try {
+          const messagesRef = ref(database, `chats/${roomId}/messages`);
+          let messagesQuery;
+          try {
+            messagesQuery = query(
+              messagesRef,
+              orderByChild('sentAt'),
+              limitToLast(limit * 2) // Load more to account for merging
+            );
+          } catch (error: any) {
+            logger.warn('orderByChild failed, trying without ordering', { roomId, error: error.message });
+            messagesQuery = query(messagesRef, limitToLast(limit * 2));
+          }
+
+          const snapshot = await get(messagesQuery);
+
+          snapshot.forEach((childSnapshot) => {
+            const firebaseData = childSnapshot.val();
+            if (!firebaseData || typeof firebaseData !== 'object') return;
+
+            const mappedMessage: ChatMessage = {
+              id: childSnapshot.key!,
+              caseId: firebaseData.caseId || '',
+              senderId: firebaseData.senderId || '',
+              senderName: firebaseData.senderName || 'Unknown',
+              senderRole: firebaseData.senderRole || 'CLIENT',
+              message: firebaseData.content || firebaseData.message || '',
+              timestamp: firebaseData.sentAt || firebaseData.timestamp || Date.now(),
+              isRead: firebaseData.isRead || false,
+              attachments: firebaseData.attachments || [],
+              status: firebaseData.status,
+              tempId: firebaseData.tempId,
+              error: firebaseData.error,
+            };
+
+            allMessages.push(mappedMessage);
+          });
+        } catch (error) {
+          logger.warn('Failed to load messages from room', { roomId, error });
+        }
+      }
+
+      // Remove duplicates (by message ID) and sort chronologically
+      const uniqueMessages = new Map<string, ChatMessage>();
+      allMessages.forEach(msg => {
+        if (!uniqueMessages.has(msg.id)) {
+          uniqueMessages.set(msg.id, msg);
+        }
+      });
+
+      const mergedMessages = Array.from(uniqueMessages.values());
+      mergedMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Take the last `limit` messages (most recent)
+      const latestMessages = mergedMessages.slice(-limit);
+
+      // Get total count from both rooms
+      let totalCount = 0;
+      for (const roomId of roomsToCheck) {
+        try {
+          const messagesRef = ref(database, `chats/${roomId}/messages`);
+          const totalSnapshot = await get(messagesRef);
+          totalCount += totalSnapshot.size;
+        } catch (error) {
+          // Ignore errors for total count
+        }
+      }
+
+      logger.info('Merged messages loaded', {
+        newRoomId,
+        oldRoomId,
+        mergedCount: latestMessages.length,
+        totalCount,
+      });
+
+      return {
+        messages: latestMessages,
+        hasMore: mergedMessages.length > limit,
+        totalCount,
+      };
+    } catch (error) {
+      logger.error('Error loading merged messages', error);
+      return { messages: [], hasMore: false, totalCount: 0 };
+    }
+  }
+
+  // Load initial messages (last 20) with caching
+  // Supports both old (case-based) and new (client-agent pair) format
+  async loadInitialMessages(caseIdOrRoomId: string): Promise<{
+    messages: ChatMessage[];
+    hasMore: boolean;
+    totalCount: number;
+  }> {
+    try {
+      logger.info('\n\n loadInitialMessages from chat service called', { caseIdOrRoomId });
       
       // Clear corrupted cache entries first
       await chatCacheService.clearCorruptedCache();
       
-      // Try cache first
-      const cachedData = await chatCacheService.getCachedMessages(caseId);
-      logger.info('\n\n Cache check completed', { caseId, hasCache: !!cachedData, cachedData });
+      // Try cache first (use the room ID as cache key)
+      const cachedData = await chatCacheService.getCachedMessages(caseIdOrRoomId);
+      logger.info('\n\n Cache check completed', { caseIdOrRoomId, hasCache: !!cachedData, cachedData });
       
       if (cachedData && cachedData.messages && Array.isArray(cachedData.messages)) {
-        logger.info('\n\n Initial messages loaded from cache', { caseId, count: cachedData.messages.length });
+        logger.info('\n\n Initial messages loaded from cache', { caseIdOrRoomId, count: cachedData.messages.length });
         const latest = cachedData.messages.slice(-50);
         latest.sort((a, b) => a.timestamp - b.timestamp); // Ensure chronological order
         return {
@@ -308,8 +511,8 @@ class ChatService {
       }
 
       // Load from Firebase
-      logger.info('\n\n Loading from Firebase', { caseId });
-      const messagesRef = ref(database, `chats/${caseId}/messages`);
+      logger.info('\n\n Loading from Firebase', { caseIdOrRoomId });
+      const messagesRef = ref(database, `chats/${caseIdOrRoomId}/messages`);
       logger.info('\n\n Messages ref created', { path: messagesRef.toString() });
       
       // Try without orderByChild first to see if data exists
@@ -321,24 +524,24 @@ class ChatService {
           limitToLast(20)
         );
       } catch (error: any) {
-        logger.warn('orderByChild failed, trying without ordering', { caseId, error: error.message });
+        logger.warn('orderByChild failed, trying without ordering', { caseIdOrRoomId, error: error.message });
         messagesQuery = query(messagesRef, limitToLast(20));
       }
 
       let snapshot = await get(messagesQuery);
-      logger.info('\n\n Firebase snapshot received', { caseId, size: snapshot.size, exists: snapshot.exists() });
+      logger.info('\n\n Firebase snapshot received', { caseIdOrRoomId, size: snapshot.size, exists: snapshot.exists() });
       
       // If no data with query, try without any restrictions
       if (!snapshot.exists() || snapshot.size === 0) {
-        logger.info('\n\n No data with query, trying without restrictions', { caseId });
+        logger.info('\n\n No data with query, trying without restrictions', { caseIdOrRoomId });
         snapshot = await get(messagesRef);
-        logger.info('\n\n Direct ref snapshot', { caseId, size: snapshot.size, exists: snapshot.exists() });
+        logger.info('\n\n Direct ref snapshot', { caseIdOrRoomId, size: snapshot.size, exists: snapshot.exists() });
       }
       
       // Log the actual data structure
       if (snapshot.exists()) {
         logger.info('Snapshot data structure', { 
-          caseId, 
+          caseIdOrRoomId, 
           keys: Object.keys(snapshot.val() || {}),
           firstKey: Object.keys(snapshot.val() || {})[0]
         });
@@ -375,21 +578,21 @@ class ChatService {
       // Ensure chronological order (oldest → newest)
       messages.sort((a, b) => a.timestamp - b.timestamp);
 
-      logger.info('Messages processed from Firebase', { caseId, count: messages.length });
+      logger.info('Messages processed from Firebase', { caseIdOrRoomId, count: messages.length });
 
       // Get total count for pagination info
       const totalSnapshot = await get(messagesRef);
       const totalCount = totalSnapshot.size;
 
-      // Cache the messages
+      // Cache the messages (use room ID as cache key)
       await chatCacheService.setCachedMessages(
-        caseId, 
+        caseIdOrRoomId, 
         messages, 
         totalCount > 20, // hasMore
         totalCount
       );
 
-      logger.info('Initial messages loaded from Firebase', { caseId, count: messages.length, totalCount });
+      logger.info('Initial messages loaded from Firebase', { caseIdOrRoomId, count: messages.length, totalCount });
       return {
         messages: Array.isArray(messages) ? messages : [],
         hasMore: totalCount > 20,
@@ -682,7 +885,7 @@ class ChatService {
     return () => off(chatsRef, 'value', listener);
   }
 
-  // Initialize a conversation for a case (aligned with web app)
+  // Initialize a conversation for a case (aligned with web app - uses client-agent pair room ID)
   async initializeConversation(
     caseId: string,
     caseReference: string,
@@ -692,39 +895,89 @@ class ChatService {
     agentName: string
   ): Promise<void> {
     try {
-      const conversationRef = ref(database, `chats/${caseId}/metadata`);
+      // Use client-agent pair for room ID instead of caseId
+      const chatRoomId = getChatRoomId(clientId, agentId);
+      const conversationRef = ref(database, `chats/${chatRoomId}/metadata`);
       
       // Check if conversation already exists
       const snapshot = await get(conversationRef);
 
       if (snapshot.exists()) {
-        // Update existing conversation with new agent info
-        await update(conversationRef, {
-          participants: {
-            clientId,
-            clientName,
-            agentId,
-            agentName,
-          },
-          updatedAt: Date.now(),
-        });
+        // Chat room exists - add this case to the caseReferences array if not already present
+        const existingData = snapshot.val();
+        const caseRefs = existingData.caseReferences || [];
 
-        logger.info('Firebase chat updated with new agent', {
-          caseId,
-          clientId,
-          agentId,
-          action: 'update',
-        });
+        // Check if this case is already in the array
+        const caseExists = caseRefs.some((ref: CaseReference) => ref.caseId === caseId);
+
+        if (!caseExists) {
+          // Add new case to the array
+          const updatedCaseRefs = [
+            ...caseRefs,
+            {
+              caseId,
+              caseReference,
+              assignedAt: Date.now(),
+            },
+          ];
+
+          await update(conversationRef, {
+            caseReferences: updatedCaseRefs,
+            updatedAt: Date.now(),
+          });
+
+          logger.info('Added case to existing chat room', {
+            caseId,
+            caseReference,
+            chatRoomId,
+            totalCases: updatedCaseRefs.length,
+          });
+        } else {
+          logger.info('Case already exists in chat room', {
+            caseId,
+            chatRoomId,
+          });
+        }
+
+        // Update participants if agent changed (reassignment case)
+        const needsParticipantUpdate =
+          existingData.participants?.agentId !== agentId ||
+          existingData.participants?.agentName !== agentName;
+
+        if (needsParticipantUpdate) {
+          await update(conversationRef, {
+            participants: {
+              clientId,
+              clientName,
+              agentId,
+              agentName,
+            },
+            updatedAt: Date.now(),
+          });
+
+          logger.info('Firebase chat updated with new agent', {
+            caseId,
+            chatRoomId,
+            oldAgent: existingData.participants?.agentId?.substring(0, 8),
+            newAgent: agentId.substring(0, 8),
+          });
+        }
       } else {
-        // Create new conversation
+        // Create new conversation with this case
         const chatMetadata: ChatMetadata = {
-          caseReference,
           participants: {
             clientId,
             clientName,
             agentId,
             agentName,
           },
+          caseReferences: [
+            {
+              caseId,
+              caseReference,
+              assignedAt: Date.now(),
+            },
+          ],
           createdAt: Date.now(),
           lastMessage: null,
           lastMessageTime: null,
@@ -734,14 +987,14 @@ class ChatService {
 
         // Create userChats index entries
         await Promise.all([
-          set(ref(database, `userChats/${agentId}/${caseId}`), {
-            chatId: caseId,
+          set(ref(database, `userChats/${agentId}/${chatRoomId}`), {
+            chatId: chatRoomId,
             participantName: clientName,
             lastMessage: null,
             lastMessageTime: null,
           }),
-          set(ref(database, `userChats/${clientId}/${caseId}`), {
-            chatId: caseId,
+          set(ref(database, `userChats/${clientId}/${chatRoomId}`), {
+            chatId: chatRoomId,
             participantName: agentName,
             lastMessage: null,
             lastMessageTime: null,
@@ -750,8 +1003,10 @@ class ChatService {
 
         logger.info('Firebase chat initialized', {
           caseId,
-          clientId,
-          agentId,
+          caseReference,
+          chatRoomId,
+          clientId: clientId.substring(0, 8) + '...',
+          agentId: agentId.substring(0, 8) + '...',
           action: 'create',
         });
       }

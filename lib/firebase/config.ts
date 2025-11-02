@@ -21,6 +21,7 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
     hasApiKey: !!firebaseConfig.apiKey,
     hasProjectId: !!firebaseConfig.projectId,
     hasAuthDomain: !!firebaseConfig.authDomain,
+    hasMessagingSenderId: !!firebaseConfig.messagingSenderId,
   });
 }
 
@@ -50,5 +51,8 @@ if (!getApps().length) {
   auth = getAuth(app);
   database = getDatabase(app);
 }
+
+// Export messaging sender ID for FCM integration
+export const messagingSenderId = firebaseConfig.messagingSenderId;
 
 export { app, auth, database };

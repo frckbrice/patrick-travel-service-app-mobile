@@ -16,6 +16,7 @@ import {
   getLastNotificationResponse,
   handleNotificationNavigation,
 } from '../lib/services/pushNotifications';
+import { initializeFCM, getFCMStatus } from '../lib/services/fcm';
 import { useCaseUpdates } from '../lib/hooks/useCaseUpdates';
 import { logger } from '../lib/utils/logger';
 import { SPACING, FONT_SIZES } from '../lib/constants';
@@ -99,8 +100,39 @@ function AppContent() {
   useEffect(() => {
     // Defer notification listeners setup to avoid blocking UI thread at launch
     let cleanup: (() => void) | undefined;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = InteractionManager.runAfterInteractions(async () => {
+      // Initialize FCM first (non-blocking, graceful failure)
+      try {
+        const fcmStatus = getFCMStatus();
+        logger.info('FCM Configuration Status:', fcmStatus);
+        
+        const fcmInit = await initializeFCM();
+        if (fcmInit.configured && fcmInit.token) {
+          logger.info('✅ FCM initialized successfully', {
+            tokenPreview: fcmInit.token.substring(0, 30) + '...',
+          });
+        } else if (fcmInit.requiresEASBuild) {
+          logger.info('ℹ️ FCM: EAS build required for push notifications', {
+            note: 'This is expected in development. Build with EAS to enable FCM.',
+            hint: 'Run: eas credentials (Android → Push Notifications)',
+          });
+        } else if (fcmInit.configured && !fcmInit.token) {
+          logger.warn('⚠️ FCM configured but token not obtained');
+        } else {
+          logger.warn('⚠️ FCM not configured - push notifications may not work');
+        }
+      } catch (error) {
+        // FCM initialization errors are non-blocking
+        logger.warn('FCM initialization skipped (non-blocking)', {
+          error: error instanceof Error ? error.message : String(error),
+          note: 'Push notifications require EAS build and credentials',
+        });
+      }
+
+      // Setup notification listeners
       cleanup = setupNotificationListeners();
+      
+      // Check for cold start notification
       getLastNotificationResponse().then((data) => {
         if (data) {
           logger.info('App opened from notification', data);
