@@ -989,11 +989,10 @@ DELETE /messages/:id                // Delete message
 GET    /cases/:caseId/messages      // Get case messages
 
 // Notification Endpoints
-GET    /notifications               // List user notifications
-GET    /notifications/unread-count  // Get unread count
-PATCH  /notifications/:id/read      // Mark as read
-POST   /notifications/read-all      // Mark all as read
-DELETE /notifications/:id           // Delete notification
+GET    /notifications               // List user notifications (includes unreadCount in response)
+PUT    /notifications/[id]          // Mark notification as read
+PUT    /notifications/mark-all-read // Mark all as read
+DELETE /notifications/[id]          // Delete notification
 
 // Statistics Endpoints (Admin only - web)
 GET    /admin/statistics/overview           // Dashboard overview stats

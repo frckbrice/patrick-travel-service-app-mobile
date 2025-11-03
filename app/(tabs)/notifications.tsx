@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Text, Platform, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { View, StyleSheet, FlatList, Text, Platform, TouchableOpacity, DeviceEventEmitter, ScrollView } from 'react-native';
 import { Avatar, Badge } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import type { Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -11,10 +12,13 @@ import { notificationsApi } from '../../lib/api/notifications.api';
 import { messagesApi } from '../../lib/api/messages.api';
 import { Notification, NotificationType, Message } from '../../lib/types';
 import { EmptyState } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
-import { COLORS, SPACING } from '../../lib/constants';
-import { format, isToday, isYesterday } from 'date-fns';
+import { SPACING } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
+import { getInitials, getConversationTitle, getNotificationBadgeColor, getNotificationIcon, getNotificationPriority, formatTime, formatEmailDate } from '../../lib/utils/notifications';
+import { logger } from '../../lib/utils/logger';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 
 type TabType = 'notifications' | 'messages' | 'inbox' | 'sent';
 
@@ -22,6 +26,8 @@ export default function NotificationsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const themeColors = useThemeColors();
+  const scrollProps = useTabBarScroll();
   const [activeTab, setActiveTab] = useState<TabType>('notifications');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -47,15 +53,28 @@ export default function NotificationsScreen() {
             return { success: true, data: [] };
           })
         ]);
-        
+
         setConversations(conversationsData);
         
         if (notificationsResponse.success && notificationsResponse.data) {
-          setNotifications(notificationsResponse.data);
+          console.log("\n\n the notifications info: ", { notificationsResponse });
+          const backendNotifications = notificationsResponse.data;
+          const unreadCount = backendNotifications.filter((n: any) => !n.isRead).length;
+          console.log(`📬 Loaded ${backendNotifications.length} backend notifications (${unreadCount} unread)`);
+
+          // Log each notification's details to see what types they are
+          backendNotifications.forEach((n: any, idx: number) => {
+            console.log(`📬 Notification ${idx + 1}: type=${n.type}, isRead=${n.isRead}, title="${n.title}"`);
+          });
+
+          setNotifications(backendNotifications);
         }
         
         if (emailsResponse.success && emailsResponse.data) {
-          setEmails(emailsResponse.data);
+          const emails = emailsResponse.data || [];
+          const unreadEmails = emails.filter((e: any) => !e.isRead);
+          console.log(`📧 Loaded ${emails.length} emails (${unreadEmails.length} unread)`);
+          setEmails(emails);
         }
         
         // Set up real-time listener for conversation updates
@@ -80,109 +99,46 @@ export default function NotificationsScreen() {
     });
   }, [user]);
 
-  // Generate initials for avatar
-  const getInitials = (name: string) => {
-    if (!name) return '?';
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-  };
+  // Refresh notifications/emails when screen regains focus (after reading an email)
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      let isActive = true;
+      const refresh = async () => {
+        try {
+          const [notificationsResponse, emailsResponse] = await Promise.all([
+            notificationsApi.getNotifications().catch(() => ({ success: true, data: [] })),
+            messagesApi.getEmails(1, 50).catch(() => ({ success: true, data: [] })),
+          ]);
+          if (!isActive) return;
+          if (notificationsResponse.success && notificationsResponse.data) {
+            const backendNotifications = notificationsResponse.data;
+            const unreadCount = backendNotifications.filter((n: any) => !n.isRead).length;
+            console.log(`📬 Refresh loaded ${backendNotifications.length} backend notifications (${unreadCount} unread)`);
 
-  // Get conversation title based on context
-  const getConversationTitle = (item: Conversation) => {
-    // If user is client, show agent name
-    if (item.participants.agentName && user?.role === 'CLIENT') {
-      return item.participants.agentName;
-    }
-    // If user is agent, show client name
-    if (item.participants.clientName && user?.role !== 'CLIENT') {
-      return item.participants.clientName;
-    }
-    // Fallback to case reference (truncated)
-    return item.caseReference?.substring(0, 20) + (item.caseReference?.length > 20 ? '...' : '') || 'Case';
-  };
+            // Log each notification's details to see what types they are
+            backendNotifications.forEach((n: any, idx: number) => {
+              console.log(`📬 Refresh Notification ${idx + 1}: type=${n.type}, isRead=${n.isRead}, title="${n.title}"`);
+            });
 
-  // Get notification badge color based on type
-  const getNotificationBadgeColor = (type: NotificationType) => {
-    switch (type) {
-      case NotificationType.CASE_STATUS_UPDATE:
-        return '#3B82F6'; // Blue
-      case NotificationType.NEW_MESSAGE:
-        return '#10B981'; // Green
-      case NotificationType.NEW_EMAIL:
-        return '#F59E0B'; // Orange
-      case NotificationType.DOCUMENT_UPLOADED:
-        return '#8B5CF6'; // Purple
-      case NotificationType.DOCUMENT_VERIFIED:
-        return '#10B981'; // Green
-      case NotificationType.DOCUMENT_REJECTED:
-        return '#EF4444'; // Red
-      case NotificationType.CASE_ASSIGNED:
-        return '#06B6D4'; // Cyan
-      case NotificationType.SYSTEM_ANNOUNCEMENT:
-        return '#6B7280'; // Gray
-      default:
-        return COLORS.primary;
-    }
-  };
+            setNotifications(backendNotifications);
+          }
+          if (emailsResponse.success && emailsResponse.data) {
+            const emails = emailsResponse.data;
+            const unreadEmails = emails.filter((e: any) => !e.isRead);
+            console.log(`📧 Refresh loaded ${emails.length} emails (${unreadEmails.length} unread)`);
+            setEmails(emails);
+          }
+        } catch { }
+      };
+      refresh();
+      return () => {
+        isActive = false;
+      };
+    }, [user])
+  );
 
-  // Get notification icon based on type
-  const getNotificationIcon = (type: NotificationType) => {
-    switch (type) {
-      case NotificationType.CASE_STATUS_UPDATE:
-        return 'file-document-edit';
-      case NotificationType.NEW_MESSAGE:
-        return 'message-text';
-      case NotificationType.NEW_EMAIL:
-        return 'email';
-      case NotificationType.DOCUMENT_UPLOADED:
-        return 'upload';
-      case NotificationType.DOCUMENT_VERIFIED:
-        return 'check-circle';
-      case NotificationType.DOCUMENT_REJECTED:
-        return 'close-circle';
-      case NotificationType.CASE_ASSIGNED:
-        return 'account-plus';
-      case NotificationType.SYSTEM_ANNOUNCEMENT:
-        return 'bullhorn';
-      default:
-        return 'bell';
-    }
-  };
-
-  // Get notification priority badge
-  const getNotificationPriority = (type: NotificationType) => {
-    switch (type) {
-      case NotificationType.DOCUMENT_REJECTED:
-      case NotificationType.CASE_STATUS_UPDATE:
-        return 'URGENT';
-      case NotificationType.NEW_MESSAGE:
-      case NotificationType.NEW_EMAIL:
-        return 'HIGH';
-      case NotificationType.DOCUMENT_UPLOADED:
-      case NotificationType.DOCUMENT_VERIFIED:
-        return 'NORMAL';
-      default:
-        return 'LOW';
-    }
-  };
-
-  // Smart time formatting
-  const formatTime = (timestamp: number) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    if (isToday(date)) {
-      return format(date, 'h:mm a');
-    } else if (isYesterday(date)) {
-      return 'Yesterday';
-    } else if (new Date().getTime() - timestamp < 7 * 24 * 60 * 60 * 1000) {
-      return format(date, 'EEE'); // Day of week
-    } else {
-      return format(date, 'MMM d');
-    }
-  };
+  // helpers moved to utils
 
   // Mark all notifications as read
   const markAllAsRead = useCallback(async () => {
@@ -194,6 +150,8 @@ export default function NotificationsScreen() {
           prev.map(n => ({ ...n, isRead: true, readAt: new Date() }))
         );
         console.log('All notifications marked as read');
+        // Inform other screens (Home) to refresh badges
+        DeviceEventEmitter.emit('notifications:markAllRead');
       } else {
         console.error('Failed to mark all notifications as read:', result.error);
       }
@@ -230,6 +188,8 @@ export default function NotificationsScreen() {
                       prev.map(n => n.id === item.id ? { ...n, isRead: true, readAt: new Date() } : n)
                     );
                     console.log('Notification marked as read:', item.id);
+                    // Inform other screens (Home) to refresh badges
+                    DeviceEventEmitter.emit('notifications:read', { id: item.id });
                   } else {
                     console.error('Failed to mark notification as read:', result.error);
                   }
@@ -242,6 +202,12 @@ export default function NotificationsScreen() {
                 const handleEmailNavigation = async () => {
                   let emailId: string | null = null;
                   
+                  // Short-circuit for web dashboard paths: open Inbox tab directly
+                  if (item.actionUrl && /\/dashboard\/messages/.test(item.actionUrl)) {
+                    setActiveTab('inbox');
+                    return;
+                  }
+
                   // Try to extract email ID from actionUrl
                   if (item.actionUrl) {
                     const match = item.actionUrl.match(/email[s]?\/([a-zA-Z0-9_-]+)/);
@@ -250,20 +216,42 @@ export default function NotificationsScreen() {
                     }
                   }
                   
-                  // If no email ID from actionUrl, fetch latest unread email (inbox only)
+                  // If no email ID from actionUrl, try to infer from locally loaded emails
                   if (!emailId) {
                     try {
-                      const response = await messagesApi.getEmails(1, 20, { isRead: false });
-                      if (response.success && response.data && response.data.length > 0) {
-                        const inboxEmail = response.data.find(m => m.senderId !== user?.id);
-                        emailId = inboxEmail?.id || null;
+                      // Prefer inbox emails (received), optionally match by caseId if present
+                      const createdAtMs = typeof item.createdAt === 'number' ? item.createdAt : new Date(item.createdAt as any).getTime();
+                      const inboxEmails = emails.filter((e) => e.senderId !== user?.id);
+                      const scoped = item.caseId
+                        ? inboxEmails.filter((e) => e.caseId === item.caseId)
+                        : inboxEmails;
+
+                      // Pick the email with the closest sentAt to the notification createdAt
+                      let best: { email: Message; delta: number } | null = null;
+                      for (const e of scoped) {
+                        const delta = Math.abs(new Date(e.sentAt).getTime() - createdAtMs);
+                        if (!best || delta < best.delta) {
+                          best = { email: e, delta };
+                        }
                       }
-                    } catch (error) {
-                      console.error('Failed to fetch latest email:', error);
+
+                      if (best) {
+                        emailId = best.email.id;
+                      }
+                    } catch (err) {
+                      console.warn('Failed to infer email from local list:', err);
                     }
+                  }
+
+                  // If still no email ID, open Inbox instead of guessing further
+                  if (!emailId) {
+                    setActiveTab('inbox');
+                    return;
                   }
                   
                   if (emailId) {
+                    // Warm the email cache to speed up the reader page
+                    messagesApi.prefetchEmail(emailId);
                     router.push(`/email/${emailId}`);
                   } else {
                     // Switch to inbox tab to show emails
@@ -273,7 +261,7 @@ export default function NotificationsScreen() {
                 
                 handleEmailNavigation();
               } else if (item.actionUrl) {
-                router.push(item.actionUrl);
+                router.push(item.actionUrl as Href);
               }
             }}
             activeOpacity={0.7}
@@ -321,14 +309,14 @@ export default function NotificationsScreen() {
         </Animated.View>
       );
     },
-    [router]
+    [router, emails, user]
   );
 
   // Memoize render function for performance
   const renderConversationItem = useCallback(
     ({ item, index }: { item: Conversation; index: number }) => {
       const hasUnread = item.unreadCount > 0;
-      const title = getConversationTitle(item);
+      const title = getConversationTitle(item, user?.role, t);
       const initials = getInitials(title);
       
       return (
@@ -344,7 +332,7 @@ export default function NotificationsScreen() {
                 label={initials}
                 style={[styles.avatar, hasUnread && styles.avatarUnread]}
                 labelStyle={styles.avatarLabel}
-                color={hasUnread ? COLORS.surface : COLORS.primary}
+                color={hasUnread ? themeColors.surface : themeColors.primary}
               />
               {hasUnread && (
                 <View style={styles.unreadBadge}>
@@ -378,7 +366,7 @@ export default function NotificationsScreen() {
                   <MaterialCommunityIcons
                     name="account-supervisor"
                     size={12}
-                    color={COLORS.textSecondary}
+                    color={themeColors.textSecondary}
                   />
                   <Text style={styles.advisorName}>Your Advisor</Text>
                 </View>
@@ -453,20 +441,22 @@ export default function NotificationsScreen() {
     // Merge and sort by newest first
     const merged = [...mappedNotifications, ...mappedConversations];
     merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    console.log(`📬 Combined notifications breakdown: ${mappedNotifications.length} backend + ${mappedConversations.length} conversations = ${merged.length} total`);
+
     return merged;
   }, [notifications, conversations, user, t]);
+
+  console.log('\n\n\n Notifications tab items:', combinedNotifications.length);
 
   // Organize emails by inbox and sent
   // Simple, explicit rule: received = not sent by me; sent = sent by me
   const inboxEmails = emails.filter((email) => email.senderId !== user?.id);
   const sentEmails = emails.filter((email) => email.senderId === user?.id);
 
-  // Format email date
-  const formatEmailDate = useCallback((date: Date) => {
-    const d = new Date(date);
-    if (isToday(d)) return format(d, 'HH:mm');
-    if (isYesterday(d)) return t('email.yesterday') || 'Yesterday';
-    return format(d, 'MMM d, yyyy');
+  // Format email date via utils
+  const formatEmailDateMemo = useCallback((date: Date) => {
+    return formatEmailDate(date, t);
   }, [t]);
 
   // Render email item
@@ -487,7 +477,7 @@ export default function NotificationsScreen() {
               <Text style={[styles.emailSubject, !item.isRead && isInbox && styles.unreadText]}>
                 {item.subject || t('email.noSubject') || 'No Subject'}
               </Text>
-              <Text style={styles.emailDate}>{formatEmailDate(item.sentAt)}</Text>
+              <Text style={styles.emailDate}>{formatEmailDateMemo(item.sentAt)}</Text>
             </View>
             <Text numberOfLines={2} style={styles.emailPreview}>
               {item.content}
@@ -499,608 +489,607 @@ export default function NotificationsScreen() {
         </TouchableOpacity>
       </Animated.View>
     );
-  }, [user, formatEmailDate, router, t]);
+  }, [user, formatEmailDateMemo, router, t]);
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.background,
+    },
+    tabContainer: {
+      flexDirection: 'row',
+      backgroundColor: themeColors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+      paddingHorizontal: SPACING.xs,
+      paddingTop: SPACING.xs,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    tab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: SPACING.md,
+      paddingHorizontal: SPACING.xs,
+      gap: SPACING.xs,
+      borderBottomWidth: 3,
+      borderBottomColor: 'transparent',
+      marginHorizontal: SPACING.xs,
+      borderRadius: 8,
+      borderTopLeftRadius: 8,
+      borderTopRightRadius: 8,
+      position: 'relative',
+    },
+    activeTab: {
+      borderBottomColor: themeColors.primary,
+      backgroundColor: themeColors.primary + '08',
+    },
+    tabText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: themeColors.textSecondary,
+      letterSpacing: 0.2,
+    },
+    activeTabText: {
+      color: themeColors.primary,
+      fontWeight: '700',
+    },
+    tabBadge: {
+      backgroundColor: themeColors.error,
+      borderRadius: 12,
+      minWidth: 20,
+      height: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+      marginLeft: -4,
+    },
+    tabBadgeText: {
+      color: '#FFF',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    contentContainer: {
+      flex: 1,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.sm,
+    },
+    markAllButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: SPACING.sm,
+      paddingVertical: SPACING.xs,
+      borderRadius: 8,
+      backgroundColor: themeColors.primary + '10',
+      gap: SPACING.xs,
+    },
+    markAllText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: themeColors.primary,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: SPACING.sm,
+    },
+    headerAction: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: SPACING.sm,
+    },
+    list: {
+      paddingHorizontal: 0,
+    },
+    conversationItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: SPACING.md,
+      paddingVertical: SPACING.md,
+      backgroundColor: themeColors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+      minHeight: 80,
+    },
+    avatarContainer: {
+      position: 'relative',
+      marginRight: SPACING.md,
+    },
+    avatarContainerUnread: {
+      opacity: 1,
+    },
+    avatar: {
+      backgroundColor: themeColors.primary + '15',
+    },
+    avatarUnread: {
+      backgroundColor: themeColors.primary,
+    },
+    avatarLabel: {
+      fontSize: 20,
+      fontWeight: '700',
+    },
+    unreadBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      backgroundColor: themeColors.error,
+      borderRadius: 10,
+      minWidth: 20,
+      height: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 6,
+      borderWidth: 2,
+      borderColor: themeColors.surface,
+    },
+    unreadBadgeText: {
+      color: themeColors.surface,
+      fontSize: 10,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    messageContent: {
+      flex: 1,
+      marginRight: SPACING.sm,
+    },
+    messageHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    conversationTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: themeColors.text,
+      flex: 1,
+      marginRight: SPACING.xs,
+    },
+    unreadTitle: {
+      fontWeight: '700',
+    },
+    timestamp: {
+      fontSize: 13,
+      color: themeColors.textSecondary,
+      fontWeight: '500',
+    },
+    unreadTimestamp: {
+      fontWeight: '600',
+    },
+    advisorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 3,
+    },
+    advisorName: {
+      fontSize: 12,
+      color: themeColors.textSecondary,
+      marginLeft: 4,
+      fontWeight: '500',
+    },
+    lastMessage: {
+      fontSize: 14,
+      lineHeight: 18,
+      color: themeColors.textSecondary,
+      marginTop: 2,
+    },
+    unreadMessage: {
+      color: themeColors.text,
+      fontWeight: '600',
+    },
+    unreadIndicator: {
+      width: 10,
+      height: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: themeColors.primary,
+    },
+    section: {
+      marginBottom: SPACING.lg,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: SPACING.md,
+      marginHorizontal: SPACING.lg,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: themeColors.text,
+      flex: 1,
+    },
+    notificationItem: {
+      backgroundColor: themeColors.surface,
+      marginHorizontal: SPACING.lg,
+      marginBottom: SPACING.sm,
+      borderRadius: 12,
+      padding: SPACING.md,
+      borderLeftWidth: 4,
+      borderLeftColor: themeColors.border,
+    },
+    unreadNotification: {
+      backgroundColor: themeColors.primary + '08',
+      borderLeftColor: themeColors.primary,
+    },
+    emailItem: {
+      backgroundColor: themeColors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+      paddingHorizontal: SPACING.lg,
+      paddingVertical: SPACING.md,
+    },
+    unreadEmail: {
+      backgroundColor: themeColors.primary + '05',
+    },
+    emailContent: {
+      flex: 1,
+      position: 'relative',
+    },
+    emailHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: SPACING.xs,
+    },
+    emailSubject: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '500',
+      color: themeColors.text,
+      marginRight: SPACING.md,
+    },
+    emailDate: {
+      fontSize: 12,
+      color: themeColors.textSecondary,
+    },
+    emailPreview: {
+      fontSize: 14,
+      color: themeColors.textSecondary,
+      lineHeight: 20,
+    },
+    notificationContent: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+    },
+    notificationIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: SPACING.md,
+    },
+    notificationText: {
+      flex: 1,
+    },
+    notificationHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: SPACING.xs,
+    },
+    notificationTitle: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: themeColors.text,
+      flex: 1,
+      marginRight: SPACING.sm,
+    },
+    notificationMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.xs,
+    },
+    priorityBadge: {
+      paddingHorizontal: SPACING.xs,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    priorityText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: 'white',
+    },
+    notificationTime: {
+      fontSize: 12,
+      color: themeColors.textSecondary,
+    },
+    notificationMessage: {
+      fontSize: 14,
+      color: themeColors.textSecondary,
+      lineHeight: 20,
+      marginBottom: SPACING.xs,
+    },
+    caseReference: {
+      fontSize: 12,
+      color: themeColors.primary,
+      fontWeight: '500',
+    },
+    unreadText: {
+      fontWeight: '600',
+    },
+  }), [themeColors]);
 
   return (
     <TouchDetector>
       <View style={styles.container}>
-      {/* Modern Gradient Header */}
-      <ModernHeader
-        variant="gradient"
-        gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
-        title={t('notifications.title') || 'Notifications'}
-        subtitle={t('notifications.subtitle') || 'Stay updated with your cases'}
-        showBackButton
-      />
+        {/* Modern Gradient Header */}
+        <ThemeAwareHeader
+          variant="gradient"
+          gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
+          title={t('notifications.title') || 'Notifications'}
+          subtitle={t('notifications.subtitle') || 'Stay updated with your cases'}
+          showBackButton
+        />
 
-      {/* Tab Navigation */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'notifications' && styles.activeTab]}
-          onPress={() => setActiveTab('notifications')}
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'notifications' && styles.activeTab]}
+            onPress={() => setActiveTab('notifications')}
+          >
+            <MaterialCommunityIcons
+              name="bell"
+              size={18}
+              color={activeTab === 'notifications' ? themeColors.primary : themeColors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'notifications' && styles.activeTabText]}>
+              {t('notifications.tab') || 'Notifications'}
+            </Text>
+            {unreadCount > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'messages' && styles.activeTab]}
+            onPress={() => setActiveTab('messages')}
+          >
+            <MaterialCommunityIcons
+              name="message-text"
+              size={18}
+              color={activeTab === 'messages' ? themeColors.primary : themeColors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'messages' && styles.activeTabText]}>
+              {t('messages.tab') || 'Messages'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'inbox' && styles.activeTab]}
+            onPress={() => setActiveTab('inbox')}
+          >
+            <MaterialCommunityIcons
+              name="email"
+              size={18}
+              color={activeTab === 'inbox' ? themeColors.primary : themeColors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'inbox' && styles.activeTabText]}>
+              {t('email.inbox') || 'Inbox'}
+            </Text>
+            {inboxEmails.filter(e => !e.isRead).length > 0 && (
+              <View style={styles.tabBadge}>
+                <Text style={styles.tabBadgeText}>{inboxEmails.filter(e => !e.isRead).length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'sent' && styles.activeTab]}
+            onPress={() => setActiveTab('sent')}
+          >
+            <MaterialCommunityIcons
+              name="send"
+              size={18}
+              color={activeTab === 'sent' ? themeColors.primary : themeColors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'sent' && styles.activeTabText]}>
+              {t('email.sent') || 'Sent'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Tab Content */}
+        <ScrollView
+          style={styles.contentContainer}
+          onScroll={scrollProps.onScroll}
+          scrollEventThrottle={scrollProps.scrollEventThrottle}
+          showsVerticalScrollIndicator={false}
         >
-          <MaterialCommunityIcons
-            name="bell"
-            size={18}
-            color={activeTab === 'notifications' ? COLORS.primary : COLORS.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'notifications' && styles.activeTabText]}>
-            {t('notifications.tab') || 'Notifications'}
-          </Text>
-          {unreadCount > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{unreadCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'messages' && styles.activeTab]}
-          onPress={() => setActiveTab('messages')}
-        >
-          <MaterialCommunityIcons
-            name="message-text"
-            size={18}
-            color={activeTab === 'messages' ? COLORS.primary : COLORS.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'messages' && styles.activeTabText]}>
-            {t('messages.tab') || 'Messages'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'inbox' && styles.activeTab]}
-          onPress={() => setActiveTab('inbox')}
-        >
-          <MaterialCommunityIcons
-            name="email"
-            size={18}
-            color={activeTab === 'inbox' ? COLORS.primary : COLORS.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'inbox' && styles.activeTabText]}>
-            {t('email.inbox') || 'Inbox'}
-          </Text>
-          {inboxEmails.filter(e => !e.isRead).length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{inboxEmails.filter(e => !e.isRead).length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'sent' && styles.activeTab]}
-          onPress={() => setActiveTab('sent')}
-        >
-          <MaterialCommunityIcons
-            name="send"
-            size={18}
-            color={activeTab === 'sent' ? COLORS.primary : COLORS.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'sent' && styles.activeTabText]}>
-            {t('email.sent') || 'Sent'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Tab Content */}
-      <View style={styles.contentContainer}>
-        {/* Notifications Tab */}
-        {activeTab === 'notifications' && (
-          <>
-            {combinedNotifications.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  {/* <Text style={styles.sectionTitle}>
+          {/* Notifications Tab */}
+          {activeTab === 'notifications' && (
+            <>
+              {combinedNotifications.length > 0 ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    {/* <Text style={styles.sectionTitle}>
                     {t('notifications.emailNotifications') || 'Notifications'}
-                  </Text> */}
-                  {unreadCount > 0 && (
-                    <TouchableOpacity
-                      style={styles.markAllButton}
-                      onPress={markAllAsRead}
-                    >
-                      <MaterialCommunityIcons
-                        name="check-all"
-                        size={16}
-                        color={COLORS.primary}
-                      />
-                      <Text style={styles.markAllText}>
-                        {t('notifications.markAllRead') || 'Mark All Read'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <FlatList
-                  data={combinedNotifications}
-                  renderItem={({ item, index }) => {
-                    // Reuse existing renderer for Notification shape by adapting item
-                    if (item._source === 'notification') {
-                      return renderNotificationItem({ item: (notifications.find(n => `notif-${n.id}` === item.id) as any) || notifications[0], index } as any);
-                    }
-                    // Conversation item: render a simple unified tile
-                    const badgeColor = getNotificationBadgeColor(NotificationType.NEW_MESSAGE);
-                    return (
-                      <Animated.View entering={FadeInDown.delay(index * 30).springify()}>
-                        <TouchableOpacity
-                          style={[styles.notificationItem, !item.isRead && styles.unreadNotification]}
-                          onPress={() => {
-                            if (item.caseId) {
-                              router.push(`/message/${item.caseId}`);
-                            } else if (item.actionUrl) {
-                              router.push(item.actionUrl);
-                            }
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <View style={styles.notificationContent}>
-                            <View style={[styles.notificationIcon, { backgroundColor: badgeColor + '15' }]}>
-                              <MaterialCommunityIcons name="message-text" size={20} color={badgeColor} />
-                            </View>
-                            <View style={styles.notificationText}>
-                              <View style={styles.notificationHeader}>
-                                <Text style={[styles.notificationTitle, !item.isRead && styles.unreadText]}>
-                                  {item.title}
-                                </Text>
-                                <Text style={styles.notificationTime}>
-                                  {formatTime(item.createdAt)}
+                    </Text> */}
+
+                    {unreadCount > 0 && (
+                      <TouchableOpacity
+                        style={styles.markAllButton}
+                        onPress={markAllAsRead}
+                      >
+                        <MaterialCommunityIcons
+                          name="check-all"
+                          size={16}
+                          color={themeColors.primary}
+                        />
+                        <Text style={styles.markAllText}>
+                          {t('notifications.markAllRead') || 'Mark All Read'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <FlatList
+                    data={combinedNotifications}
+                    renderItem={({ item, index }) => {
+                      // Reuse existing renderer for Notification shape by adapting item
+                      if (item._source === 'notification') {
+                        return renderNotificationItem({ item: (notifications.find(n => `notif-${n.id}` === item.id) as any) || notifications[0], index } as any);
+                      }
+                      // Conversation item: render a simple unified tile
+                      const badgeColor = getNotificationBadgeColor(NotificationType.NEW_MESSAGE);
+                      return (
+                        <Animated.View entering={FadeInDown.delay(index * 30).springify()}>
+                          <TouchableOpacity
+                            style={[styles.notificationItem, !item.isRead && styles.unreadNotification]}
+                            onPress={() => {
+                              if (item.caseId) {
+                                router.push(`/message/${item.caseId}`);
+                              } else if (item.actionUrl) {
+                                router.push(item.actionUrl as Href);
+                              }
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.notificationContent}>
+                              <View style={[styles.notificationIcon, { backgroundColor: badgeColor + '15' }]}>
+                                <MaterialCommunityIcons name="message-text" size={20} color={badgeColor} />
+                              </View>
+                              <View style={styles.notificationText}>
+                                <View style={styles.notificationHeader}>
+                                  <Text style={[styles.notificationTitle, !item.isRead && styles.unreadText]}>
+                                    {item.title}
+                                  </Text>
+                                  <Text style={styles.notificationTime}>
+                                    {formatTime(item.createdAt)}
+                                  </Text>
+                                </View>
+                                <Text numberOfLines={2} style={[styles.notificationMessage, !item.isRead && styles.unreadText]}>
+                                  {item.message}
                                 </Text>
                               </View>
-                              <Text numberOfLines={2} style={[styles.notificationMessage, !item.isRead && styles.unreadText]}>
-                                {item.message}
-                              </Text>
+                              {!item.isRead && (
+                                <View style={[styles.unreadDot, { backgroundColor: badgeColor }]} />
+                              )}
                             </View>
-                            {!item.isRead && (
-                              <View style={[styles.unreadDot, { backgroundColor: badgeColor }]} />
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      </Animated.View>
-                    );
-                  }}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
-                />
-              </View>
-            ) : (
-              <EmptyState
-                icon="bell-outline"
-                title={t('notifications.noNotifications') || 'No Notifications'}
-                description={t('notifications.noNotificationsDesc') || 'You\'re all caught up! New notifications will appear here.'}
-              />
-            )}
-          </>
-        )}
-
-        {/* Messages Tab */}
-        {activeTab === 'messages' && (
-          <>
-            {conversations.length > 0 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  {t('notifications.chatMessages') || 'Chat Messages'}
-                </Text>
-                <FlatList
-                  data={conversations}
-                  renderItem={renderConversationItem}
-                  keyExtractor={keyExtractor}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
-                />
-              </View>
-            ) : (
-              <EmptyState
-                icon="message-outline"
-                title={t('messages.noMessages') || 'No Messages'}
-                description={t('messages.noMessagesDesc') || 'Start a conversation with your advisor.'}
-              />
-            )}
-          </>
-        )}
-
-        {/* Inbox Tab */}
-        {activeTab === 'inbox' && (
-          <>
-            {inboxEmails.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>
-                    {t('email.inbox') || 'Inbox'} ({inboxEmails.length})
-                  </Text>
+                          </TouchableOpacity>
+                        </Animated.View>
+                      );
+                    }}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
                 </View>
-                <FlatList
-                  data={inboxEmails}
-                  renderItem={renderEmailItem}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
+              ) : (
+                <EmptyState
+                  icon="bell-outline"
+                  title={t('notifications.noNotifications') || 'No Notifications'}
+                  description={t('notifications.noNotificationsDesc') || 'You\'re all caught up! New notifications will appear here.'}
                 />
-              </View>
-            ) : (
-              <EmptyState
-                icon="email-outline"
-                title={t('email.noInboxEmails') || 'No Inbox Emails'}
-                description={t('email.noInboxEmailsDesc') || 'You don\'t have any received emails yet.'}
-              />
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
 
-        {/* Sent Tab */}
-        {activeTab === 'sent' && (
-          <>
-            {sentEmails.length > 0 ? (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
+          {/* Messages Tab */}
+          {activeTab === 'messages' && (
+            <>
+              {conversations.length > 0 ? (
+                <View style={styles.section}>
                   <Text style={styles.sectionTitle}>
-                    {t('email.sent') || 'Sent'} ({sentEmails.length})
+                    {t('notifications.chatMessages') || 'Chat Messages'}
                   </Text>
+                  <FlatList
+                    data={conversations}
+                    renderItem={renderConversationItem}
+                    keyExtractor={keyExtractor}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
                 </View>
-                <FlatList
-                  data={sentEmails}
-                  renderItem={renderEmailItem}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  showsVerticalScrollIndicator={false}
+              ) : (
+                <EmptyState
+                  icon="message-outline"
+                  title={t('messages.noMessages') || 'No Messages'}
+                  description={t('messages.noMessagesDesc') || 'Start a conversation with your advisor.'}
                 />
-              </View>
-            ) : (
-              <EmptyState
-                icon="send-outline"
-                title={t('email.noSentEmails') || 'No Sent Emails'}
-                description={t('email.noSentEmailsDesc') || 'You haven\'t sent any emails yet.'}
-              />
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
+
+          {/* Inbox Tab */}
+          {activeTab === 'inbox' && (
+            <>
+              {inboxEmails.length > 0 ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>
+                      {t('email.inbox') || 'Inbox'} ({inboxEmails.length})
+                    </Text>
+                  </View>
+                  <FlatList
+                    data={inboxEmails}
+                    renderItem={renderEmailItem}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
+                </View>
+              ) : (
+                <EmptyState
+                  icon="email-outline"
+                  title={t('email.noInboxEmails') || 'No Inbox Emails'}
+                  description={t('email.noInboxEmailsDesc') || 'You don\'t have any received emails yet.'}
+                />
+              )}
+            </>
+          )}
+
+          {/* Sent Tab */}
+          {activeTab === 'sent' && (
+            <>
+              {sentEmails.length > 0 ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>
+                      {t('email.sent') || 'Sent'} ({sentEmails.length})
+                    </Text>
+                  </View>
+                  <FlatList
+                    data={sentEmails}
+                    renderItem={renderEmailItem}
+                    keyExtractor={(item) => item.id}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
+                  />
+                </View>
+              ) : (
+                <EmptyState
+                  icon="send-outline"
+                  title={t('email.noSentEmails') || 'No Sent Emails'}
+                  description={t('email.noSentEmailsDesc') || 'You haven\'t sent any emails yet.'}
+                />
+              )}
+            </>
+          )}
+        </ScrollView>
       </View>
-    </View>
     </TouchDetector>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    paddingHorizontal: SPACING.xs,
-    paddingTop: SPACING.xs,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xs,
-    gap: SPACING.xs,
-    borderBottomWidth: 3,
-    borderBottomColor: 'transparent',
-    marginHorizontal: SPACING.xs,
-    borderRadius: 8,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    position: 'relative',
-  },
-  activeTab: {
-    borderBottomColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '08',
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.textSecondary,
-    letterSpacing: 0.2,
-  },
-  activeTabText: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  tabBadge: {
-    backgroundColor: COLORS.error,
-    borderRadius: 12,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    marginLeft: -4,
-  },
-  tabBadgeText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  markAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary + '10',
-    gap: SPACING.xs,
-  },
-  markAllText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.sm,
-  },
-  headerAction: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: SPACING.sm,
-  },
-  list: {
-    paddingHorizontal: 0,
-  },
-  conversationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    minHeight: 80,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginRight: SPACING.md,
-  },
-  avatarContainerUnread: {
-    opacity: 1,
-  },
-  avatar: {
-    backgroundColor: COLORS.primary + '15',
-  },
-  avatarUnread: {
-    backgroundColor: COLORS.primary,
-  },
-  avatarLabel: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  unreadBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: COLORS.error,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    borderWidth: 2,
-    borderColor: COLORS.surface,
-  },
-  unreadBadgeText: {
-    color: COLORS.surface,
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  messageContent: {
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  messageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  conversationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    flex: 1,
-    marginRight: SPACING.xs,
-  },
-  unreadTitle: {
-    fontWeight: '700',
-  },
-  timestamp: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  unreadTimestamp: {
-    fontWeight: '600',
-  },
-  advisorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 3,
-  },
-  advisorName: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  lastMessage: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  unreadMessage: {
-    color: COLORS.text,
-    fontWeight: '600',
-  },
-  unreadIndicator: {
-    width: 10,
-    height: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-  section: {
-    marginBottom: SPACING.lg,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-    marginHorizontal: SPACING.lg,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    flex: 1,
-  },
-  notificationItem: {
-    backgroundColor: COLORS.surface,
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.sm,
-    borderRadius: 12,
-    padding: SPACING.md,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.border,
-  },
-  unreadNotification: {
-    backgroundColor: COLORS.primary + '08',
-    borderLeftColor: COLORS.primary,
-  },
-  emailItem: {
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-  },
-  unreadEmail: {
-    backgroundColor: COLORS.primary + '05',
-  },
-  emailContent: {
-    flex: 1,
-    position: 'relative',
-  },
-  emailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.xs,
-  },
-  emailSubject: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.text,
-    marginRight: SPACING.md,
-  },
-  emailDate: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  emailPreview: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-  },
-  notificationContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  notificationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  notificationText: {
-    flex: 1,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.xs,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.text,
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  notificationMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  priorityBadge: {
-    paddingHorizontal: SPACING.xs,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  priorityText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'white',
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-    marginBottom: SPACING.xs,
-  },
-  caseReference: {
-    fontSize: 12,
-    color: COLORS.primary,
-    fontWeight: '500',
-  },
-  unreadText: {
-    fontWeight: '600',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: SPACING.sm,
-    marginTop: SPACING.xs,
-  },
-});

@@ -26,7 +26,8 @@ import Animated, {
   SharedValue,
 } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, TFunction } from 'react-i18next';
+import '../lib/i18n'; // Ensure i18n is initialized before using translations
 import { completeOnboarding } from '../lib/utils/onboarding';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -39,7 +40,7 @@ interface OnboardingSlide {
   color: string;
 }
 
-const getOnboardingSlides = (t: any): OnboardingSlide[] => [
+const getOnboardingSlides = (t: TFunction): OnboardingSlide[] => [
   {
     id: '1',
     title: t('onboarding.slide1Title'),
@@ -127,16 +128,27 @@ const OnboardingItem = ({
     };
   });
 
+  // Show logo on first slide, icon on others
+  const isFirstSlide = index === 0;
+
   return (
     <View style={[styles.slide, { width: SCREEN_WIDTH }]}>
       <Animated.View
         style={[
           styles.iconContainer,
           imageAnimatedStyle,
-          { backgroundColor: item.color },
+          !isFirstSlide && { backgroundColor: item.color },
         ]}
       >
-        <MaterialCommunityIcons name={item.icon} size={80} color="#FFFFFF" />
+        {isFirstSlide ? (
+          <Image
+            source={require('../assets/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <MaterialCommunityIcons name={item.icon} size={80} color="#FFFFFF" />
+        )}
       </Animated.View>
 
       <Animated.View style={[styles.textContainer, textAnimatedStyle]}>
@@ -321,6 +333,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  logoImage: {
+    width: 140,
+    height: 140,
   },
   textContainer: {
     alignItems: 'center',

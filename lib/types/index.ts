@@ -211,6 +211,7 @@ export interface Message {
   attachments?: MessageAttachment[];
   messageType?: MessageType;
   emailThreadId?: string | null;
+  threadId?: string | null; // Mapped from emailThreadId by backend for mobile compatibility
   replyToId?: string | null;
 }
 

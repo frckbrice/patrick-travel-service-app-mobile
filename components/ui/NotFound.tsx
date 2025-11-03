@@ -1,13 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { COLORS, SPACING } from '../../lib/constants';
-import { ModernHeader } from './ModernHeader';
+import Animated, { FadeInDown, FadeInUp, FadeIn } from 'react-native-reanimated';
+import { SPACING } from '../../lib/constants';
+import { ThemeAwareHeader } from './ThemeAwareHeader';
 import { TouchDetector } from './TouchDetector';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 
 interface NotFoundProps {
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -28,6 +29,7 @@ export const NotFound: React.FC<NotFoundProps> = ({
 }) => {
   const router = useRouter();
   const { t } = useTranslation();
+  const colors = useThemeColors();
 
   // Determine icon and texts based on variant
   const getVariantConfig = () => {
@@ -73,50 +75,124 @@ export const NotFound: React.FC<NotFoundProps> = ({
 
   const config = getVariantConfig();
 
+  // Theme-aware gradient colors
+  const headerGradient = colors.isDark
+    ? [colors.primary, '#4A90E2', '#5AA3C7']
+    : [colors.primary, '#7A9BB8', '#94B5A0'];
+
+  const iconGradientStart = colors.primary + (colors.isDark ? '25' : '20');
+  const iconGradientEnd = colors.primary + (colors.isDark ? '15' : '10');
+  const primaryBorder = colors.primary + (colors.isDark ? '40' : '30');
+
+  const buttonGradient = colors.isDark
+    ? [colors.primary, '#4A90E2']
+    : [colors.primary, '#7A9BB8'];
+
   return (
     <TouchDetector>
-      <View style={styles.container}>
-        <ModernHeader
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ThemeAwareHeader
           variant="gradient"
-          gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
+          gradientColors={headerGradient}
           title={config.defaultTitle}
           showBackButton
         />
 
         <View style={styles.content}>
-          <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.iconContainer}>
+          {/* Decorative background circles */}
+          <Animated.View
+            entering={FadeIn.delay(100).duration(600)}
+            style={[
+              styles.decorativeCircle1,
+              {
+                backgroundColor: colors.primary + (colors.isDark ? '08' : '05'),
+              },
+            ]}
+          />
+          <Animated.View
+            entering={FadeIn.delay(150).duration(600)}
+            style={[
+              styles.decorativeCircle2,
+              {
+                backgroundColor: colors.primary + (colors.isDark ? '10' : '08'),
+              },
+            ]}
+          />
+          <Animated.View
+            entering={FadeIn.delay(200).duration(600)}
+            style={[
+              styles.decorativeCircle3,
+              {
+                backgroundColor: colors.primary + (colors.isDark ? '06' : '04'),
+              },
+            ]}
+          />
+
+          {/* Icon Container */}
+          <Animated.View
+            entering={FadeInDown.delay(250).springify()}
+            style={styles.iconContainer}
+          >
             <LinearGradient
-              colors={[COLORS.primary + '20', COLORS.primary + '10']}
-              style={styles.iconGradient}
+              colors={[iconGradientStart, iconGradientEnd]}
+              style={[
+                styles.iconGradient,
+                {
+                  borderColor: primaryBorder,
+                  shadowColor: colors.primary,
+                },
+              ]}
             >
               <MaterialCommunityIcons
                 name={config.icon}
                 size={80}
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </LinearGradient>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.textContainer}>
-            <Text style={styles.title}>{config.defaultTitle}</Text>
-            <Text style={styles.description}>{config.defaultDescription}</Text>
+          {/* Text Container */}
+          <Animated.View
+            entering={FadeInDown.delay(350).springify()}
+            style={styles.textContainer}
+          >
+            <Text style={[styles.title, { color: colors.text }]}>
+              {config.defaultTitle}
+            </Text>
+            <Text style={[styles.description, { color: colors.textSecondary }]}>
+              {config.defaultDescription}
+            </Text>
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(400).springify()} style={styles.actionsContainer}>
+          {/* Action Buttons */}
+          <Animated.View
+            entering={FadeInUp.delay(450).springify()}
+            style={styles.actionsContainer}
+          >
             {showGoBack && (
               <TouchableOpacity
-                style={[styles.button, styles.backButton]}
+                style={[
+                  styles.button,
+                  styles.backButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: primaryBorder,
+                    shadowColor: colors.isDark ? '#000' : colors.primary,
+                  },
+                ]}
                 onPress={() => router.back()}
-                activeOpacity={0.8}
+                activeOpacity={0.7}
               >
                 <View style={styles.backButtonContent}>
                   <MaterialCommunityIcons
                     name="arrow-left"
                     size={20}
-                    color={COLORS.primary}
+                    color={colors.primary}
                     style={styles.buttonIcon}
                   />
-                  <Text style={[styles.buttonText, styles.backButtonText]}>
+                  <Text
+                    style={[styles.buttonText, { color: colors.primary }]}
+                  >
                     {t('common.goBack') || 'Go Back'}
                   </Text>
                 </View>
@@ -125,12 +201,18 @@ export const NotFound: React.FC<NotFoundProps> = ({
 
             {showGoHome && (
               <TouchableOpacity
-                style={[styles.button, styles.homeButton]}
+                style={[
+                  styles.button,
+                  styles.homeButton,
+                  {
+                    shadowColor: colors.primary,
+                  },
+                ]}
                 onPress={() => router.push('/(tabs)')}
                 activeOpacity={0.8}
               >
                 <LinearGradient
-                  colors={[COLORS.primary, '#7A9BB8']}
+                  colors={buttonGradient}
                   style={styles.buttonGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
@@ -148,16 +230,6 @@ export const NotFound: React.FC<NotFoundProps> = ({
               </TouchableOpacity>
             )}
           </Animated.View>
-
-          {/* Decorative elements */}
-          <Animated.View
-            entering={FadeInDown.delay(100).springify()}
-            style={styles.decorativeCircle1}
-          />
-          <Animated.View
-            entering={FadeInDown.delay(150).springify()}
-            style={styles.decorativeCircle2}
-          />
         </View>
       </View>
     </TouchDetector>
@@ -167,19 +239,20 @@ export const NotFound: React.FC<NotFoundProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.xl,
+    paddingVertical: SPACING.xxl,
     position: 'relative',
+    overflow: 'hidden',
   },
   iconContainer: {
     marginBottom: SPACING.xl,
     alignItems: 'center',
+    zIndex: 2,
   },
   iconGradient: {
     width: 160,
@@ -188,46 +261,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: COLORS.primary + '30',
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   textContainer: {
     alignItems: 'center',
     marginBottom: SPACING.xl,
     maxWidth: 320,
+    zIndex: 2,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
-    color: COLORS.text,
     textAlign: 'center',
     marginBottom: SPACING.md,
+    letterSpacing: -0.5,
   },
   description: {
     fontSize: 16,
-    color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
+    paddingHorizontal: SPACING.md,
   },
   actionsContainer: {
     width: '100%',
     maxWidth: 320,
     gap: SPACING.md,
     marginTop: SPACING.lg,
+    zIndex: 2,
   },
   button: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   backButton: {
-    backgroundColor: COLORS.surface,
     borderWidth: 2,
-    borderColor: COLORS.primary + '30',
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.md + 2,
     paddingHorizontal: SPACING.lg,
   },
   backButtonContent: {
@@ -242,7 +329,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.md + 2,
     paddingHorizontal: SPACING.lg,
   },
   buttonIcon: {
@@ -251,30 +338,35 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
-  },
-  backButtonText: {
-    color: COLORS.primary,
+    letterSpacing: 0.3,
   },
   homeButtonText: {
     color: '#FFFFFF',
   },
   decorativeCircle1: {
     position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: COLORS.primary + '05',
-    top: -50,
-    left: -50,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    top: -80,
+    left: -80,
     zIndex: 0,
   },
   decorativeCircle2: {
     position: 'absolute',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: COLORS.primary + '08',
-    bottom: -30,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    bottom: -40,
+    right: -40,
+    zIndex: 0,
+  },
+  decorativeCircle3: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    top: '20%',
     right: -30,
     zIndex: 0,
   },

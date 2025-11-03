@@ -6,9 +6,10 @@ import { logger } from '../utils/logger';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -56,6 +57,7 @@ class NotificationService {
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#0066CC',
+          sound: 'default',
         });
       }
 

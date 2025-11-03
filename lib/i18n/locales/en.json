@@ -1,5 +1,9 @@
 {
   "common": {
+    "comingSoon": "Coming Soon",
+    "voiceCallComingSoon": "Voice Call Coming Soon",
+    "voiceCallComingSoonDesc": "This feature will be available soon",
+    "continue": "Continue",
     "welcome": "Welcome",
     "welcomeBack": "Welcome back",
     "login": "Login",
@@ -29,7 +33,9 @@
     "close": "Close",
     "goBack": "Go Back",
     "noActiveCase": "No Active Case",
-    "noActiveCaseDesc": "You must have an active case to perform this action. Would you like to create one now?"
+    "noActiveCaseDesc": "You must have an active case to perform this action. Would you like to create one now?",
+    "featureComingSoon": "Feature Coming Soon",
+    "featureComingSoonDesc": "This feature will be available soon"
   },
   "auth": {
     "email": "Email",
@@ -113,7 +119,11 @@
       "activeCases": "Active",
       "documents": "Documents",
       "messages": "Messages",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "activeLabel": "Active: {{count}}",
+      "totalLabel": "Total: {{count}}",
+      "pendingLabel": "Pending review",
+      "unreadBreakdown": "Emails + Chat + System"
     },
     "actions": {
       "title": "Quick Actions",
@@ -142,6 +152,7 @@
     "downloadTemplates": "Download Templates"
   },
   "cases": {
+    "selectCase": "Select Case",
     "myCases": "My Cases",
     "caseDetails": "Case Details",
     "newCase": "New Case",
@@ -165,6 +176,11 @@
     "filterByStatus": "Filter by Status",
     "filterByServiceType": "Filter by Service Type",
     "searchByReference": "Search by reference number",
+    "allStatuses": "All Statuses",
+    "allServices": "All Services",
+    "sortBy": "Sort By",
+    "newestFirst": "Newest First",
+    "newest": "Newest",
     "noCasesFound": "No cases found",
     "noCasesDescription": "Create your first case to get started",
     "submitNewCase": "Submit New Case",
@@ -186,10 +202,22 @@
     "draftRestoredMessage": "Your previous draft has been restored",
     "savingDraft": "Saving draft...",
     "draftSaved": "Draft saved",
+    "draftSavedSilently": "Your draft has been saved automatically",
+    "draftSaveFailed": "Failed to save draft",
+    "draftSaveFailedMessage": "Unable to save your draft. Please try again.",
+    "submitted": "Case Submitted",
     "processingInBackground": "Processing in background",
     "submissionFailed": "Submission Failed"
   },
   "documents": {
+    "selectAndUpload": "Select a file to upload",
+    "uploadFailed": "Upload failed",
+    "uploadHelper": "Upload a document for your case",
+    "quickUpload": "Quick Upload",
+    "chooseFile": "Choose File",
+    "chooseImage": "Choose Image",
+    "title": "Documents",
+    "subtitle": "Upload and manage your files",
     "myDocuments": "My Documents",
     "searchDocuments": "Search documents",
     "uploadDocument": "Upload Document",
@@ -212,7 +240,9 @@
     "status": "Status:",
     "rejectionReason": "Rejection Reason:",
     "uploadSuccess": "Document uploaded successfully",
+    "uploadSuccessMessage": "Your document has been uploaded and is being processed",
     "downloadSuccess": "Document downloaded successfully",
+    "documentDeleted": "Document deleted successfully",
     "deleteDocument": "Delete Document",
     "confirmDelete": "Are you sure you want to delete this document?",
     "previewNotAvailable": "Preview not available",
@@ -224,9 +254,20 @@
     "selectFileFirst": "Please select a case and file",
     "selectCaseFirst": "Please select a case first",
     "tapToViewImage": "Tap to view image",
-    "tapToViewPDF": "Tap to view PDF"
+    "tapToViewPDF": "Tap to view PDF",
+    "allTypes": "All Types",
+    "sortBy": "Sort By",
+    "newestFirst": "Newest First",
+    "oldestFirst": "Oldest First",
+    "byType": "By Type",
+    "bySize": "By Size",
+    "newest": "Newest",
+    "oldest": "Oldest",
+    "type": "Type",
+    "size": "Size"
   },
   "messages": {
+    "online": "Online",
     "conversations": "Conversations",
     "chat": "Chat",
     "noConversations": "No conversations yet",
@@ -242,7 +283,8 @@
     "messageFailed": "Failed to send",
     "tab": "Messages",
     "noMessages": "No Messages",
-    "noMessagesDesc": "Start a conversation with your advisor."
+    "noMessagesDesc": "Start a conversation with your advisor.",
+    "voiceCallComingSoon": "Voice Call Coming Soon"
   },
   "profile": {
     "profile": "Profile",
@@ -270,7 +312,31 @@
     "confirmDelete": "Are you sure you want to delete your account? This action cannot be undone.",
     "emailCannotChange": "Email cannot be changed",
     "profileUpdated": "Profile updated successfully",
-    "passwordChanged": "Password changed successfully"
+    "photoUpdated": "Profile photo updated successfully",
+    "changesWillSync": "Your changes will sync automatically",
+    "passwordChanged": "Password changed successfully",
+    "stats": {
+      "cases": "Cases",
+      "active": "Active",
+      "pending": "Pending"
+    },
+    "changeProfilePhoto": "Change Profile Photo",
+    "choosePhotoOption": "Choose an option",
+    "takePhoto": "Take Photo",
+    "chooseFromLibrary": "Choose from Library",
+    "noPermissions": "No Permissions",
+    "cameraPermissionNeeded": "You need to grant permission to your Camera",
+    "photosPermissionNeeded": "You need to grant permission to your Photos",
+    "dismiss": "Dismiss",
+    "openSettings": "Open Settings",
+    "failedToTakePhoto": "Failed to take photo",
+    "failedToPickImage": "Failed to pick image",
+    "failedToChangePhoto": "Failed to change profile photo. Please try again.",
+    "privacyPolicy": "Privacy Policy",
+    "privacyPolicyDesc": "View our privacy policy and data protection",
+    "termsAndConditions": "Terms & Conditions",
+    "termsAndConditionsDesc": "View our terms of service",
+    "deleteAccountFailed": "Failed to delete account. Please try again."
   },
   "notifications": {
     "channels": "Notification Channels",
@@ -291,6 +357,9 @@
     "testNotification": "Send Test Notification",
     "pushToken": "Push Token (for debugging):",
     "notificationsSaved": "Notification preferences saved",
+    "pushNotificationsEnabled": "Push notifications enabled",
+    "pushNotificationsEnableFailed": "Failed to enable push notifications. Please check your device settings.",
+    "testNotificationSent": "Test notification sent",
     "markAllRead": "Mark All Read",
     "subtitle": "Manage how your receive notifications",
     "title": "Notifications",
@@ -299,7 +368,22 @@
     "noNotificationsDesc": "You're all caught up! New notifications will appear here.",
     "chatMessages": "Chat Messages"
   },
+  "downloads": {
+    "title": "Downloads",
+    "subtitle": "Downloaded files will appear here.",
+    "noDownloads": "No Downloads",
+    "noDownloadsDesc": "You haven't downloaded any files yet.",
+    "downloading": "Downloading...",
+    "downloadedSuccess": "Downloaded Successfully",
+    "deleteSuccess": "Deleted Successfully"
+  },
   "email": {
+    "downloadSuccess": "Attachment downloaded successfully.",
+    "send": "Send",
+    "replyMessage": "Reply to this email",
+    "cannotReply": "Cannot Reply",
+    "systemNotification": "This is a system notification and cannot be replied to. Please use the dashboard to contact support.",
+    "Reply": "reply",
     "noInboxEmails": "No Inbox Emails",
     "noInboxEmailsDesc": "You don't have any received emails yet.",
     "noSentEmails": "No Sent Emails",
@@ -355,12 +439,15 @@
     "storage": "Storage",
     "clearCache": "Clear Cache",
     "clearCacheDesc": "Free up storage space",
+    "cacheCleared": "Cache cleared successfully",
     "about": "About",
     "version": "App Version",
     "checkUpdates": "Check for Updates",
     "upToDate": "You are up to date"
   },
   "help": {
+    "help": "Help",
+    "contactInfo": "Contact Information",
     "faq": "FAQs",
     "searchFAQ": "Search FAQs",
     "contact": "Contact Support",
@@ -432,10 +519,18 @@
     "noCachedData": "No cached data available and offline"
   },
   "templates": {
+    "uploadFilled": "Upload file",
+    "selectFile": "Select File",
     "templates": "Document Templates",
+    "title": "Templates",
+    "subtitle": "Download and fill required documents",
     "searchTemplates": "Search templates...",
     "allServices": "All Services",
     "allCategories": "All Categories",
+    "filter": {
+      "serviceType": "Service Type",
+      "category": "Category"
+    },
     "required": "Required",
     "downloads": "downloads",
     "download": "Download",
@@ -443,7 +538,26 @@
     "noTemplatesDescription": "There are no templates available at the moment.",
     "downloading": "Downloading...",
     "downloaded": "Downloaded",
-    "downloadError": "Failed to download template"
+    "downloadError": "Failed to download template",
+    "share": "Share",
+    "downloadAndFill": "Download",
+    "completeTemplate": "Complete template",
+    "fillNow": "Fill now",
+    "fillNowDesc": "Complete the form directly in the app",
+    "downloadBlank": "Download blank",
+    "downloadBlankDesc": "Save a blank copy to fill later",
+    "submitCompleted": "Submit completed file",
+    "selectFilledFile": "Choose file",
+    "downloadSuccess": "Template downloaded successfully",
+    "downloadComplete": "Download Complete",
+    "fillInstructions": "The template has been downloaded. Please fill it out using your preferred app and then upload it back.",
+    "inAppFillNotAvailable": "In-App Filling Not Available",
+    "useExternalApp": "This template cannot be filled in-app. Please download and fill using an external app.",
+    "uploadSuccess": "Filled template uploaded successfully",
+    "noCasesAvailable": "No cases available. Please create a case first.",
+    "caseReady": "Case Ready",
+    "caseReadyDesc": "Case {{caseNumber}} is ready for document upload.",
+    "casePreselected": "Your case is preselected. You can now upload your filled template."
   },
   "legal": {
     "privacyPolicy": "Privacy Policy",

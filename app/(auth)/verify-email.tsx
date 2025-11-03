@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import {
   Text,
   Button,
@@ -24,6 +24,15 @@ export default function VerifyEmailScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Company Logo */}
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </View>
+
       <View style={styles.content}>
         <Text variant="headlineLarge" style={styles.title}>
           {t('auth.verifyEmail')}
@@ -115,6 +124,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     justifyContent: 'center',
     padding: SPACING.lg,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+  },
+  logo: {
+    width: 120,
+    height: 120,
   },
   content: {
     alignItems: 'center',

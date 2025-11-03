@@ -63,13 +63,24 @@ export function usePagination<T>(
     setData(prev => {
       const existing = prev || [];
       // Filter out duplicates based on id or tempId
-      const uniqueNewData = newData.filter(newItem => 
-        !existing.some(existingItem => 
-          (existingItem as any).id === (newItem as any).id ||
-          (existingItem as any).tempId === (newItem as any).tempId
-        )
-      );
-      return [...uniqueNewData, ...existing];
+      const uniqueNewData = newData.filter((newItem) => {
+        const existingHasSameId = existing.some((existingItem) => {
+          const a = existingItem as Partial<{ id: string; tempId: string }>;
+          const b = newItem as Partial<{ id: string; tempId: string }>;
+          return (a.id && b.id && a.id === b.id) || (a.tempId && b.tempId && a.tempId === b.tempId);
+        });
+        return !existingHasSameId;
+      });
+
+      // Combine and sort chronologically (oldest → newest)
+      const combined = [...uniqueNewData, ...existing];
+      const sorted = combined.sort((a, b) => {
+        const aTimestamp = (a as any).timestamp || 0;
+        const bTimestamp = (b as any).timestamp || 0;
+        return aTimestamp - bTimestamp;
+      });
+
+      return sorted;
     });
   }, []);
 
@@ -77,13 +88,24 @@ export function usePagination<T>(
     setData(prev => {
       const existing = prev || [];
       // Filter out duplicates based on id or tempId
-      const uniqueNewData = newData.filter(newItem => 
-        !existing.some(existingItem => 
-          (existingItem as any).id === (newItem as any).id ||
-          (existingItem as any).tempId === (newItem as any).tempId
-        )
-      );
-      return [...existing, ...uniqueNewData];
+      const uniqueNewData = newData.filter((newItem) => {
+        const existingHasSameId = existing.some((existingItem) => {
+          const a = existingItem as Partial<{ id: string; tempId: string }>;
+          const b = newItem as Partial<{ id: string; tempId: string }>;
+          return (a.id && b.id && a.id === b.id) || (a.tempId && b.tempId && a.tempId === b.tempId);
+        });
+        return !existingHasSameId;
+      });
+
+      // Combine and sort chronologically (oldest → newest)
+      const combined = [...existing, ...uniqueNewData];
+      const sorted = combined.sort((a, b) => {
+        const aTimestamp = (a as any).timestamp || 0;
+        const bTimestamp = (b as any).timestamp || 0;
+        return aTimestamp - bTimestamp;
+      });
+
+      return sorted;
     });
   }, []);
 
@@ -99,11 +121,17 @@ export function usePagination<T>(
       const result = await loadInitialFn();
       logger.info('loadInitialFn completed', { result });
       
-      // Ensure result.data is an array (for generic use) or result.messages (for chat)
-      const dataArray = Array.isArray(result.data) ? result.data : 
-                       Array.isArray(result.messages) ? result.messages : [];
+      // Ensure result.data is an array
+      const dataArray = Array.isArray(result.data) ? result.data : [];
       
-      setData(dataArray);
+      // Sort chronologically (oldest → newest) before setting
+      const sortedData = dataArray.sort((a, b) => {
+        const aTimestamp = (a as any).timestamp || 0;
+        const bTimestamp = (b as any).timestamp || 0;
+        return aTimestamp - bTimestamp;
+      });
+
+      setData(sortedData);
       setHasMore(result.hasMore || false);
       setTotalCount(result.totalCount || 0);
       hasMoreRef.current = result.hasMore || false;
@@ -124,10 +152,16 @@ export function usePagination<T>(
     }
   }, [loadInitialFn, onError]);
 
+  const isLoadingMoreRef = useRef(false);
+
   const loadMore = useCallback(async () => {
-    if (!hasMoreRef.current || isLoadingRef.current || !data || data.length === 0) return;
+    // Prevent duplicate calls
+    if (isLoadingMoreRef.current || !hasMoreRef.current || isLoadingRef.current || !data || data.length === 0) {
+      return;
+    }
 
     try {
+      isLoadingMoreRef.current = true;
       setIsLoadingMore(true);
       
       // Get the oldest timestamp from current data
@@ -135,9 +169,8 @@ export function usePagination<T>(
       
       const result = await loadMoreFn(oldestTimestamp);
       
-      // Ensure result.data is an array (for generic use) or result.messages (for chat)
-      const dataArray = Array.isArray(result.data) ? result.data : 
-                       Array.isArray(result.messages) ? result.messages : [];
+      // Ensure result.data is an array
+      const dataArray = Array.isArray(result.data) ? result.data : [];
       
       if (dataArray.length > 0) {
         prependData(dataArray);
@@ -159,6 +192,10 @@ export function usePagination<T>(
       onError?.(err as Error);
     } finally {
       setIsLoadingMore(false);
+      // Reset ref after a delay to prevent rapid re-triggering
+      setTimeout(() => {
+        isLoadingMoreRef.current = false;
+      }, 300);
     }
   }, [data, loadMoreFn, getTimestamp, prependData, onError]);
 
@@ -191,24 +228,45 @@ export function usePagination<T>(
 /**
  * Hook specifically for chat messages with optimized caching
  */
-export function useChatPagination(
+export function useChatPagination<T extends { timestamp: number; id?: string; tempId?: string }>(
   caseId: string,
-  loadInitialMessages: (caseId: string) => Promise<{
-    messages: any[];
+  loadInitialMessages: (caseId: string, clientId?: string, agentId?: string) => Promise<{
+    messages: T[];
     hasMore: boolean;
     totalCount: number;
   }>,
-  loadOlderMessages: (caseId: string, beforeTimestamp: number) => Promise<{
-    messages: any[];
+  loadOlderMessages: (caseId: string, beforeTimestamp: number, clientId?: string, agentId?: string) => Promise<{
+    messages: T[];
     hasMore: boolean;
-  }>
+  }>,
+  clientId?: string,
+  agentId?: string
 ) {
-  return usePagination(
-    () => loadInitialMessages(caseId),
-    (beforeTimestamp) => loadOlderMessages(caseId, beforeTimestamp),
-    (message) => message.timestamp,
+  return usePagination<T>(
+    async () => {
+      const result = await loadInitialMessages(caseId, clientId, agentId);
+      // logger.info('\n\n loadInitialMessages result', {
+      //   result,
+      //   messages: result.messages,
+      //   hasMore: result.hasMore,
+      //   totalCount: result.totalCount,
+      // });
+      return {
+        data: Array.isArray(result.messages) ? result.messages : [],
+        hasMore: !!result.hasMore,
+        totalCount: result.totalCount || 0,
+      };
+    },
+    async (beforeTimestamp) => {
+      const result = await loadOlderMessages(caseId, beforeTimestamp, clientId, agentId);
+      return {
+        data: Array.isArray(result.messages) ? result.messages : [],
+        hasMore: !!result.hasMore,
+      };
+    },
+    (message: T) => message.timestamp,
     {
-      initialLimit: 20,
+      initialLimit: 50,
       loadMoreLimit: 20,
     }
   );
@@ -217,22 +275,35 @@ export function useChatPagination(
 /**
  * Hook for email pagination (future use)
  */
-export function useEmailPagination(
+export function useEmailPagination<E extends { timestamp: number }>(
   folderId: string,
   loadInitialEmails: (folderId: string) => Promise<{
-    emails: any[];
+    emails: E[];
     hasMore: boolean;
     totalCount: number;
   }>,
   loadOlderEmails: (folderId: string, beforeTimestamp: number) => Promise<{
-    emails: any[];
+    emails: E[];
     hasMore: boolean;
   }>
 ) {
-  return usePagination(
-    () => loadInitialEmails(folderId),
-    (beforeTimestamp) => loadOlderEmails(folderId, beforeTimestamp),
-    (email) => email.timestamp,
+  return usePagination<E>(
+    async () => {
+      const result = await loadInitialEmails(folderId);
+      return {
+        data: Array.isArray(result.emails) ? result.emails : [],
+        hasMore: !!result.hasMore,
+        totalCount: result.totalCount || 0,
+      };
+    },
+    async (beforeTimestamp) => {
+      const result = await loadOlderEmails(folderId, beforeTimestamp);
+      return {
+        data: Array.isArray(result.emails) ? result.emails : [],
+        hasMore: !!result.hasMore,
+      };
+    },
+    (email: E) => email.timestamp,
     {
       initialLimit: 20,
       loadMoreLimit: 20,

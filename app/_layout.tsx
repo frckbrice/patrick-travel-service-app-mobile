@@ -1,25 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { AppState, AppStateStatus, Platform, InteractionManager, View, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import Toast from 'react-native-toast-message';
+import Toast, { BaseToast } from 'react-native-toast-message';
 import { useAuthStore } from '../stores/auth/authStore';
 import { ThemeProvider, useTheme } from '../lib/theme/ThemeContext';
 import { TabBarProvider } from '../lib/context/TabBarContext';
 import { DynamicTabBar } from '../components/ui/DynamicTabBar';
 import { useTabBarContext } from '../lib/context/TabBarContext';
+import { NotificationBannerProvider } from '../components/ui/NotificationBannerProvider';
 import {
   setupNotificationListeners,
   getLastNotificationResponse,
   handleNotificationNavigation,
 } from '../lib/services/pushNotifications';
+import { initializeFCM, getFCMStatus } from '../lib/services/fcm';
 import { useCaseUpdates } from '../lib/hooks/useCaseUpdates';
 import { logger } from '../lib/utils/logger';
 import { SPACING, FONT_SIZES } from '../lib/constants';
 import '../lib/i18n';
+import { AlertProvider, useCustomAlert } from '../components/ui/CustomAlert';
+import { initAlert } from '../lib/utils/alert';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,9 +40,53 @@ function AppContent() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { theme, isDark } = useTheme();
   const { isTabBarVisible, showTabBar, hideTabBar } = useTabBarContext();
+  const { showAlert } = useCustomAlert();
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const [isAppReady, setIsAppReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const pathname = usePathname();
+
+  // Check route groups - be precise about pathname matching
+  // Note: home page pathname is '/(tabs)' or '/(tabs)/' or '/(tabs)/index', NOT '/'
+  // Only the root index route '/' (which redirects) should be treated as auth route
+  // const isTabsRoute = pathname?.startsWith('/(tabs)');
+  // const isAuthRoute = pathname?.startsWith('/(auth)') || pathname === '/onboarding' || (pathname === '/' && !isTabsRoute);
+
+  // Control tab bar visibility based on route
+  // useEffect(() => {
+  //   if (isAuthRoute) {
+  //     // Hide on auth routes
+  //     hideTabBar();
+  //   } else if (isTabsRoute) {
+  //     // Show on tabs routes (home and other tab screens)
+  //     // This ensures tab bar is visible when navigating to home
+  //     // Use a small delay to ensure it runs after other effects
+  //     const timer = setTimeout(() => {
+  //       showTabBar();
+  //     }, 10); // Minimal delay to ensure it runs after mount
+  //     return () => clearTimeout(timer);
+  //   }
+  //   // Other routes (modals, cards) don't need tab bar, scroll behavior will handle visibility
+  // }, [isAuthRoute, isTabsRoute, showTabBar, hideTabBar]);
+
+  // Memoize visibility change handler to prevent re-renders
+  // const handleVisibilityChange = useCallback((visible: boolean) => {
+  //   // Don't show tab bar on auth routes
+  //   if (isAuthRoute) {
+  //     hideTabBar();
+  //     return;
+  //   }
+  //   if (visible) {
+  //     showTabBar();
+  //   } else {
+  //     hideTabBar();
+  //   }
+  // }, [showTabBar, hideTabBar, isAuthRoute]);
+
+  // Initialize global Alert API
+  useEffect(() => {
+    initAlert(showAlert);
+  }, [showAlert]);
 
   // Enable fallback case update monitoring (acts as backup if push notifications fail)
   useCaseUpdates();
@@ -82,12 +130,43 @@ function AppContent() {
   useEffect(() => {
     // Defer notification listeners setup to avoid blocking UI thread at launch
     let cleanup: (() => void) | undefined;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = InteractionManager.runAfterInteractions(async () => {
+      // Initialize FCM first (non-blocking, graceful failure)
+      try {
+        const fcmStatus = getFCMStatus();
+        logger.info('FCM Configuration Status:', fcmStatus);
+        
+        const fcmInit = await initializeFCM();
+        if (fcmInit.configured && fcmInit.token) {
+          logger.info('✅ FCM initialized successfully', {
+            tokenPreview: fcmInit.token.substring(0, 30) + '...',
+          });
+        } else if (fcmInit.requiresEASBuild) {
+          logger.info('ℹ️ FCM: EAS build required for push notifications', {
+            note: 'This is expected in development. Build with EAS to enable FCM.',
+            hint: 'Run: eas credentials (Android → Push Notifications)',
+          });
+        } else if (fcmInit.configured && !fcmInit.token) {
+          logger.warn('⚠️ FCM configured but token not obtained');
+        } else {
+          logger.warn('⚠️ FCM not configured - push notifications may not work');
+        }
+      } catch (error) {
+        // FCM initialization errors are non-blocking
+        logger.warn('FCM initialization skipped (non-blocking)', {
+          error: error instanceof Error ? error.message : String(error),
+          note: 'Push notifications require EAS build and credentials',
+        });
+      }
+
+      // Setup notification listeners
       cleanup = setupNotificationListeners();
-      getLastNotificationResponse().then((data) => {
+      
+      // Check for cold start notification
+      getLastNotificationResponse().then(async (data) => {
         if (data) {
           logger.info('App opened from notification', data);
-          handleNotificationNavigation(data);
+          await handleNotificationNavigation(data);
         }
       });
     });
@@ -259,17 +338,47 @@ function AppContent() {
             }}
           />
         </Stack>
-        <Toast />
-        <DynamicTabBar 
-          visible={isTabBarVisible} 
-          onVisibilityChange={(visible) => {
-            if (visible) {
-              showTabBar();
-            } else {
-              hideTabBar();
-            }
-          }} 
+        <Toast
+          config={{
+            success: ({ text1, text2 }) => (
+              <BaseToast
+                text1={text1}
+                text2={text2}
+                style={styles.successToast}
+                contentContainerStyle={styles.toastContent}
+                text1Style={styles.toastTitle}
+                text2Style={styles.toastMessage}
+              />
+            ),
+            error: ({ text1, text2 }) => (
+              <BaseToast
+                text1={text1}
+                text2={text2}
+                style={styles.errorToast}
+                contentContainerStyle={styles.toastContent}
+                text1Style={styles.toastTitle}
+                text2Style={styles.toastMessage}
+              />
+            ),
+            info: ({ text1, text2 }) => (
+              <BaseToast
+                text1={text1}
+                text2={text2}
+                style={styles.infoToast}
+                contentContainerStyle={styles.toastContent}
+                text1Style={styles.toastTitle}
+                text2Style={styles.toastMessage}
+              />
+            ),
+          }}
         />
+        {/* Hide tab bar on auth routes */}
+        {/* {!isAuthRoute && (
+          <DynamicTabBar
+            visible={isTabBarVisible}
+            onVisibilityChange={handleVisibilityChange}
+          />
+        )} */}
       </PaperProvider>
     </SafeAreaProvider>
   );
@@ -279,9 +388,13 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TabBarProvider>
-          <AppContent />
-        </TabBarProvider>
+        <AlertProvider>
+          <NotificationBannerProvider defaultAutoDismissDelay={5000}>
+            <TabBarProvider>
+              <AppContent />
+            </TabBarProvider>
+          </NotificationBannerProvider>
+        </AlertProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
@@ -302,5 +415,70 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     textAlign: 'center',
     paddingHorizontal: SPACING.lg,
+  },
+  // Toast Styles - Modern Mobile Standards (2025 Mobile Market Standards)
+  successToast: {
+    height: 72,
+    borderLeftWidth: 5,
+    borderLeftColor: '#10B981',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    backgroundColor: '#FFFFFF',
+    minWidth: '90%',
+    maxWidth: '95%',
+  },
+  errorToast: {
+    height: 72,
+    borderLeftWidth: 5,
+    borderLeftColor: '#EF4444',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    backgroundColor: '#FFFFFF',
+    minWidth: '90%',
+    maxWidth: '95%',
+  },
+  infoToast: {
+    height: 72,
+    borderLeftWidth: 5,
+    borderLeftColor: '#3B82F6',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    backgroundColor: '#FFFFFF',
+    minWidth: '90%',
+    maxWidth: '95%',
+  },
+  toastContent: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  toastTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  toastMessage: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: '#6B7280',
+    lineHeight: 20,
   },
 });

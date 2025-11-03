@@ -434,7 +434,7 @@ interface EmailResponse {
 ```
 
 #### 2. Mark Single Email as Read
-**Endpoint:** `PUT /api/emails/{id}/read`  
+**Endpoint:** `PUT /api/emails/{id}`  
 **Authentication:** Required
 
 **Response:**

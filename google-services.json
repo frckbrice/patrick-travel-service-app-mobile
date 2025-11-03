@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "99009333671",
+    "firebase_url": "https://patrick-travel-agency-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "patrick-travel-agency",
+    "storage_bucket": "patrick-travel-agency.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:99009333671:android:dbf0550ba7f74d32afce82",
+        "android_client_info": {
+          "package_name": "com.unidov.patricktravel"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "99009333671-ri4pfighdjb8a8thmfi0u6glr98ktu9i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDqlkR4_CxuzfBSL9MxRUjocHzSu1ak3jU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "99009333671-ri4pfighdjb8a8thmfi0u6glr98ktu9i.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

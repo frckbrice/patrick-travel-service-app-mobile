@@ -1,5 +1,7 @@
 # Authentication Setup Documentation
 
+> Scope: Mobile authentication (Firebase Auth + Google OAuth), flows, security and usage. This doc does not duplicate push setup or platform-specific emulator details. See `PUSH_NOTIFICATIONS_SETUP.md` and `ANDROID_DEV_GUIDE.md` for those topics.
+
 ## Overview
 
 This document describes the authentication system implemented for the Patrick Travel Services mobile app, including email/password authentication and Google OAuth 2.0 integration.
@@ -51,26 +53,26 @@ The authentication system uses a hybrid approach:
 
 ## Features
 
-### ✅ Email/Password Authentication
+###  Email/Password Authentication
 - User registration with email verification
 - Secure login with password hashing
 - Password recovery/reset
 - Remember me functionality
 - Token-based session management
 
-### ✅ Google OAuth 2.0
+###  Google OAuth 2.0
 - One-tap Google Sign-In
 - Cross-platform support (iOS, Android, Web)
 - Automatic user profile sync
 - Seamless integration with Firebase
 
-### ✅ Session Management
+###  Session Management
 - JWT-based authentication
 - Automatic token refresh
 - Secure token storage using Expo SecureStore
 - Session persistence across app restarts
 
-### ✅ Security Features
+###  Security Features
 - Encrypted token storage
 - HTTPS-only communication
 - Token expiration handling
@@ -92,7 +94,10 @@ Create a `.env` file in the mobile directory:
 
 ```bash
 # API Configuration
+# Local/dev API base URL
 EXPO_PUBLIC_API_URL=http://localhost:3000/api
+# Production API base URL (used when NODE_ENV=production)
+EXPO_PUBLIC_API_PROD_URL=https://api.your-domain.com/api
 
 # Firebase Configuration
 EXPO_PUBLIC_FIREBASE_API_KEY=your-firebase-api-key
@@ -505,6 +510,6 @@ mobile/
 
 **Last Updated:** October 19, 2025  
 **Version:** 1.0.0  
-**Author:** Senior Mobile Developer
+**Author:** Avom brice, Senior Mobile Developer
 
 

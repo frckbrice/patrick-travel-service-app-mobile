@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, Alert, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import { Text, Button, Chip, ActivityIndicator } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,6 +19,9 @@ import {
 import { format } from 'date-fns';
 import { toast } from '../../lib/services/toast';
 import { PDFViewer, ImageZoomViewer } from '../../components/ui';
+import { Alert } from '../../lib/utils/alert';
+import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +29,8 @@ export default function DocumentDetailsScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const tabBarPadding = useTabBarPadding();
+  const scrollProps = useTabBarScroll();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [document, setDocument] = useState<Document | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -193,7 +198,11 @@ export default function DocumentDetailsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView>
+      <ScrollView 
+        contentContainerStyle={{ paddingBottom: SPACING.xl + tabBarPadding }}
+        onScroll={scrollProps.onScroll}
+        scrollEventThrottle={scrollProps.scrollEventThrottle}
+      >
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <Text variant="titleLarge" style={styles.fileName}>

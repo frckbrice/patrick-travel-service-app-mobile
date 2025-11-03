@@ -3,13 +3,57 @@ import { Message, ApiResponse } from '../types';
 import { logger } from '../utils/logger';
 
 export const messagesApi = {
+  // Simple in-memory cache for single email fetches (opt-in, short TTL)
+  _emailCache: new Map<string, { data: Message; ts: number }>(),
+  _emailCacheTtlMs: 60 * 1000,
+
+  _getCachedEmail(id: string): Message | undefined {
+    const entry = this._emailCache.get(id);
+    if (!entry) return undefined;
+    if (Date.now() - entry.ts > this._emailCacheTtlMs) {
+      this._emailCache.delete(id);
+      return undefined;
+    }
+    return entry.data;
+  },
+
+  _setCachedEmail(id: string, data: Message) {
+    this._emailCache.set(id, { data, ts: Date.now() });
+  },
+
+  // Preload an email into cache without blocking navigation
+  async prefetchEmail(id: string): Promise<void> {
+    try {
+      const safeId = encodeURIComponent(id);
+      const response = await apiClient.get<ApiResponse<{ email: Message }>>(`/emails/${safeId}`);
+      if (response.data.success && response.data.data?.email) {
+        this._setCachedEmail(id, response.data.data.email);
+      }
+    } catch { }
+  },
+
   // Get single email message by ID
   async getEmail(id: string): Promise<ApiResponse<Message>> {
     try {
+      // Serve from cache when fresh
+      const cached = this._getCachedEmail(id);
+      if (cached) {
+        return { success: true, data: cached } as ApiResponse<Message>;
+      }
       const response = await apiClient.get<ApiResponse<{ email: Message }>>(`/emails/${id}`);
+      if (response.data.success && response.data.data?.email) {
+        // Backend already maps emailThreadId to threadId (see /api/emails/[id]/route.ts)
+        const email = response.data.data.email;
+        this._setCachedEmail(id, email);
+        return {
+          success: response.data.success,
+          data: email,
+          error: response.data.error,
+        };
+      }
       return {
         success: response.data.success,
-        data: response.data.data?.email || null,
+        data: response.data.data?.email,
         error: response.data.error,
       };
     } catch (error: any) {
@@ -20,14 +64,12 @@ export const messagesApi = {
         return {
           success: false,
           error: 'Email not found',
-          data: null,
         };
       }
       
       return {
         success: false,
         error: error.response?.data?.error || 'Unable to load email.',
-        data: null,
       };
     }
   },
@@ -35,7 +77,11 @@ export const messagesApi = {
   // Mark single email as read
   async markEmailAsRead(id: string): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.put<ApiResponse<void>>(`/emails/${id}/read`);
+      const safeId = encodeURIComponent(id);
+      // Correct endpoint: PUT /api/emails/{emailId}
+      // The route.ts file handles both GET and PUT at /api/emails/[id]
+      const response = await apiClient.put<ApiResponse<void>>(`/emails/${safeId}`);
+      // console.log("\n\n the mark email as read info: ", { response });
       return response.data;
     } catch (error: any) {
       logger.error('Failed to mark email as read', error);
@@ -64,10 +110,24 @@ export const messagesApi = {
       if (filters?.caseId) params.append('caseId', filters.caseId);
       if (filters?.isRead !== undefined) params.append('isRead', filters.isRead.toString());
 
-      const response = await apiClient.get<ApiResponse<{ emails: Message[] }>>(`/emails?${params}`);
+      const url = `/emails?${params}`;
+      logger.info(`📧 Fetching emails with filters:`, {
+        isRead: filters?.isRead,
+        caseId: filters?.caseId,
+        url
+      });
+
+      const response = await apiClient.get<ApiResponse<{ emails: Message[] }>>(url);
+
+      const emails = response.data.data?.emails || [];
+      logger.info(`📧 Received ${emails.length} emails from API`);
+      if (emails.length > 0) {
+        logger.info(`📧 Email read statuses:`, emails.map((e: any) => ({ id: e.id, isRead: e.isRead })));
+      }
+
       return {
         success: response.data.success,
-        data: response.data.data?.emails || [],
+        data: emails,
         error: response.data.error,
       };
     } catch (error: any) {
@@ -86,6 +146,7 @@ export const messagesApi = {
       const response = await apiClient.put<ApiResponse<void>>('/emails/mark-read', {
         emailIds,
       });
+      console.log("\n\n the mark emails as read info: ", { response });
       return response.data;
     } catch (error: any) {
       logger.error('Failed to mark emails as read', error);
@@ -100,9 +161,10 @@ export const messagesApi = {
   async getChatMessage(id: string): Promise<ApiResponse<Message>> {
     try {
       const response = await apiClient.get<ApiResponse<{ message: Message }>>(`/chat/messages/${id}`);
+      console.log("\n\n the get chat message info: ", { response });
       return {
         success: response.data.success,
-        data: response.data.data?.message || null,
+        data: response.data.data?.message,
         error: response.data.error,
       };
     } catch (error: any) {
@@ -110,14 +172,16 @@ export const messagesApi = {
       return {
         success: false,
         error: error.response?.data?.error || 'Unable to load chat message.',
-        data: null,
       };
     }
   },
 
   async markChatMessageAsRead(id: string): Promise<ApiResponse<void>> {
     try {
+      // Note: baseURL already includes /api, so this resolves to:
+      // /api/chat/messages/{id}/read (matches web API spec)
       const response = await apiClient.put<ApiResponse<void>>(`/chat/messages/${id}/read`);
+      console.log("\n\n the mark chat message as read info: ", { response });
       return response.data;
     } catch (error: any) {
       logger.error('Failed to mark chat message as read', error);
@@ -130,10 +194,13 @@ export const messagesApi = {
 
   async markChatMessagesAsRead(messageIds: string[], chatRoomId?: string): Promise<ApiResponse<void>> {
     try {
+      // Note: baseURL already includes /api, so this resolves to:
+      // /api/chat/messages/mark-read (matches web API spec)
       const response = await apiClient.put<ApiResponse<void>>('/chat/messages/mark-read', {
         messageIds,
         chatRoomId,
       });
+      console.log("\n\n the mark chat messages as read info: ", { response });
       return response.data;
     } catch (error: any) {
       logger.error('Failed to mark chat messages as read', error);
@@ -150,6 +217,7 @@ export const messagesApi = {
       // Get unread emails with a minimal page size just to get the count
       const response = await this.getEmails(1, 1, { isRead: false });
       if (!response.success || !response.data) {
+        logger.info('📧 Unread emails count: 0 (no data)');
         return 0;
       }
       
@@ -157,7 +225,9 @@ export const messagesApi = {
       // Otherwise, fetch a larger batch to count
       const fullResponse = await this.getEmails(1, 100, { isRead: false });
       if (fullResponse.success && fullResponse.data) {
-        return fullResponse.data.length;
+        const count = fullResponse.data.length;
+        logger.info(`📧 Unread emails count: ${count}`);
+        return count;
       }
       
       return 0;
@@ -197,7 +267,6 @@ export const messagesApi = {
     return {
       success: true,
       data: [],
-      error: null,
     };
   },
 };

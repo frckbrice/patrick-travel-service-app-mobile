@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -18,22 +19,32 @@ import { useRequireAuth } from '../features/auth/hooks/useAuth';
 import { templatesApi } from '../lib/api/templates.api';
 import { DocumentTemplate, ServiceType, TemplateCategory } from '../lib/types';
 import { Card, EmptyState } from '../components/ui';
+import { ThemeAwareHeader } from '../components/ui/ThemeAwareHeader';
+import { TouchDetector } from '../components/ui/TouchDetector';
 import { useDebounce } from '../lib/hooks';
 import { SPACING } from '../lib/constants';
 import { useThemeColors } from '../lib/theme/ThemeContext';
 import { format } from 'date-fns';
+import { casesApi } from '../lib/api/cases.api';
+import { useAuthStore } from '../stores/auth/authStore';
+import { Alert } from '../lib/utils/alert';
 
 export default function TemplatesScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
   const colors = useThemeColors();
+  const user = useAuthStore((s) => s.user);
   
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | undefined>();
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | undefined>();
+  const [isCasePickerVisible, setIsCasePickerVisible] = useState(false);
+  const [availableCases, setAvailableCases] = useState<Array<{ id: string; referenceNumber?: string; serviceType?: string }>>([]);
+  const [isLoadingCases, setIsLoadingCases] = useState(false);
+  const [templatePendingCase, setTemplatePendingCase] = useState<DocumentTemplate | null>(null);
 
   useEffect(() => {
     fetchTemplates();
@@ -64,12 +75,17 @@ export default function TemplatesScreen() {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   const filteredTemplates = useMemo(() => {
+    const q = (debouncedSearchQuery || '').trim().toLowerCase();
+    if (!q) return templates;
     return templates.filter((template) => {
-      const matchesSearch = template.name
-        .toLowerCase()
-        .includes(debouncedSearchQuery.toLowerCase()) ||
-        template.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
-      return matchesSearch;
+      const haystacks = [
+        template.name,
+        template.description || '',
+        template.fileName,
+        String(template.category),
+        String(template.serviceType),
+      ].map((s) => s.toLowerCase());
+      return haystacks.some((h) => h.includes(q));
     });
   }, [templates, debouncedSearchQuery]);
 
@@ -93,7 +109,47 @@ export default function TemplatesScreen() {
   };
 
   const handleDownloadAndFill = (template: DocumentTemplate) => {
-    router.push(`/template/${template.id}`);
+    setTemplatePendingCase(template);
+    openCasePicker(template);
+  };
+
+  const openCasePicker = async (template: DocumentTemplate) => {
+    try {
+      setIsLoadingCases(true);
+      const response = await casesApi.getCases(undefined, 1, 50);
+      const items = (response.success && response.data ? response.data : []).map((c: any) => ({
+        id: c.id,
+        referenceNumber: c.referenceNumber,
+        serviceType: c.serviceType,
+      }));
+      if (items.length === 0) {
+        Alert.alert(
+          t('cases.myCases') || 'My Cases',
+          t('documents.noCasesAvailable') || 'No cases available. Please create a case first.',
+          [
+            { text: t('common.cancel') || 'Cancel', style: 'cancel', onPress: () => setTemplatePendingCase(null) },
+            { text: t('cases.newCase') || 'New Case', onPress: () => router.push('/case/new') },
+            { text: t('templates.download') || 'Download', onPress: () => router.push(`/template/${template.id}`) },
+          ]
+        );
+        return;
+      }
+      setAvailableCases(items);
+      setIsCasePickerVisible(true);
+    } catch (e) {
+      console.error('Failed to load cases', e);
+      router.push(`/template/${template.id}`);
+    } finally {
+      setIsLoadingCases(false);
+    }
+  };
+
+  const handlePickCase = (caseId: string) => {
+    const template = templatePendingCase;
+    setIsCasePickerVisible(false);
+    setTemplatePendingCase(null);
+    if (!template) return;
+    router.push(`/template/${template.id}?caseId=${caseId}`);
   };
 
   const getFileIcon = useCallback((mimeType: string) => {
@@ -212,7 +268,16 @@ export default function TemplatesScreen() {
   const keyExtractor = useCallback((item: DocumentTemplate) => item.id, []);
 
   return (
+    // <TouchDetector>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ThemeAwareHeader
+        variant="gradient"
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
+        title={t('templates.title') || 'Templates'}
+        subtitle={t('templates.subtitle') || 'Download and fill required documents'}
+        showBackButton
+      />
+
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <View style={[styles.searchContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <MaterialCommunityIcons
@@ -227,50 +292,53 @@ export default function TemplatesScreen() {
             onChangeText={setSearchQuery}
             style={[styles.searchInput, { color: colors.text }]}
             placeholderTextColor={colors.textSecondary}
+            autoCorrect={false}
+            autoCapitalize="none"
           />
         </View>
       </View>
 
-      {/* Service Type Filters */}
-      <View style={styles.filters}>
-        <Chip
-          selected={!selectedServiceType}
-          onPress={() => setSelectedServiceType(undefined)}
-          style={styles.filterChip}
-        >
-          {t('templates.allServices')}
-        </Chip>
-        {Object.values(ServiceType).map((serviceType) => (
-          <Chip
-            key={serviceType}
-            selected={selectedServiceType === serviceType}
-            onPress={() => setSelectedServiceType(serviceType)}
-            style={styles.filterChip}
-          >
-            {serviceType}
-          </Chip>
-        ))}
-      </View>
+      {/* Filters Section - organized like cases page */}
+      <View style={styles.filtersSection}>
+        <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+          {t('templates.filter.serviceType') || 'Service Type'}
+        </Text>
+        <FlatList
+          data={[undefined as any, ...Object.values(ServiceType)]}
+          keyExtractor={(v, idx) => (v || 'all') + '-' + idx}
+          renderItem={({ item }) => (
+            <Chip
+                selected={selectedServiceType === item || (!item && !selectedServiceType)}
+                onPress={() => setSelectedServiceType(item)}
+                style={styles.filterChip}
+              >
+                {item || (t('templates.allServices') || 'All Services')}
+              </Chip>
+          )}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}
+        />
 
-      {/* Category Filters */}
-      <View style={styles.filters}>
-        <Chip
-          selected={!selectedCategory}
-          onPress={() => setSelectedCategory(undefined)}
-          style={styles.filterChip}
-        >
-          {t('templates.allCategories')}
-        </Chip>
-        {Object.values(TemplateCategory).map((category) => (
-          <Chip
-            key={category}
-            selected={selectedCategory === category}
-            onPress={() => setSelectedCategory(category)}
-            style={styles.filterChip}
-          >
-            {category}
-          </Chip>
-        ))}
+        <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: SPACING.sm }]}>
+          {t('templates.filter.category') || 'Category'}
+        </Text>
+        <FlatList
+          data={[undefined as any, ...Object.values(TemplateCategory)]}
+          keyExtractor={(v, idx) => (v || 'all') + '-' + idx}
+          renderItem={({ item }) => (
+            <Chip
+                selected={selectedCategory === item || (!item && !selectedCategory)}
+                onPress={() => setSelectedCategory(item)}
+                style={styles.filterChip}
+              >
+                {item || (t('templates.allCategories') || 'All Categories')}
+              </Chip>
+          )}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}
+        />
       </View>
 
       {isLoading ? (
@@ -292,7 +360,52 @@ export default function TemplatesScreen() {
           }
         />
       )}
+
+      {/* Case Picker Modal */}
+      <Modal visible={isCasePickerVisible} transparent animationType="slide" onRequestClose={() => setIsCasePickerVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {t('cases.selectCase') || 'Select Case'}
+            </Text>
+            {isLoadingCases ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <FlatList
+                data={availableCases}
+                keyExtractor={(c) => c.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.caseRow} activeOpacity={0.7} onPress={() => handlePickCase(item.id)}>
+                    <View style={styles.caseRowLeft}>
+                      <MaterialCommunityIcons name="file-document-outline" size={20} color={colors.textSecondary} />
+                    </View>
+                    <View style={styles.caseRowBody}>
+                      <Text style={[styles.caseRowTitle, { color: colors.text }]} numberOfLines={1}>
+                        {item.referenceNumber || item.id}
+                      </Text>
+                      {!!item.serviceType && (
+                        <Text style={[styles.caseRowSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {item.serviceType}
+                        </Text>
+                      )}
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+                ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+                style={{ maxHeight: 320 }}
+              />
+            )}
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalBtn, { borderColor: colors.border }]} onPress={() => setIsCasePickerVisible(false)}>
+                <Text style={[styles.modalBtnText, { color: colors.text }]}>{t('common.cancel') || 'Cancel'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
+    // </TouchDetector>
   );
 }
 
@@ -331,6 +444,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     flexWrap: 'wrap',
+  },
+  filtersSection: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  filtersRow: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.xs,
   },
   filterChip: {
     marginRight: SPACING.sm,
@@ -426,6 +556,59 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: SPACING.md,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: SPACING.sm,
+  },
+  caseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+  },
+  caseRowLeft: {
+    marginRight: SPACING.md,
+  },
+  caseRowBody: {
+    flex: 1,
+  },
+  caseRowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  caseRowSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  separator: {
+    height: 1,
+    opacity: 0.6,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: SPACING.md,
+  },
+  modalBtn: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  modalBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

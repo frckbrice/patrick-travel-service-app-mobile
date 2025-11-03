@@ -4,7 +4,7 @@ Complete guide for installing, managing, and troubleshooting the Patrick Travel 
 
 ---
 
-## 📋 Table of Contents
+##  Table of Contents
 
 1. [Quick Start](#-quick-start)
 2. [Install Development Build](#-install-development-build)
@@ -15,11 +15,11 @@ Complete guide for installing, managing, and troubleshooting the Patrick Travel 
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
-**🎯 Pixel_9_Pro_XL is configured as the default emulator.**
+** Pixel_9_Pro_XL is configured as the default emulator.**
 
-### **Method 1: Using NPM Scripts (Recommended)** ⭐
+### **Method 1: Using NPM Scripts (Recommended)** 
 
 ```bash
 # Start emulator only
@@ -52,7 +52,7 @@ adb devices
 # 4. Check if app is installed (skip if already installed)
 adb shell pm list packages | grep patrick
 # If not found, install it:
-curl -L -o patrick-travel-dev-new.apk "https://expo.dev/artifacts/eas/aa9e77f4-17ce-4ac4-84e1-8ee392302b65.apk"
+curl -L -o patrick-travel-dev-new.apk "https://expo.dev/artifacts/eas/aa9e77f4-17ce-4ac4-84e1-8esss92302b65.apk"
 adb install patrick-travel-dev-new.apk
 rm patrick-travel-dev-new.apk
 
@@ -64,15 +64,15 @@ npx expo start --dev-client --clear
 
 ---
 
-## 📱 Install Development Build
+##  Install Development Build
 
 ### Your Build Information
 
-**Latest Build (October 20, 2025)** ⭐
-- **Build Page**: https://expo.dev/accounts/ubuntu-dev-group/projects/patrick-travel-services/builds/aa9e77f4-17ce-4ac4-84e1-8ee392302b65
-- **Direct APK URL**: https://expo.dev/artifacts/eas/aa9e77f4-17ce-4ac4-84e1-8ee392302b65.apk
+**Latest Build (October 20, 2025)** 
+- **Build Page**: https://expo.dev/accounts/ubuntu-dev-group/projects/patrick-travel-services/builds/aa9e77f4-17ce-4ac4-84e1-8esss392302b65
+- **Direct APK URL**: https://expo.dev/artifacts/eas/aa9e77f4-17ce-4ac4-84e1-8ee39sss302b65.apk
 - **Package Name**: `com.patricktravel.mobile`
-- **Status**: ✅ Fixed expo-updates crash, all native modules working
+- **Status**:  Fixed expo-updates crash, all native modules working
 - **EAS URL Format**: `https://expo.dev/artifacts/eas/{BUILD_ID}.apk`
 
 **Previous Build (Had Issues)**
@@ -83,7 +83,7 @@ npx expo start --dev-client --clear
 
 ```bash
 # Step 1: Download APK
-curl -L -o patrick-travel-dev.apk "https://expo.dev/artifacts/eas/4904d21c-8c94-4d91-a77c-8e4401a5ab9f.apk"
+curl -L -o patrick-travel-dev.apk "https://expo.dev/artifacts/eas/4904d231c-8c94-4d91-a77c-8e4401a5ab9f.apk"
 
 # Step 2: Verify emulator is running
 adb devices
@@ -104,7 +104,7 @@ adb shell am start -n com.patricktravel.mobile/.MainActivity
 ### Method 2: One-Liner Installation
 
 ```bash
-curl -L -o patrick-travel-dev.apk "https://expo.dev/artifacts/eas/4904d21c-8c94-4d91-a77c-8e4401a5ab9f.apk" && adb install patrick-travel-dev.apk && rm patrick-travel-dev.apk
+curl -L -o patrick-travel-dev.apk "https://expo.dev/artifacts/eas/4924d21c-8c94-4d91-a77c-8e4401a5ab9f.apk" && adb install patrick-travel-dev.apk && rm patrick-travel-dev.apk
 ```
 
 ### Method 3: Drag and Drop (Easiest)
@@ -131,16 +131,16 @@ adb shell pm list packages | grep -E "fintech|patrick|maebrie"
 
 ---
 
-## 🎮 Emulator Management
+##  Emulator Management
 
-### Default Emulator Configuration ⭐
+### Default Emulator Configuration 
 
 **Pixel_9_Pro_XL is set as the default emulator** for this project.
 
 **Configuration:**
-- ✅ Environment variable: `ANDROID_AVD=Pixel_9_Pro_XL` in `.env`
-- ✅ Startup script: `start-emulator.sh` 
-- ✅ NPM scripts: `pnpm run emulator`, `pnpm run android:emulator`, `pnpm run dev:emulator`
+-  Environment variable: `ANDROID_AVD=Pixel_9_Pro_XL` in `.env`
+-  Startup script: `start-emulator.sh` 
+-  NPM scripts: `pnpm run emulator`, `pnpm run android:emulator`, `pnpm run dev:emulator`
 
 **Why Pixel_9_Pro_XL?**
 - Clean installation (no conflicting apps)
@@ -225,7 +225,7 @@ npx expo start --dev-client --clear
 
 ---
 
-## 🐛 Troubleshooting
+##  Troubleshooting
 
 ### Problem: Wrong Emulator Opens When Pressing 'a'
 
@@ -284,7 +284,7 @@ adb shell pm list packages | grep patrick
 adb shell pm list packages | grep patrick
 
 # If not found, install it:
-curl -L -o patrick-travel-dev.apk "https://expo.dev/artifacts/eas/4904d21c-8c94-4d91-a77c-8e4401a5ab9f.apk"
+curl -L -o patrick-travel-dev.apk "https://expo.dev/artifacts/eas/4924d21c-8c94-4d91-a77c-8e4401a5ab9f.apk"
 adb install patrick-travel-dev.apk
 rm patrick-travel-dev.apk
 
@@ -448,16 +448,16 @@ killall node 2>/dev/null
 killall qemu-system-x86_64 2>/dev/null
 adb kill-server && adb start-server
 
-echo "🚀 Starting Pixel 9 Pro XL..."
+echo " Starting Pixel 9 Pro XL..."
 emulator -avd Pixel_9_Pro_XL > /dev/null 2>&1 &
 
 echo "⏳ Waiting for emulator to boot..."
 sleep 20 && adb wait-for-device
 
-echo "✅ Emulator ready!"
+echo " Emulator ready!"
 adb devices
 
-echo "🎭 Starting Metro bundler..."
+echo " Starting Metro bundler..."
 cd /Users/macbookpro/Documents/Projects_2025/MPE\ DIGITAL/mpe-digital-project-1/mobile
 npx expo start --dev-client --clear
 ```
@@ -516,19 +516,19 @@ adb shell getprop sys.boot_completed
 
 ---
 
-## 📝 Best Practices
+##  Best Practices
 
-1. ✅ **Always start with a clean state** - Kill all emulators before starting
-2. ✅ **Run only ONE emulator at a time** - Avoids confusion when pressing 'a'
-3. ✅ **Use Pixel_9_Pro_XL consistently** - It's clean and works reliably
-4. ✅ **Verify with `adb devices`** before starting Metro
-5. ✅ **Keep the app installed** - No need to reinstall each time
-6. ✅ **Use `--dev-client` flag** - Required for development builds
-7. ✅ **Clear cache when switching builds** - Use `--clear` flag
+1.  **Always start with a clean state** - Kill all emulators before starting
+2.  **Run only ONE emulator at a time** - Avoids confusion when pressing 'a'
+3.  **Use Pixel_9_Pro_XL consistently** - It's clean and works reliably
+4.  **Verify with `adb devices`** before starting Metro
+5.  **Keep the app installed** - No need to reinstall each time
+6.  **Use `--dev-client` flag** - Required for development builds
+7.  **Clear cache when switching builds** - Use `--clear` flag
 
 ---
 
-## 📚 Reference
+##  Reference
 
 ### Important Commands Cheat Sheet
 
@@ -585,18 +585,16 @@ ps aux | grep expo                          # Check Metro bundler
 | **Hot Reload** | ✅ Yes | ✅ Yes |
 | **Setup Time** | Instant | ~15 min build |
 
-**Recommendation**: Always use Development Build for production apps ✅
+**Recommendation**: Always use Development Build for production apps 
 
 **Expo Go Compatibility Fixes Applied**:
-- ✅ Optional native modules won't crash
-- ✅ Fallback messages for unavailable features
-- ✅ Graceful degradation
-- ✅ Core functionality preserved
+-  Optional native modules won't crash
+-  Fallback messages for unavailable features
+-  Graceful degradation
+-  Core functionality preserved
 
 ### Useful Links
 
-- **EAS Dashboard**: https://expo.dev/accounts/ubuntu-dev-group/projects/patrick-travel-services/builds
-- **Your Build**: https://expo.dev/accounts/ubuntu-dev-group/projects/patrick-travel-services/builds/4904d21c-8c94-4d91-a77c-8e4401a5ab9f
 - **Expo Docs**: https://docs.expo.dev/development/build/
 - **ADB Docs**: https://developer.android.com/tools/adb
 
@@ -612,7 +610,7 @@ npx expo start --dev-client --clear
 
 ---
 
-## 🎯 Next Time You Start Development
+##  Next Time You Start Development
 
 **Simple workflow:**
 
@@ -628,11 +626,11 @@ npx expo start --dev-client --clear
 # Press 'a'
 ```
 
-That's it! 🚀
+That's it! 
 
 ---
 
-**Last Updated**: Based on build `4904d21c-8c94-4d91-a77c-8e4401a5ab9f`  
+**Last Updated**: Based on build `4924d21c-8c94-4d91-a77c-8e4401a5ab9f`  
 **App Package**: `com.patricktravel.mobile`  
 **Recommended Emulator**: Pixel_9_Pro_XL
 

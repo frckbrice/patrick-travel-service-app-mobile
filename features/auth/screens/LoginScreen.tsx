@@ -26,6 +26,7 @@ import {
 import { useAuthStore } from '../../../stores/auth/authStore';
 import { logger } from '../../../lib/utils/logger';
 import i18n from 'i18next';
+import { Alert } from '../../../lib/utils/alert';
 
 
 export default function LoginScreen() {
@@ -123,8 +124,7 @@ export default function LoginScreen() {
 
     logger.info('Prompting biometric enable', { email });
 
-    // Show native alert using React Native's Alert
-    const { Alert } = require('react-native');
+    // Show custom alert
     Alert.alert(
       t('settings.enableBiometric'),
       `Enable ${biometricType} for faster login?`,
@@ -164,6 +164,15 @@ export default function LoginScreen() {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Company Logo */}
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
+
         <View style={styles.header}>
           <Text variant="headlineLarge" style={styles.title}>
             {t('auth.welcomeBack')}
@@ -336,6 +345,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: SPACING.lg,
     justifyContent: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+    marginTop: SPACING.md,
+  },
+  logo: {
+    width: 120,
+    height: 120,
   },
   header: {
     marginBottom: SPACING.xl,

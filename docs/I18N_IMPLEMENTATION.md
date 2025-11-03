@@ -22,6 +22,7 @@ Both English and French translation files have been fully updated with comprehen
 10. **help** - FAQ and contact support
 11. **onboarding** - Onboarding carousel
 12. **errors** - Error messages
+13. **offline** - Offline mode and sync messages (NEW)
 
 ## 📝 How to Use Translations in Screens
 
@@ -239,7 +240,71 @@ i18n.changeLanguage('en'); // English
 
 ---
 
+## 🌐 Offline Mode Translations (October 26, 2025)
+
+### Added Translation Keys
+
+#### English Translations (`lib/i18n/locales/en.json`)
+Added new offline section with 9 translation keys:
+- `offlineMode`: "Offline Mode"
+- `connectionRestored`: "Connection Restored"
+- `youAreOffline`: "You are offline"
+- `changesWillSync`: "Changes will sync when connection is restored"
+- `youAreBackOnline`: "You are back online. Syncing data..."
+- `syncFailed`: "Sync Failed"
+- `failedToSync`: "Failed to sync {{operation}} {{url}} after {{attempts}} attempts"
+- `syncingData`: "Syncing data..."
+- `cacheCleared`: "Cache cleared successfully"
+- `noCachedData`: "No cached data available and offline"
+
+#### French Translations (`lib/i18n/locales/fr.json`)
+Complete French translations:
+- `offlineMode`: "Mode hors ligne"
+- `connectionRestored`: "Connexion restaurée"
+- `youAreOffline`: "Vous êtes hors ligne"
+- `changesWillSync`: "Les modifications seront synchronisées lorsque la connexion sera rétablie"
+- `youAreBackOnline`: "Vous êtes de nouveau en ligne. Synchronisation des données..."
+- `syncFailed`: "Échec de la synchronisation"
+- `failedToSync`: "Échec de la synchronisation {{operation}} {{url}} après {{attempts}} tentatives"
+- `syncingData`: "Synchronisation des données..."
+- `cacheCleared`: "Cache vidé avec succès"
+- `noCachedData`: "Aucune donnée en cache disponible et hors ligne"
+
+### Usage Examples
+
+#### Network Status Messages
+```typescript
+// Connection restored
+toast.success({
+  title: t('offline.connectionRestored'),
+  message: t('offline.youAreBackOnline'),
+});
+
+// Went offline
+toast.warning({
+  title: t('offline.offlineMode'),
+  message: t('offline.changesWillSync'),
+});
+```
+
+#### Sync Failure with Dynamic Parameters
+```typescript
+toast.error({
+  title: t('offline.syncFailed'),
+  message: t('offline.failedToSync', { 
+    operation: 'POST',
+    url: '/api/cases',
+    attempts: 3
+  }),
+});
+```
+
+---
+
 **Status**: Translation files complete ✅  
 **Next Step**: Apply to all screens (pattern provided above)
 **Estimated Time**: ~2-3 hours to update all 20+ screens
+
+**Last Updated:** 26 October 2025  
+**Maintained by:** Development Team
 

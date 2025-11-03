@@ -1,13 +1,9 @@
 // Firebase configuration
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import {
-  getAuth,
-  initializeAuth,
-  getReactNativePersistence,
-} from 'firebase/auth';
+import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
   apiKey: Constants.expoConfig?.extra?.firebaseApiKey,
@@ -25,6 +21,7 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
     hasApiKey: !!firebaseConfig.apiKey,
     hasProjectId: !!firebaseConfig.projectId,
     hasAuthDomain: !!firebaseConfig.authDomain,
+    hasMessagingSenderId: !!firebaseConfig.messagingSenderId,
   });
 }
 
@@ -34,14 +31,28 @@ let database: ReturnType<typeof getDatabase>;
 
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
+  // Initialize Auth with AsyncStorage persistence for React Native
+  // This ensures auth state persists between app sessions
+  try {
+    auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch (error: any) {
+    // If auth already initialized (e.g., hot reload), use getAuth instead
+    if (error.code === 'auth/already-initialized') {
+      auth = getAuth(app);
+    } else {
+      throw error;
+    }
+  }
   database = getDatabase(app);
 } else {
   app = getApps()[0];
   auth = getAuth(app);
   database = getDatabase(app);
 }
+
+// Export messaging sender ID for FCM integration
+export const messagingSenderId = firebaseConfig.messagingSenderId;
 
 export { app, auth, database };

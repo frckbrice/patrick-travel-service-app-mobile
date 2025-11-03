@@ -15,6 +15,7 @@ export const useAuth = () => {
     login: authStore.login,
     register: authStore.register,
     logout: authStore.logout,
+    deleteAccount: authStore.deleteAccount,
     refreshAuth: authStore.refreshAuth,
     clearError: authStore.clearError,
     updateUser: authStore.updateUser,

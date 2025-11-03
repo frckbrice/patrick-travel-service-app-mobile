@@ -13,7 +13,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   splash: {
     image: './assets/splash-icon.png',
     resizeMode: 'contain',
-    backgroundColor: '#0066CC',
+    backgroundColor: '#FFFFFF', // Modern clean white background for maximum logo visibility
   },
   assetBundlePatterns: ['**/*'],
   ios: {
@@ -27,18 +27,23 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#0066CC',
+      backgroundColor: '#FFFFFF', // Match splash screen for consistency
     },
+    googleServicesFile: './google-services.json',
     package: 'com.unidov.patricktravel',
     permissions: [
       'android.permission.CAMERA',
       'android.permission.READ_EXTERNAL_STORAGE',
       'android.permission.WRITE_EXTERNAL_STORAGE',
+      'android.permission.POST_NOTIFICATIONS', // Required for FCM on Android 13+
+      'android.permission.RECEIVE_BOOT_COMPLETED', // For notification scheduling
+      'com.google.android.c2dm.permission.RECEIVE', // FCM permission
     ],
   },
   web: {
     favicon: './assets/favicon.png',
     bundler: 'metro',
+    // output: 'server', // Required for API routes support (app/api/*.ts)
   },
   scheme: 'patrick-travel',
   plugins: [
@@ -52,6 +57,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         icon: './assets/icon.png',
         color: '#0066CC',
+        sound: true,
+        defaultChannel: 'default',
       },
     ],
   ],
@@ -59,7 +66,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     typedRoutes: true,
   },
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api',
+    // Always prefer explicit PROD URL if present, otherwise fall back to DEV URL
+    // Default to the production API if nothing is set
+    apiUrl:
+      (process.env.EXPO_PUBLIC_API_PROD_URL || process.env.EXPO_PUBLIC_API_URL)
+      || 'https://patrick-travel-services-web-app.vercel.app/api',
     firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
     firebaseAuthDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
     firebaseProjectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
@@ -71,8 +82,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
     googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     googleAndroidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    uploadthingApiKey: process.env.EXPO_PUBLIC_UPLOADTHING_API_KEY,
-    uploadthingAppId: process.env.EXPO_PUBLIC_UPLOADTHING_APP_ID,
     eas: {
       projectId: '2c78e03f-b77b-4a17-afde-9d7cd2171610',
     },

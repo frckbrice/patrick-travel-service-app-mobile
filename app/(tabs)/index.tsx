@@ -1,506 +1,5 @@
-// import React, { useEffect, useState } from 'react';
-// import {
-//   View,
-//   StyleSheet,
-//   ScrollView,
-//   RefreshControl,
-//   Text,
-//   TouchableOpacity,
-//   Dimensions,
-//   Platform,
-// } from 'react-native';
-// import { LinearGradient } from 'expo-linear-gradient';
-// import { useRouter } from 'expo-router';
-// import { useTranslation } from 'react-i18next';
-// import { MaterialCommunityIcons } from '@expo/vector-icons';
-// import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-// import { ModernHeader } from '../../components/ui/ModernHeader';
-// import { TouchDetector } from '../../components/ui/TouchDetector';
-// import { userApi } from '../../lib/api/user.api';
-// import { useAuthStore } from '../../stores/auth/authStore';
-// import { DashboardStats } from '../../lib/types';
-// import { SPACING, COLORS as STATIC_COLORS } from '../../lib/constants';
-// import { useThemeColors } from '../../lib/theme/ThemeContext';
 
-// const { width } = Dimensions.get('window');
-// const CARD_WIDTH = (width - SPACING.lg * 3) / 2;
-
-// export default function HomeScreen() {
-//   const { t } = useTranslation();
-//   const router = useRouter();
-//   const user = useAuthStore((state) => state.user);
-//   const COLORS = useThemeColors();
-//   const [stats, setStats] = useState<DashboardStats>({
-//     totalCases: 0,
-//     activeCases: 0,
-//     pendingDocuments: 0,
-//     unreadMessages: 0,
-//   });
-//   const [isLoading, setIsLoading] = useState(false);
-
-//   const fetchDashboardStats = async () => {
-//     setIsLoading(true);
-//     const response = await userApi.getDashboardStats();
-//     if (response.success && response.data) {
-//       // Handle both simple and detailed dashboard stats response
-//       const data = response.data;
-//       setStats({
-//         totalCases: (data as any).cases?.total || data.totalCases || 0,
-//         activeCases: (data as any).cases?.active || data.activeCases || 0,
-//         pendingDocuments:
-//           (data as any).documents?.pending || data.pendingDocuments || 0,
-//         unreadMessages:
-//           (data as any).notifications?.unread || data.unreadMessages || 0,
-//       });
-//     }
-//     setIsLoading(false);
-//   };
-
-//   useEffect(() => {
-//     fetchDashboardStats();
-//   }, []);
-
-//   const getGreeting = () => {
-//     const hour = new Date().getHours();
-//     if (hour < 12) return t('dashboard.goodMorning') || 'Good Morning';
-//     if (hour < 18) return t('dashboard.goodAfternoon') || 'Good Afternoon';
-//     return t('dashboard.goodEvening') || 'Good Evening';
-//   };
-
-
-
-//   return (
-//     <TouchDetector>
-//       <View style={styles.container}>
-//         {/* Gradient Header like Profile Page */}
-//         <ModernHeader
-//           variant="gradient"
-//           gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
-//           title={getGreeting()}
-//           subtitle={`Welcome back, ${user?.firstName}`}
-//           showNotificationButton
-//           notificationCount={stats.unreadMessages}
-//           onNotificationPress={() => router.push('/(tabs)/notifications')}
-//           showProfileButton
-//           onProfilePress={() => router.push('/profile')}
-//           rightActions={
-//             <TouchableOpacity
-//               style={styles.headerAction}
-//               onPress={() => router.push('/profile/settings')}
-//             >
-//               <MaterialCommunityIcons
-//                 name="cog"
-//                 size={24}
-//                 color="#FFF"
-//               />
-//             </TouchableOpacity>
-//           }
-//         />
-
-//         <ScrollView
-//           style={{ flex: 1 }}
-//           contentContainerStyle={styles.scrollContent}
-//           showsVerticalScrollIndicator={false}
-//           refreshControl={
-//             <RefreshControl
-//               refreshing={isLoading}
-//               onRefresh={fetchDashboardStats}
-//               tintColor={COLORS.primary}
-//               colors={[COLORS.primary]}
-//             />
-//           }
-//         >
-//           {/* Stats Overview Cards - Clean Design */}
-//           <View style={styles.statsSection}>
-//             <View style={styles.statsGrid}>
-//               <Animated.View entering={FadeInDown.delay(100).springify()}>
-//                 <TouchableOpacity 
-//                   onPress={() => router.push('/(tabs)/cases')}
-//                   style={styles.statCard}
-//                   activeOpacity={0.7}
-//                 >
-//                   <View style={styles.statCardContent}>
-//                     <View style={styles.statCardHeader}>
-//                       <View style={[styles.statIconContainer, { backgroundColor: COLORS.primary + '15' }]}>
-//                         <MaterialCommunityIcons
-//                           name="briefcase"
-//                           size={24}
-//                           color={COLORS.primary}
-//                         />
-//                       </View>
-//                       <MaterialCommunityIcons
-//                         name="chevron-right"
-//                         size={20}
-//                         color={COLORS.textSecondary}
-//                       />
-//                     </View>
-//                     <View style={styles.statCardBody}>
-//                       <Text style={[styles.statValue, { color: COLORS.text }]}>
-//                         {stats.totalCases}
-//                       </Text>
-//                       <Text style={[styles.statTitle, { color: COLORS.textSecondary }]}>
-//                         {t('dashboard.totalCases') || 'Total Cases'}
-//                       </Text>
-//                     </View>
-//                   </View>
-//                 </TouchableOpacity>
-//               </Animated.View>
-
-//               <Animated.View entering={FadeInDown.delay(150).springify()}>
-//                 <TouchableOpacity 
-//                   onPress={() => router.push('/(tabs)/cases')}
-//                   style={styles.statCard}
-//                   activeOpacity={0.7}
-//                 >
-//                   <View style={styles.statCardContent}>
-//                     <View style={styles.statCardHeader}>
-//                       <View style={[styles.statIconContainer, { backgroundColor: COLORS.success + '15' }]}>
-//                         <MaterialCommunityIcons
-//                           name="briefcase-check"
-//                           size={24}
-//                           color={COLORS.success}
-//                         />
-//                       </View>
-//                       <MaterialCommunityIcons
-//                         name="chevron-right"
-//                         size={20}
-//                         color={COLORS.textSecondary}
-//                       />
-//                     </View>
-//                     <View style={styles.statCardBody}>
-//                       <Text style={[styles.statValue, { color: COLORS.text }]}>
-//                         {stats.activeCases}
-//                       </Text>
-//                       <Text style={[styles.statTitle, { color: COLORS.textSecondary }]}>
-//                         {t('dashboard.activeCases') || 'Active Cases'}
-//                       </Text>
-//                     </View>
-//                   </View>
-//                 </TouchableOpacity>
-//               </Animated.View>
-//             </View>
-
-//             <View style={styles.statsGrid}>
-//               <Animated.View entering={FadeInDown.delay(200).springify()}>
-//                 <TouchableOpacity 
-//                   onPress={() => router.push('/(tabs)/documents')}
-//                   style={styles.statCard}
-//                   activeOpacity={0.7}
-//                 >
-//                   <View style={styles.statCardContent}>
-//                     <View style={styles.statCardHeader}>
-//                       <View style={[styles.statIconContainer, { backgroundColor: COLORS.warning + '15' }]}>
-//                         <MaterialCommunityIcons
-//                           name="file-document-multiple"
-//                           size={24}
-//                           color={COLORS.warning}
-//                         />
-//                       </View>
-//                       <MaterialCommunityIcons
-//                         name="chevron-right"
-//                         size={20}
-//                         color={COLORS.textSecondary}
-//                       />
-//                     </View>
-//                     <View style={styles.statCardBody}>
-//                       <Text style={[styles.statValue, { color: COLORS.text }]}>
-//                         {stats.pendingDocuments}
-//                       </Text>
-//                       <Text style={[styles.statTitle, { color: COLORS.textSecondary }]}>
-//                         {t('dashboard.documents') || 'Documents'}
-//                       </Text>
-//                     </View>
-//                   </View>
-//                 </TouchableOpacity>
-//               </Animated.View>
-
-//               <Animated.View entering={FadeInDown.delay(250).springify()}>
-//                 <TouchableOpacity 
-//                   onPress={() => router.push('/(tabs)/messages')}
-//                   style={styles.statCard}
-//                   activeOpacity={0.7}
-//                 >
-//                   <View style={styles.statCardContent}>
-//                     <View style={styles.statCardHeader}>
-//                       <View style={[styles.statIconContainer, { backgroundColor: COLORS.secondary + '15' }]}>
-//                         <MaterialCommunityIcons
-//                           name="message-text"
-//                           size={24}
-//                           color={COLORS.secondary}
-//                         />
-//                       </View>
-//                       <MaterialCommunityIcons
-//                         name="chevron-right"
-//                         size={20}
-//                         color={COLORS.textSecondary}
-//                       />
-//                     </View>
-//                     <View style={styles.statCardBody}>
-//                       <Text style={[styles.statValue, { color: COLORS.text }]}>
-//                         {stats.unreadMessages}
-//                       </Text>
-//                       <Text style={[styles.statTitle, { color: COLORS.textSecondary }]}>
-//                         {t('dashboard.messages') || 'Messages'}
-//                       </Text>
-//                     </View>
-//                   </View>
-//                 </TouchableOpacity>
-//               </Animated.View>
-//             </View>
-//           </View>
-
-//           {/* Quick Actions Section */}
-//           <View style={styles.actionsSection}>
-//             <Text style={[styles.sectionTitle, { color: COLORS.text }]}>
-//               {t('dashboard.quickActions')}
-//             </Text>
-
-//             <Animated.View entering={FadeInUp.delay(300).springify()}>
-//               <TouchableOpacity 
-//                 onPress={() => router.push('/case/new')}
-//                 style={styles.actionButton}
-//                 activeOpacity={0.8}
-//               >
-//                 <View style={styles.actionButtonContent}>
-//                   <View style={[styles.actionIconContainer, { backgroundColor: COLORS.primary }]}>
-//                     <MaterialCommunityIcons
-//                       name="plus-circle"
-//                       size={24}
-//                       color="#FFF"
-//                     />
-//                   </View>
-//                   <Text style={[styles.actionButtonText, { color: COLORS.text }]}>
-//                     {t('dashboard.newCase') || 'Submit New Case'}
-//                   </Text>
-//                   <MaterialCommunityIcons
-//                     name="chevron-right"
-//                     size={24}
-//                     color={COLORS.textSecondary}
-//                   />
-//                 </View>
-//               </TouchableOpacity>
-//             </Animated.View>
-
-//             <Animated.View entering={FadeInUp.delay(350).springify()}>
-//               <TouchableOpacity 
-//                 onPress={() => router.push('/document/upload')}
-//                 style={styles.actionButton}
-//                 activeOpacity={0.8}
-//               >
-//                 <View style={styles.actionButtonContent}>
-//                   <View style={[styles.actionIconContainer, { backgroundColor: COLORS.secondary }]}>
-//                     <MaterialCommunityIcons
-//                       name="cloud-upload"
-//                       size={24}
-//                       color="#FFF"
-//                     />
-//                   </View>
-//                   <Text style={[styles.actionButtonText, { color: COLORS.text }]}>
-//                     {t('dashboard.uploadDocument') || 'Upload Document'}
-//                   </Text>
-//                   <MaterialCommunityIcons
-//                     name="chevron-right"
-//                     size={24}
-//                     color={COLORS.textSecondary}
-//                   />
-//                 </View>
-//               </TouchableOpacity>
-//             </Animated.View>
-
-//             <Animated.View entering={FadeInUp.delay(400).springify()}>
-//               <TouchableOpacity 
-//                 onPress={() => router.push('/help/contact')}
-//                 style={styles.actionButton}
-//                 activeOpacity={0.8}
-//               >
-//                 <View style={styles.actionButtonContent}>
-//                   <View style={[styles.actionIconContainer, { backgroundColor: COLORS.accent }]}>
-//                     <MaterialCommunityIcons
-//                       name="headset"
-//                       size={24}
-//                       color="#FFF"
-//                     />
-//                   </View>
-//                   <Text style={[styles.actionButtonText, { color: COLORS.text }]}>
-//                     {t('dashboard.contactSupport') || 'Contact Support'}
-//                   </Text>
-//                   <MaterialCommunityIcons
-//                     name="chevron-right"
-//                     size={24}
-//                     color={COLORS.textSecondary}
-//                   />
-//                 </View>
-//               </TouchableOpacity>
-//             </Animated.View>
-
-//             <Animated.View entering={FadeInUp.delay(450).springify()}>
-//               <TouchableOpacity 
-//                 onPress={() => router.push('/help/faq')}
-//                 style={styles.actionButton}
-//                 activeOpacity={0.8}
-//               >
-//                 <View style={styles.actionButtonContent}>
-//                   <View style={[styles.actionIconContainer, { backgroundColor: COLORS.info }]}>
-//                     <MaterialCommunityIcons
-//                       name="help-circle"
-//                       size={24}
-//                       color="#FFF"
-//                     />
-//                   </View>
-//                   <Text style={[styles.actionButtonText, { color: COLORS.text }]}>
-//                     {t('dashboard.viewFAQs') || 'View FAQs'}
-//                   </Text>
-//                   <MaterialCommunityIcons
-//                     name="chevron-right"
-//                     size={24}
-//                     color={COLORS.textSecondary}
-//                   />
-//                 </View>
-//               </TouchableOpacity>
-//             </Animated.View>
-
-//             <Animated.View entering={FadeInUp.delay(500).springify()}>
-//               <TouchableOpacity 
-//                 onPress={() => router.push('/templates')}
-//                 style={styles.actionButton}
-//                 activeOpacity={0.8}
-//               >
-//                 <View style={styles.actionButtonContent}>
-//                   <View style={[styles.actionIconContainer, { backgroundColor: COLORS.warning }]}>
-//                     <MaterialCommunityIcons
-//                       name="file-download-outline"
-//                       size={24}
-//                       color="#FFF"
-//                     />
-//                   </View>
-//                   <Text style={[styles.actionButtonText, { color: COLORS.text }]}>
-//                     {t('dashboard.downloadTemplates') || 'Download Templates'}
-//                   </Text>
-//                   <MaterialCommunityIcons
-//                     name="chevron-right"
-//                     size={24}
-//                     color={COLORS.textSecondary}
-//                   />
-//                 </View>
-//               </TouchableOpacity>
-//             </Animated.View>
-//           </View>
-//         </ScrollView>
-//       </View>
-//     </TouchDetector>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     backgroundColor: STATIC_COLORS.background,
-//   },
-//   scrollContent: {
-//     flexGrow: 1,
-//     paddingTop: SPACING.lg,
-//     paddingBottom: Platform.OS === 'ios' ? 100 : 80,
-//   },
-//   // Header Styles
-//   headerAction: {
-//     width: 40,
-//     height: 40,
-//     borderRadius: 20,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//     backgroundColor: 'rgba(255,255,255,0.2)',
-//   },
-//   // Stats Section - Clean Design
-//   statsSection: {
-//     paddingHorizontal: SPACING.lg,
-//     paddingTop: SPACING.lg,
-//   },
-//   statsGrid: {
-//     flexDirection: 'row',
-//     gap: SPACING.md,
-//     marginBottom: SPACING.lg,
-//   },
-//   statCard: {
-//     flex: 1,
-//     borderRadius: 12,
-//     padding: SPACING.lg,
-//     backgroundColor: 'transparent',
-//     borderWidth: 1,
-//     borderColor: STATIC_COLORS.border,
-//   },
-//   statCardContent: {
-//     flex: 1,
-//   },
-//   statCardHeader: {
-//     flexDirection: 'row',
-//     justifyContent: 'space-between',
-//     alignItems: 'center',
-//     marginBottom: SPACING.md,
-//   },
-//   statIconContainer: {
-//     width: 40,
-//     height: 40,
-//     borderRadius: 20,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//   },
-//   statCardBody: {
-//     flex: 1,
-//   },
-//   statValue: {
-//     fontSize: 28,
-//     fontWeight: '700',
-//     marginBottom: 4,
-//     letterSpacing: -0.5,
-//   },
-//   statTitle: {
-//     fontSize: 14,
-//     fontWeight: '500',
-//     opacity: 0.8,
-//   },
-//   // Actions Section - Clean Design
-//   actionsSection: {
-//     paddingHorizontal: SPACING.lg,
-//     paddingTop: SPACING.lg,
-//   },
-//   sectionTitle: {
-//     fontSize: 20,
-//     fontWeight: '600',
-//     marginBottom: SPACING.lg,
-//     color: STATIC_COLORS.text,
-//   },
-//   actionButton: {
-//     borderRadius: 12,
-//     padding: SPACING.lg,
-//     backgroundColor: 'transparent',
-//     borderWidth: 1,
-//     borderColor: STATIC_COLORS.border,
-//     marginBottom: SPACING.md,
-//   },
-//   actionButtonContent: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//   },
-//   actionIconContainer: {
-//     width: 40,
-//     height: 40,
-//     borderRadius: 20,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//     marginRight: SPACING.md,
-//   },
-//   actionButtonText: {
-//     flex: 1,
-//     fontSize: 16,
-//     fontWeight: '500',
-//   },
-// });
-
-
-
-
-
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
@@ -511,24 +10,27 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  DeviceEventEmitter,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { ModernHeader } from '../../components/ui/ModernHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { userApi } from '../../lib/api/user.api';
 import { messagesApi } from '../../lib/api/messages.api';
 import { casesApi } from '../../lib/api/cases.api';
+import { notificationsApi } from '../../lib/api/notifications.api';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { DashboardStats } from '../../lib/types';
 import { SPACING, COLORS as STATIC_COLORS } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
-import { useCaseRequirementGuard } from '../../lib/guards/useCaseRequirementGuard';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { chatService } from '../../lib/services/chat';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { useTabBarContext } from '../../lib/context/TabBarContext';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - SPACING.lg * 3) / 2;
@@ -539,7 +41,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const COLORS = useThemeColors();
-  const { requiresActiveCase } = useCaseRequirementGuard();
+  const scrollProps = useTabBarScroll();
+  const { showTabBar } = useTabBarContext();
   const [stats, setStats] = useState<DashboardStats>({
     totalCases: 0,
     activeCases: 0,
@@ -550,6 +53,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const isFetchingStatsRef = useRef(false);
   const isFetchingUnreadCountsRef = useRef(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchDashboardStats = useCallback(async () => {
     if (isFetchingStatsRef.current) return; // Prevent concurrent calls
@@ -561,17 +65,31 @@ export default function HomeScreen() {
       if (response.success && response.data) {
         // Handle both simple and detailed dashboard stats response
         const data = response.data;
-        setStats({
-          totalCases: (data as any).cases?.total || data.totalCases || 0,
-          activeCases: (data as any).cases?.active || data.activeCases || 0,
-          pendingDocuments:
-            (data as any).documents?.pending || data.pendingDocuments || 0,
-          unreadMessages:
-            (data as any).notifications?.unread || data.unreadMessages || 0,
-        });
+        // Extract values from nested structure or flat structure
+        const statsData = {
+          totalCases: typeof data === 'object' && data !== null
+            ? (data as any).cases?.total ?? (data as any).totalCases ?? 0
+            : 0,
+          activeCases: typeof data === 'object' && data !== null
+            ? (data as any).cases?.active ?? (data as any).activeCases ?? 0
+            : 0,
+          pendingDocuments: typeof data === 'object' && data !== null
+            ? (data as any).documents?.pending ?? (data as any).documents?.total ?? (data as any).pendingDocuments ?? 0
+            : 0,
+          unreadMessages: typeof data === 'object' && data !== null
+            ? (data as any).notifications?.unread ?? (data as any).unreadMessages ?? 0
+            : 0,
+        };
+
+        setStats(statsData);
+        console.log('📊 Dashboard stats loaded:', statsData);
+      } else if (!response.success) {
+        console.warn('⚠️ Dashboard stats API returned error:', response.error);
+        // Keep default values (all zeros)
       }
     } catch (error) {
-      console.error('Failed to fetch dashboard stats:', error);
+      console.error('❌ Failed to fetch dashboard stats:', error);
+      // Keep default values (all zeros) on error
     } finally {
       setIsLoading(false);
       isFetchingStatsRef.current = false;
@@ -579,35 +97,25 @@ export default function HomeScreen() {
   }, []);
 
   const fetchAllUnreadCounts = useCallback(async () => {
-    if (!user?.id || isFetchingUnreadCountsRef.current) return; // Prevent concurrent calls
+    if (!user?.id || isFetchingUnreadCountsRef.current) {
+      console.log('⏸️ Skipping fetchAllUnreadCounts: no user or already fetching');
+      return; // Prevent concurrent calls
+    }
 
     isFetchingUnreadCountsRef.current = true;
+    console.log('🔄 Fetching all unread counts...');
     try {
-      // Fetch only unread emails and chat messages (exclude system notifications)
-      // Reduced limit from 100 to 50 to prevent rate limiting
-      const [emailsCount, casesResponse] = await Promise.all([
-        // Unread emails count
-        messagesApi.getUnreadEmailsCount(),
-        // Get user's cases to check chat messages - reduced limit to prevent rate limiting
-        casesApi.getCases(undefined, 1, 50),
-      ]);
+      // Fetch unread counts for backend notifications
+      // This gives us the total unread notifications from the backend
+      const backendNotificationsCount = await notificationsApi.getUnreadCount();
 
-      // Get case IDs for chat message counting
-      const caseIds = casesResponse.success && casesResponse.data 
-        ? casesResponse.data.map(case_ => case_.id)
-        : [];
+      console.log('📬 Unread notifications count:', backendNotificationsCount);
 
-      // Get total unread chat messages across all cases
-      const chatMessagesCount = caseIds.length > 0
-        ? await chatService.getTotalUnreadCount(user.id, caseIds)
-        : 0;
-
-      // Only count unread emails + unread chat messages (exclude system notifications)
-      const total = emailsCount + chatMessagesCount;
-      
-      setTotalUnreadCount(total);
+      // Set the total unread count (backend notifications only)
+      // This matches what the notifications screen shows
+      setTotalUnreadCount(backendNotificationsCount);
     } catch (error) {
-      console.error('Failed to fetch unread counts:', error);
+      console.error('❌ Failed to fetch unread counts:', error);
       // Fallback to 0 if error occurs
       setTotalUnreadCount(0);
     } finally {
@@ -617,6 +125,12 @@ export default function HomeScreen() {
 
   useEffect(() => {
     fetchDashboardStats();
+    // Show tab bar when home page loads (like documents page)
+    // Use a small delay to ensure it runs after layout effects
+    const timer = setTimeout(() => {
+      showTabBar();
+    }, 20);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
@@ -642,6 +156,33 @@ export default function HomeScreen() {
     }, [user?.id, fetchAllUnreadCounts, fetchDashboardStats])
   );
 
+  // Subscribe to notification/email read events to update counts instantly
+  useEffect(() => {
+    const scheduleRefresh = () => {
+      console.log('📬 Event received: Schedule refresh for unread counts');
+      if (refreshTimerRef.current) return; // debounce bursts
+      refreshTimerRef.current = setTimeout(() => {
+        refreshTimerRef.current = null;
+        console.log('📬 Executing scheduled refresh for unread counts');
+        fetchAllUnreadCounts();
+      }, 250);
+    };
+
+    const sub1 = DeviceEventEmitter.addListener('notifications:read', scheduleRefresh);
+    const sub2 = DeviceEventEmitter.addListener('notifications:markAllRead', scheduleRefresh);
+    const sub3 = DeviceEventEmitter.addListener('email:read', scheduleRefresh);
+
+    return () => {
+      sub1.remove();
+      sub2.remove();
+      sub3.remove();
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [fetchAllUnreadCounts]);
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return t('dashboard.greetings.morning') || 'Good Morning';
@@ -649,20 +190,58 @@ export default function HomeScreen() {
     return t('dashboard.greetings.evening') || 'Good Evening';
   };
 
-  // Handle upload navigation with case requirement
+  // Handle upload navigation - navigate directly without case requirement check
   const handleUploadPress = useCallback(() => {
-    if (requiresActiveCase('upload documents')) {
-      router.push('/document/upload');
-    }
-  }, [requiresActiveCase, router]);
+    router.push('/document/upload');
+  }, [router]);
+
+  // Dynamic theme-aware styles
+  const dynamicStyles = useMemo(() => ({
+    container: {
+      ...styles.container,
+      backgroundColor: COLORS.background,
+    },
+    statCard: {
+      ...styles.statCard,
+      backgroundColor: COLORS.surface,
+    },
+    statValue: {
+      ...styles.statValue,
+      color: COLORS.text,
+    },
+    statTitle: {
+      ...styles.statTitle,
+      color: COLORS.textSecondary,
+    },
+    sectionTitle: {
+      ...styles.sectionTitle,
+      color: COLORS.text,
+    },
+    actionGroup: {
+      ...styles.actionGroup,
+      backgroundColor: COLORS.surface,
+    },
+    actionGroupTitle: {
+      ...styles.actionGroupTitle,
+      color: COLORS.text,
+    },
+    actionButton: {
+      ...styles.actionButton,
+      borderBottomColor: COLORS.border,
+    },
+    actionButtonText: {
+      ...styles.actionButtonText,
+      color: COLORS.text,
+    },
+  }), [COLORS]);
 
   return (
     <TouchDetector>
-      <View style={styles.container}>
+      <View style={[dynamicStyles.container, { backgroundColor: COLORS.background, paddingBottom: SPACING.lg }]}>
         {/* Gradient Header like Profile Page */}
-        <ModernHeader
+        <ThemeAwareHeader
           variant="gradient"
-          gradientColors={[COLORS.primary, '#7A9BB8', '#94B5A0']}
+          gradientColors={[COLORS.primary, COLORS.secondary, COLORS.accent]}
           title={getGreeting()}
           subtitle={t('dashboard.welcomeBack', { name: user?.firstName || '' }) || `Welcome back, ${user?.firstName || ''}`}
           showNotificationButton
@@ -688,6 +267,8 @@ export default function HomeScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          onScroll={scrollProps.onScroll}
+          scrollEventThrottle={scrollProps.scrollEventThrottle}
           refreshControl={
             <RefreshControl
               refreshing={isLoading}
@@ -707,12 +288,12 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(100).springify()} style={{ flex: 1 }}>
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/cases')}
-                  style={styles.statCard}
+                  style={dynamicStyles.statCard}
                   activeOpacity={0.7}
                 >
                   <View style={styles.statCardContent}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statIconContainer, { backgroundColor: '#5B8BA8' }]}>
+                      <View style={[styles.statIconContainer, { backgroundColor: COLORS.primary }]}>
                         <MaterialCommunityIcons
                           name="briefcase"
                           size={26}
@@ -721,11 +302,14 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <View style={styles.statCardBody}>
-                      <Text style={styles.statValue}>
+                      <Text style={dynamicStyles.statValue}>
                         {stats.totalCases}
                       </Text>
-                      <Text style={styles.statTitle}>
+                      <Text style={dynamicStyles.statTitle}>
                         {t('dashboard.stats.totalCases') || 'Total Cases'}
+                      </Text>
+                      <Text style={[styles.statMeta, { color: COLORS.textSecondary }]}>
+                        {t('dashboard.stats.activeLabel', { count: stats.activeCases }) || `Active: ${stats.activeCases}`}
                       </Text>
                     </View>
                   </View>
@@ -735,12 +319,12 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(150).springify()} style={{ flex: 1 }}>
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/cases')}
-                  style={styles.statCard}
+                  style={dynamicStyles.statCard}
                   activeOpacity={0.7}
                 >
                   <View style={styles.statCardContent}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statIconContainer, { backgroundColor: '#7ABD96' }]}>
+                      <View style={[styles.statIconContainer, { backgroundColor: COLORS.success }]}>
                         <MaterialCommunityIcons
                           name="briefcase-check"
                           size={26}
@@ -749,11 +333,14 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <View style={styles.statCardBody}>
-                      <Text style={styles.statValue}>
+                      <Text style={dynamicStyles.statValue}>
                         {stats.activeCases}
                       </Text>
-                      <Text style={styles.statTitle}>
+                      <Text style={dynamicStyles.statTitle}>
                         {t('dashboard.stats.activeCases') || 'Active'}
+                      </Text>
+                      <Text style={[styles.statMeta, { color: COLORS.textSecondary }]}>
+                        {t('dashboard.stats.totalLabel', { count: stats.totalCases }) || `Total: ${stats.totalCases}`}
                       </Text>
                     </View>
                   </View>
@@ -765,12 +352,12 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(200).springify()} style={{ flex: 1 }}>
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/documents')}
-                  style={styles.statCard}
+                  style={dynamicStyles.statCard}
                   activeOpacity={0.7}
                 >
                   <View style={styles.statCardContent}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statIconContainer, { backgroundColor: '#F4A460' }]}>
+                      <View style={[styles.statIconContainer, { backgroundColor: COLORS.warning }]}>
                         <MaterialCommunityIcons
                           name="file-document-multiple"
                           size={26}
@@ -779,11 +366,14 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <View style={styles.statCardBody}>
-                      <Text style={styles.statValue}>
+                      <Text style={dynamicStyles.statValue}>
                         {stats.pendingDocuments}
                       </Text>
-                      <Text style={styles.statTitle}>
+                      <Text style={dynamicStyles.statTitle}>
                         {t('dashboard.stats.documents') || 'Documents'}
+                      </Text>
+                      <Text style={[styles.statMeta, { color: COLORS.textSecondary }]}>
+                        {t('dashboard.stats.pendingLabel', { count: stats.pendingDocuments }) || 'Pending review'}
                       </Text>
                     </View>
                   </View>
@@ -793,12 +383,12 @@ export default function HomeScreen() {
               <Animated.View entering={FadeInDown.delay(250).springify()} style={{ flex: 1 }}>
                 <TouchableOpacity 
                   onPress={() => router.push('/(tabs)/notifications')}
-                  style={styles.statCard}
+                  style={dynamicStyles.statCard}
                   activeOpacity={0.7}
                 >
                   <View style={styles.statCardContent}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statIconContainer, { backgroundColor: '#7A9BB8' }]}>
+                      <View style={[styles.statIconContainer, { backgroundColor: COLORS.info }]}>
                         <MaterialCommunityIcons
                           name="bell"
                           size={26}
@@ -807,10 +397,10 @@ export default function HomeScreen() {
                       </View>
                     </View>
                     <View style={styles.statCardBody}>
-                      <Text style={styles.statValue}>
+                      <Text style={dynamicStyles.statValue}>
                         {totalUnreadCount}
                       </Text>
-                      <Text style={styles.statTitle}>
+                      <Text style={dynamicStyles.statTitle}>
                         {t('dashboard.stats.notifications') || 'Notifications'}
                       </Text>
                     </View>
@@ -822,62 +412,76 @@ export default function HomeScreen() {
 
           {/* Quick Actions Section - Grouped */}
           <View style={styles.actionsSection}>
-            <Text style={styles.sectionTitle}>
+            <Text style={dynamicStyles.sectionTitle}>
               {t('dashboard.actions.title') || 'Quick Actions'}
             </Text>
 
             {/* Case Management Group */}
             <Animated.View entering={FadeInUp.delay(300).springify()}>
-              <View style={styles.actionGroup}>
-                <Text style={styles.actionGroupTitle}>
+              <View style={dynamicStyles.actionGroup}>
+                <Text style={dynamicStyles.actionGroupTitle}>
                   {t('dashboard.actions.caseManagement') || 'Case Management'}
                 </Text>
                 
                 <TouchableOpacity 
                   onPress={() => router.push('/case/new')}
-                  style={styles.actionButton}
-                  activeOpacity={0.6}
+                  style={dynamicStyles.actionButton}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#5B8BA8' }]}>
+                    <LinearGradient
+                      colors={[COLORS.primary, COLORS.primary]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.actionIconContainer}
+                    >
                       <MaterialCommunityIcons
                         name="plus-circle-outline"
-                        size={24}
+                        size={22}
                         color="#FFFFFF"
                       />
-                    </View>
-                    <Text style={styles.actionButtonText}>
+                    </LinearGradient>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.newCase') || 'Submit New Case'}
                     </Text>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={22}
-                      color="#C5CDD4"
-                    />
+                    <View style={[styles.actionChevron, { backgroundColor: COLORS.background }]}>
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={18}
+                        color={COLORS.textSecondary}
+                      />
+                    </View>
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
                   onPress={handleUploadPress}
-                  style={[styles.actionButton, styles.actionButtonLast]}
-                  activeOpacity={0.6}
+                  style={[dynamicStyles.actionButton, styles.actionButtonLast]}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#7A9BB8' }]}>
+                    <LinearGradient
+                      colors={[COLORS.accent, COLORS.accent]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.actionIconContainer}
+                    >
                       <MaterialCommunityIcons
                         name="cloud-upload-outline"
-                        size={24}
+                        size={22}
                         color="#FFFFFF"
                       />
-                    </View>
-                    <Text style={styles.actionButtonText}>
+                    </LinearGradient>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.uploadDocument') || 'Upload Document'}
                     </Text>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={22}
-                      color="#C5CDD4"
-                    />
+                    <View style={[styles.actionChevron, { backgroundColor: COLORS.background }]}>
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={18}
+                        color={COLORS.textSecondary}
+                      />
+                    </View>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -885,80 +489,101 @@ export default function HomeScreen() {
 
             {/* Support & Resources Group */}
             <Animated.View entering={FadeInUp.delay(350).springify()}>
-              <View style={styles.actionGroup}>
-                <Text style={styles.actionGroupTitle}>
+              <View style={dynamicStyles.actionGroup}>
+                <Text style={dynamicStyles.actionGroupTitle}>
                   {t('dashboard.actions.supportResources') || 'Support & Resources'}
                 </Text>
                 
                 <TouchableOpacity 
                   onPress={() => router.push('/help/contact')}
-                  style={styles.actionButton}
-                  activeOpacity={0.6}
+                  style={dynamicStyles.actionButton}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#94B5A0' }]}>
+                    <LinearGradient
+                      colors={[COLORS.secondary, COLORS.secondary]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.actionIconContainer}
+                    >
                       <MaterialCommunityIcons
                         name="headset"
-                        size={24}
+                        size={22}
                         color="#FFFFFF"
                       />
-                    </View>
-                    <Text style={styles.actionButtonText}>
+                    </LinearGradient>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.contactSupport') || 'Contact Support'}
                     </Text>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={22}
-                      color="#C5CDD4"
-                    />
+                    <View style={[styles.actionChevron, { backgroundColor: COLORS.background }]}>
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={18}
+                        color={COLORS.textSecondary}
+                      />
+                    </View>
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
                   onPress={() => router.push('/help/faq')}
-                  style={styles.actionButton}
-                  activeOpacity={0.6}
+                  style={dynamicStyles.actionButton}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#7ABD96' }]}>
+                    <LinearGradient
+                      colors={[COLORS.success, COLORS.success]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.actionIconContainer}
+                    >
                       <MaterialCommunityIcons
                         name="help-circle-outline"
-                        size={24}
+                        size={22}
                         color="#FFFFFF"
                       />
-                    </View>
-                    <Text style={styles.actionButtonText}>
+                    </LinearGradient>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.viewFAQs') || 'View FAQs'}
                     </Text>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={22}
-                      color="#C5CDD4"
-                    />
+                    <View style={[styles.actionChevron, { backgroundColor: COLORS.background }]}>
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={18}
+                        color={COLORS.textSecondary}
+                      />
+                    </View>
                   </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  onPress={() => router.push('/templates')}
-                  style={[styles.actionButton, styles.actionButtonLast]}
-                  activeOpacity={0.6}
+                  onPress={() => router.push('/(tabs)/documents?tab=templates')}
+                  style={[dynamicStyles.actionButton, styles.actionButtonLast]}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.actionButtonContent}>
-                    <View style={[styles.actionIconContainer, { backgroundColor: '#F4A460' }]}>
+                    <LinearGradient
+                      colors={[COLORS.warning, COLORS.warning]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.actionIconContainer}
+                    >
                       <MaterialCommunityIcons
                         name="file-download-outline"
-                        size={24}
+                        size={22}
                         color="#FFFFFF"
                       />
-                    </View>
-                    <Text style={styles.actionButtonText}>
+                    </LinearGradient>
+                    <Text style={dynamicStyles.actionButtonText}>
                       {t('dashboard.actions.downloadTemplates') || 'Download Templates'}
                     </Text>
-                    <MaterialCommunityIcons
-                      name="chevron-right"
-                      size={22}
-                      color="#C5CDD4"
-                    />
+                    <View style={[styles.actionChevron, { backgroundColor: COLORS.background }]}>
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={18}
+                        color={COLORS.textSecondary}
+                      />
+                    </View>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -996,19 +621,19 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: SPACING.md,
-    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
   statCard: {
     flex: 1,
-    borderRadius: 20,
-    padding: SPACING.lg,
+    borderRadius: 14,
+    padding: SPACING.md,
     backgroundColor: '#FFFFFF',
     shadowColor: '#5B8BA8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   statCardContent: {
     flex: 1,
@@ -1017,12 +642,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   statIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1030,18 +655,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statValue: {
-    fontSize: 32,
+    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 6,
-    letterSpacing: -1,
+    marginBottom: 2,
+    letterSpacing: -0.5,
     color: '#1A2B3C',
   },
   statTitle: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#6B7C8C',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    textTransform: 'none',
+    letterSpacing: 0.2,
+  },
+  statMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '500',
   },
   // Actions Section - Grouped Design
   actionsSection: {
@@ -1057,14 +687,16 @@ const styles = StyleSheet.create({
   },
   actionGroup: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     marginBottom: SPACING.lg,
     overflow: 'hidden',
-    shadowColor: '#5B8BA8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#EEF2F5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   actionGroupTitle: {
     fontSize: 15,
@@ -1077,7 +709,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   actionButton: {
-    paddingVertical: SPACING.lg,
+    paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F3F5',
@@ -1090,18 +722,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
   },
   actionButtonText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1A2B3C',
     letterSpacing: -0.2,
+  },
+  actionChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

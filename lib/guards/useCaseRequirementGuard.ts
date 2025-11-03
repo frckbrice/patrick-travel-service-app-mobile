@@ -1,7 +1,7 @@
 import { useCasesStore } from '../../stores/cases/casesStore';
-import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { Alert } from '../utils/alert';
 
 export const useCaseRequirementGuard = () => {
     const cases = useCasesStore((s) => s.cases);

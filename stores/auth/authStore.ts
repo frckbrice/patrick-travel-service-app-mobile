@@ -10,6 +10,8 @@ import { auth } from '../../lib/firebase/config';
 import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
+  deleteUser,
+  User as FirebaseUser,
 } from 'firebase/auth';
 import { signInWithGoogle, signOutFromGoogle } from '../../lib/auth/googleAuth';
 import { registerForPushNotifications } from '../../lib/services/pushNotifications';
@@ -34,6 +36,7 @@ interface AuthState {
   loginWithBiometric: () => Promise<boolean>;
   register: (data: RegisterRequest) => Promise<boolean>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<boolean>;
   refreshAuth: () => Promise<void>;
   clearError: () => void;
   updateUser: (user: User) => Promise<void>;
@@ -46,6 +49,10 @@ interface AuthState {
   updateUserOptimistic: (updates: Partial<User>) => void;
   revertUserUpdate: () => void;
 }
+
+// Guard against concurrent refreshAuth calls
+let isRefreshing = false;
+let refreshPromise: Promise<void> | null = null;
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -292,11 +299,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true });
 
       // Remove push token from backend (non-blocking)
-      try {
-        await userApi.removePushToken();
-      } catch (error) {
-        logger.warn('Failed to remove push token', error);
-        // Continue with logout even if push token removal fails
+      // Only attempt if we have an auth token to avoid 401 loops
+      const currentToken = get().token;
+      if (currentToken || auth.currentUser) {
+        try {
+          await userApi.removePushToken();
+        } catch (error) {
+          logger.warn('Failed to remove push token', error);
+          // Continue with logout even if push token removal fails
+        }
+      } else {
+        logger.info('Skipping push token removal - no auth token available');
       }
 
       // Logout from API - this revokes refresh tokens on server side
@@ -351,87 +364,280 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  refreshAuth: async () => {
+  deleteAccount: async () => {
     try {
-      console.log('🔄 refreshAuth - Starting...');
-      set({ isLoading: true });
+      set({ isLoading: true, error: null });
 
-      // Wait for Firebase auth state to initialize
-      await new Promise<void>((resolve) => {
-        const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
-          unsubscribe();
-          resolve();
+      // First, call backend API to schedule account deletion
+      const response = await userApi.deleteAccount();
+
+      if (!response.success) {
+        set({
+          error: response.error || 'Failed to delete account',
+          isLoading: false,
         });
-      });
+        return false;
+      }
 
+      logger.info('Backend account deletion scheduled');
+
+      // Delete Firebase auth user
       const firebaseUser = auth.currentUser;
-      console.log('🔄 refreshAuth - Firebase user:', !!firebaseUser);
-
       if (firebaseUser) {
-        // Get fresh Firebase token
-        const firebaseToken = await firebaseUser.getIdToken(false); // Don't force refresh on app load
-
-        // Get stored user data
-        const user = await secureStorage.getUserData<User>();
-        console.log('📖 Loaded user from storage:', user ? `${user.firstName} ${user.lastName}` : 'null');
-
-        if (user) {
-          // Update stored token
-          await secureStorage.setAuthToken(firebaseToken);
-
-          set({
-            user,
-            token: firebaseToken,
-            isAuthenticated: true,
-            isLoading: false,
-          });
-          logger.info('Auth refreshed successfully with Firebase token', {
-            firstName: user.firstName,
-            lastName: user.lastName
-          });
-          return;
-        } else {
-          // Firebase user exists but no stored user data - fetch from backend
-          logger.info(
-            'Firebase user exists but no stored user data, fetching from backend'
-          );
-          const response = await apiClient.get('/auth/me');
-          if (response.data?.success && response.data?.data) {
-            const userData = response.data.data;
-            await secureStorage.setUserData(userData);
-            await secureStorage.setAuthToken(firebaseToken);
-
-            set({
-              user: userData,
-              token: firebaseToken,
-              isAuthenticated: true,
-              isLoading: false,
-            });
-            logger.info('User data fetched and auth restored');
-            return;
-          }
+        try {
+          await deleteUser(firebaseUser);
+          logger.info('Firebase user deleted successfully');
+        } catch (firebaseError: any) {
+          logger.warn('Firebase user deletion failed', firebaseError);
+          // Continue with local logout even if Firebase deletion fails
+          // Backend will handle the scheduled deletion
         }
       }
 
-      // If no Firebase user or data fetch failed, clear auth
+      // Clear local data
       await secureStorage.clearAuthData();
+
       set({
         user: null,
         token: null,
+        pushToken: null,
         isAuthenticated: false,
         isLoading: false,
+        error: null,
       });
-      logger.info('No active Firebase session, cleared auth');
+
+      logger.info('Account deletion completed');
+      return true;
     } catch (error: any) {
-      logger.error('Refresh auth error', error);
-      await secureStorage.clearAuthData();
+      logger.error('Delete account error', error);
+      
+      // Sanitize error message
+      const userFriendlyError = sanitizeErrorMessage(error);
+      
       set({
-        user: null,
-        token: null,
-        isAuthenticated: false,
+        error: userFriendlyError,
         isLoading: false,
       });
+      return false;
     }
+  },
+
+  refreshAuth: async () => {
+    // If already refreshing, return the existing promise (PERFORMANCE: prevents duplicate work)
+    if (isRefreshing && refreshPromise) {
+      logger.debug('refreshAuth already in progress, waiting for existing promise');
+      return refreshPromise;
+    }
+
+    // Mark as refreshing and create new promise
+    isRefreshing = true;
+    refreshPromise = (async () => {
+      try {
+        logger.debug('refreshAuth starting');
+
+        // PERFORMANCE: Don't set isLoading for background refresh - avoid UI flashing
+        // Only set if there's actually no user data loaded yet
+        const currentUser = get().user;
+        if (!currentUser) {
+          set({ isLoading: true });
+        }
+
+        // PERFORMANCE: Try current user first to avoid waiting for auth state
+        let firebaseUser: FirebaseUser | null = auth.currentUser;
+
+        // Only wait for auth state if we don't have a user yet
+        if (!firebaseUser) {
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+              unsubscribe();
+              resolve();
+            }, 2000); // 2 second timeout
+
+            const unsubscribe = auth.onAuthStateChanged((user) => {
+              firebaseUser = user;
+              clearTimeout(timeout);
+              unsubscribe();
+              resolve();
+            });
+          });
+        }
+
+        // Check stored user data first - this is more reliable than Firebase user
+        // Firebase user might be null temporarily due to initialization timing
+        const storedUser = await secureStorage.getUserData<User>();
+        const storedToken = await secureStorage.getAuthToken();
+
+        // If we have stored credentials, try to restore them
+        if (storedUser && storedToken) {
+          // PERFORMANCE: Quick check - if we already have this user loaded and Firebase user unchanged, skip refresh
+          const currentState = get();
+          if (currentState.user?.id === storedUser.id && firebaseUser && !currentState.isLoading) {
+            logger.debug('Auth already loaded and unchanged, skipping refresh');
+            set({ isLoading: false });
+            return;
+          }
+
+          // If Firebase user exists, get fresh token
+          if (firebaseUser) {
+            try {
+              const freshToken = await (firebaseUser as FirebaseUser).getIdToken(false);
+              await secureStorage.setAuthToken(freshToken);
+
+              set({
+                user: storedUser,
+                token: freshToken,
+                isAuthenticated: true,
+                isLoading: false,
+              });
+              logger.info('Auth refreshed successfully with Firebase token', {
+                firstName: storedUser.firstName,
+                lastName: storedUser.lastName
+              });
+              return;
+            } catch (tokenError) {
+              logger.warn('Failed to get fresh Firebase token, trying stored token', tokenError);
+              // Fall through to use stored token
+            }
+          }
+
+          // Try to use stored token - verify it's still valid by making a test request
+          try {
+            // Set token in store temporarily to test it
+            set({
+              user: storedUser,
+              token: storedToken,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+
+            // Verify token is valid by fetching user data
+            const response = await apiClient.get('/auth/me');
+            if (response.data?.success && response.data?.data) {
+              const userData = response.data.data;
+              // Get fresh token if Firebase user exists now
+              if (firebaseUser) {
+                try {
+                  const freshToken = await (firebaseUser as FirebaseUser).getIdToken(false);
+                  await secureStorage.setAuthToken(freshToken);
+                  set({
+                    user: userData,
+                    token: freshToken,
+                    isAuthenticated: true,
+                    isLoading: false,
+                  });
+                } catch {
+                  // Use stored token if fresh token fails
+                  await secureStorage.setAuthToken(storedToken);
+                  set({
+                    user: userData,
+                    token: storedToken,
+                    isAuthenticated: true,
+                    isLoading: false,
+                  });
+                }
+              } else {
+                // No Firebase user but token is valid - keep using stored token
+                await secureStorage.setAuthToken(storedToken);
+                set({
+                  user: userData,
+                  token: storedToken,
+                  isAuthenticated: true,
+                  isLoading: false,
+                });
+              }
+              logger.info('Auth restored from storage - token verified');
+              return;
+            }
+          } catch (verifyError: any) {
+            logger.warn('Stored token validation failed', verifyError);
+            // Token is invalid - clear and continue to check Firebase
+          }
+        }
+
+        // If Firebase user exists but no stored data, fetch from backend
+        if (firebaseUser && !storedUser) {
+          try {
+            logger.info(
+              'Firebase user exists but no stored user data, fetching from backend'
+            );
+            const firebaseToken = await (firebaseUser as FirebaseUser).getIdToken(false);
+            const response = await apiClient.get('/auth/me');
+            if (response.data?.success && response.data?.data) {
+              const userData = response.data.data;
+              await secureStorage.setUserData(userData);
+              await secureStorage.setAuthToken(firebaseToken);
+
+              set({
+                user: userData,
+                token: firebaseToken,
+                isAuthenticated: true,
+                isLoading: false,
+              });
+              logger.info('User data fetched and auth restored');
+              return;
+            }
+          } catch (fetchError) {
+            logger.warn('Failed to fetch user data from backend', fetchError);
+          }
+        }
+
+        // If we get here, we couldn't restore auth - clear it
+        // Only clear if we truly have no valid credentials
+        if (!storedUser || !storedToken) {
+          logger.info('No valid auth credentials found, clearing auth');
+          await secureStorage.clearAuthData();
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        } else {
+          // We have stored credentials but they might be temporarily invalid
+          // Don't clear - keep them and let the 401 handler try to refresh
+          logger.info('Stored credentials exist but validation failed - keeping for retry');
+          set({
+            user: storedUser,
+            token: storedToken,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        }
+      } catch (error: any) {
+        logger.error('Refresh auth error', error);
+        // Don't immediately clear on error - might be temporary
+        // Check if we have stored credentials first
+        const storedUser = await secureStorage.getUserData<User>();
+        const storedToken = await secureStorage.getAuthToken();
+
+        if (storedUser && storedToken) {
+          // Keep stored credentials for retry
+          set({
+            user: storedUser,
+            token: storedToken,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          logger.info('Error during refresh, but keeping stored credentials for retry');
+        } else {
+          // No stored credentials - clear everything
+          await secureStorage.clearAuthData();
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        }
+      } finally {
+        // Always reset the refresh guard
+        isRefreshing = false;
+        refreshPromise = null;
+      }
+    })();
+
+    // Return the promise
+    return refreshPromise;
   },
 
   clearError: () => set({ error: null }),

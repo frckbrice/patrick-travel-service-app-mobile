@@ -14,10 +14,17 @@ export interface UploadDocumentRequest {
 export const documentsApi = {
   async getCaseDocuments(caseId: string): Promise<ApiResponse<Document[]>> {
     try {
-      const response = await apiClient.get<ApiResponse<Document[]>>(
-        `/cases/${caseId}/documents`
+      // Web API uses GET /documents?caseId={caseId}
+      // Web returns: { success: true, data: { documents: [...], pagination } }
+      const response = await apiClient.get<ApiResponse<{ documents: Document[], pagination: any }>>(
+        `/documents?caseId=${caseId}`
       );
-      return response.data;
+
+      return {
+        success: response.data.success,
+        data: response.data.data?.documents || [],
+        error: response.data.error,
+      };
     } catch (error: any) {
       // Error already sanitized by interceptor - safe to use
       return {
@@ -36,11 +43,18 @@ export const documentsApi = {
         caseId: data.caseId,
         type: data.documentType,
       });
-      const response = await apiClient.post<ApiResponse<Document>>(
-        `/cases/${data.caseId}/documents`,
+      // Web API uses POST /documents with caseId in request body
+      // Web returns: { success: true, data: { document: {...} } }
+      const response = await apiClient.post<ApiResponse<{ document: Document }>>(
+        `/documents`,
         data
       );
-      return response.data;
+
+      return {
+        success: response.data.success,
+        data: response.data.data?.document,
+        error: response.data.error,
+      };
     } catch (error: any) {
       // Error already sanitized by interceptor - safe to use
       return {
@@ -101,6 +115,28 @@ export const documentsApi = {
         success: false,
         error: error.response?.data?.error || 'Unable to load documents.',
         data: [],
+      };
+    }
+  },
+
+  async getDocumentById(id: string): Promise<ApiResponse<Document>> {
+    try {
+      // Web API uses GET /documents/:id
+      // Web returns: { success: true, data: { document: {...} } }
+      const response = await apiClient.get<ApiResponse<{ document: Document }>>(
+        `/documents/${id}`
+      );
+
+      return {
+        success: response.data.success,
+        data: response.data.data?.document,
+        error: response.data.error,
+      };
+    } catch (error: any) {
+      // Error already sanitized by interceptor - safe to use
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Unable to load document details.',
       };
     }
   },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,9 +12,19 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { notificationService } from '../../lib/services/notifications';
+import {
+  registerForPushNotifications,
+  areNotificationsEnabled,
+  requestNotificationPermissions,
+} from '../../lib/services/pushNotifications';
 import { secureStorage } from '../../lib/storage/secureStorage';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { toast } from '../../lib/services/toast';
+import { useAuthStore } from '../../stores/auth/authStore';
+import { logger } from '../../lib/utils/logger';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface NotificationPreferences {
   pushEnabled: boolean;
@@ -29,6 +39,10 @@ export default function NotificationPreferencesScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
+  const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
+  const registerPushToken = useAuthStore((state) => state.registerPushToken);
+  const pushTokenFromStore = useAuthStore((state) => state.pushToken);
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     pushEnabled: false,
     emailEnabled: true,
@@ -38,21 +52,164 @@ export default function NotificationPreferencesScreen() {
     marketing: false,
   });
   const [pushToken, setPushToken] = useState<string | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined' | 'checking'>('checking');
+
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollContainer: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingTop: SPACING.lg,
+    },
+    section: {
+      marginBottom: SPACING.lg,
+      paddingHorizontal: SPACING.md,
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      textTransform: 'uppercase',
+      marginBottom: SPACING.sm,
+      marginLeft: SPACING.xs,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+    },
+    listItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: SPACING.md,
+    },
+    listItemLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      marginRight: SPACING.md,
+    },
+    iconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      backgroundColor: colors.primary + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: SPACING.md,
+    },
+    listItemContent: {
+      flex: 1,
+    },
+    listItemTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 2,
+    },
+    listItemDescription: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
+    divider: {
+      marginLeft: SPACING.md + 40 + SPACING.md,
+      backgroundColor: colors.border,
+    },
+    testSection: {
+      paddingHorizontal: SPACING.lg,
+      marginTop: SPACING.md,
+    },
+    testButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      borderRadius: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+    },
+    testButtonText: {
+      marginLeft: 8,
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    tokenInfo: {
+      padding: SPACING.md,
+      backgroundColor: colors.surface,
+      margin: SPACING.lg,
+      marginTop: SPACING.md,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    tokenLabel: {
+      fontWeight: 'bold',
+      marginBottom: SPACING.xs,
+      color: colors.text,
+      fontSize: 13,
+    },
+    tokenText: {
+      color: colors.textSecondary,
+      fontFamily: 'monospace',
+      fontSize: 11,
+    },
+  }), [colors]);
 
   useEffect(() => {
     loadPreferences();
-  }, []);
+  }, [pushTokenFromStore]); // Reload when push token becomes available
 
   const loadPreferences = async () => {
+    // Check notification permissions status
+    let hasPermission = false;
+    try {
+      hasPermission = await areNotificationsEnabled();
+      setPermissionStatus(hasPermission ? 'granted' : 'denied');
+    } catch (error) {
+      logger.error('Error checking permissions', error);
+      setPermissionStatus('undetermined');
+    }
+
     const saved = await secureStorage.get<NotificationPreferences>(
       'notificationPreferences'
     );
-    if (saved) {
-      setPreferences(saved);
-    }
 
-    const token = notificationService.getExpoPushToken();
+    // Get token from auth store (this is the token registered with backend)
+    const token = pushTokenFromStore || notificationService.getExpoPushToken();
     setPushToken(token);
+
+    // Merge saved preferences with push token status
+    // If token exists and permissions granted, push is enabled
+    // If no saved preference but token exists and permissions granted, enable it
+    const finalPreferences: NotificationPreferences = {
+      pushEnabled: saved?.pushEnabled ?? (!!token && hasPermission), // Use saved preference, or enable if token exists and permission granted
+      emailEnabled: saved?.emailEnabled ?? true,
+      caseUpdates: saved?.caseUpdates ?? true,
+      documentUpdates: saved?.documentUpdates ?? true,
+      messageNotifications: saved?.messageNotifications ?? true,
+      marketing: saved?.marketing ?? false,
+    };
+
+    setPreferences(finalPreferences);
   };
 
   const savePreferences = async (newPreferences: NotificationPreferences) => {
@@ -62,22 +219,80 @@ export default function NotificationPreferencesScreen() {
 
   const handleTogglePush = async (enabled: boolean) => {
     if (enabled) {
-      const token = await notificationService.registerForPushNotifications();
-      if (token) {
-        setPushToken(token);
-        savePreferences({ ...preferences, pushEnabled: true });
-        toast.success({
-          title: t('common.success'),
-          message: 'Push notifications enabled',
-        });
-      } else {
+      try {
+        // Step 1: Check if permissions are already granted
+        const hasPermission = await areNotificationsEnabled();
+
+        if (!hasPermission) {
+          // Step 2: Request permissions
+          logger.info('Requesting notification permissions...');
+          const permissionGranted = await requestNotificationPermissions();
+
+          if (!permissionGranted) {
+            // Permission was denied - show helpful message
+            setPermissionStatus('denied');
+            toast.error({
+              title: t('common.error'),
+              message: 'Notification permissions are required. Please enable them in your device settings.',
+            });
+            setPreferences(prev => ({ ...prev, pushEnabled: false }));
+            return;
+          }
+
+          logger.info('Notification permissions granted');
+          setPermissionStatus('granted');
+        }
+
+        // Step 3: Register token with backend (this uses registerForPushNotifications internally)
+        await registerPushToken();
+
+        // Step 4: Get updated token from store after registration
+        const updatedToken = useAuthStore.getState().pushToken;
+
+        if (updatedToken) {
+          setPushToken(updatedToken);
+          savePreferences({ ...preferences, pushEnabled: true });
+
+          toast.success({
+            title: t('common.success'),
+            message: 'Push notifications enabled',
+          });
+        } else {
+          // Token might still be registering, check again
+          const tokenData = await registerForPushNotifications();
+          if (tokenData?.token) {
+            setPushToken(tokenData.token);
+            savePreferences({ ...preferences, pushEnabled: true });
+            toast.success({
+              title: t('common.success'),
+              message: 'Push notifications enabled',
+            });
+          } else {
+            throw new Error('Failed to obtain push token. Please check your device settings.');
+          }
+        }
+      } catch (error: any) {
+        logger.error('Failed to enable push notifications', error);
+
+        // Provide specific error messages
+        let errorMessage = 'Failed to enable push notifications.';
+        if (error?.message?.includes('permission') || error?.message?.includes('Permission')) {
+          errorMessage = 'Notification permissions are required. Please enable them in your device settings.';
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
         toast.error({
           title: t('common.error'),
-          message: 'Failed to enable push notifications. Please check your device settings.',
+          message: errorMessage,
         });
+        // Reset switch if failed
+        setPreferences(prev => ({ ...prev, pushEnabled: false }));
       }
     } else {
       savePreferences({ ...preferences, pushEnabled: false });
+      // Note: We don't remove the token from backend here - it will be removed on logout
+      // User can still receive notifications but preferences say they're disabled
     }
   };
 
@@ -93,31 +308,18 @@ export default function NotificationPreferencesScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <MaterialCommunityIcons
-              name="arrow-left"
-              size={24}
-              color={COLORS.text}
-            />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text variant="headlineMedium" style={styles.title}>
-              {t('profile.notificationPreferences')}
-            </Text>
-            <Text variant="bodyLarge" style={styles.subtitle}>
-              {t('profile.manageNotifications')}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.content}>
+    <View style={[styles.container, { paddingBottom: insets.bottom + SPACING.lg }]}>
+      <ThemeAwareHeader
+        variant="gradient"
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
+        title={t('profile.notificationPreferences')}
+        subtitle={t('profile.manageNotifications')}
+        showBackButton
+      />
+      <ScrollView
+        style={[styles.scrollContainer, { paddingBottom: insets.bottom + SPACING.lg + SPACING.xl }]}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('notifications.channels')}</Text>
 
@@ -128,7 +330,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="cellphone"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -136,16 +338,18 @@ export default function NotificationPreferencesScreen() {
                     {t('notifications.pushNotifications')}
                   </Text>
                   <Text style={styles.listItemDescription}>
-                    {pushToken
-                      ? t('notifications.pushEnabled')
-                      : t('notifications.pushDesc')}
+                    {permissionStatus === 'denied'
+                      ? 'Notification permissions are required. Enable in device settings.'
+                      : pushToken
+                        ? t('notifications.pushEnabled')
+                        : t('notifications.pushDesc')}
                   </Text>
                 </View>
               </View>
               <Switch
                 value={preferences.pushEnabled}
                 onValueChange={handleTogglePush}
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
 
@@ -157,7 +361,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="email"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -174,7 +378,7 @@ export default function NotificationPreferencesScreen() {
                 onValueChange={(value) =>
                   savePreferences({ ...preferences, emailEnabled: value })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
           </View>
@@ -190,7 +394,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="briefcase"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -207,7 +411,7 @@ export default function NotificationPreferencesScreen() {
                 onValueChange={(value) =>
                   savePreferences({ ...preferences, caseUpdates: value })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
 
@@ -219,7 +423,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="file-document"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -236,7 +440,7 @@ export default function NotificationPreferencesScreen() {
                 onValueChange={(value) =>
                   savePreferences({ ...preferences, documentUpdates: value })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
 
@@ -248,7 +452,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="message"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -268,7 +472,7 @@ export default function NotificationPreferencesScreen() {
                     messageNotifications: value,
                   })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
 
@@ -280,7 +484,7 @@ export default function NotificationPreferencesScreen() {
                   <MaterialCommunityIcons
                     name="bullhorn"
                     size={24}
-                    color={COLORS.primary}
+                    color={colors.primary}
                   />
                 </View>
                 <View style={styles.listItemContent}>
@@ -297,13 +501,13 @@ export default function NotificationPreferencesScreen() {
                 onValueChange={(value) =>
                   savePreferences({ ...preferences, marketing: value })
                 }
-                color={COLORS.primary}
+                color={colors.primary}
               />
             </View>
           </View>
         </View>
 
-        {preferences.pushEnabled && (
+        {/* {preferences.pushEnabled && (
           <View style={styles.testSection}>
             <TouchableOpacity
               style={styles.testButton}
@@ -313,16 +517,16 @@ export default function NotificationPreferencesScreen() {
               <MaterialCommunityIcons
                 name="bell-ring"
                 size={20}
-                color={COLORS.primary}
+                color={colors.primary}
               />
               <Text style={styles.testButtonText}>
                 {t('notifications.testNotification')}
               </Text>
             </TouchableOpacity>
           </View>
-        )}
+        )} */}
 
-        {pushToken && (
+        {/* {pushToken && (
           <View style={styles.tokenInfo}>
             <Text variant="bodySmall" style={styles.tokenLabel}>
               {t('notifications.pushToken')}
@@ -335,159 +539,8 @@ export default function NotificationPreferencesScreen() {
               {pushToken}
             </Text>
           </View>
-        )}
-      </View>
-    </ScrollView>
+        )} */}
+      </ScrollView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    paddingTop: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.lg,
-    backgroundColor: COLORS.surface,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-    marginTop: SPACING.xs,
-  },
-  headerContent: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  title: {
-    fontWeight: 'bold',
-    marginBottom: SPACING.sm,
-    color: COLORS.primary,
-  },
-  subtitle: {
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  content: {
-    flex: 1,
-    paddingTop: SPACING.lg,
-  },
-  section: {
-    marginBottom: SPACING.lg,
-    paddingHorizontal: SPACING.md,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    textTransform: 'uppercase',
-    marginBottom: SPACING.sm,
-    marginLeft: SPACING.xs,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: SPACING.md,
-  },
-  listItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: SPACING.md,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: COLORS.primary + '15',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  listItemContent: {
-    flex: 1,
-  },
-  listItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 2,
-  },
-  listItemDescription: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-  },
-  divider: {
-    marginLeft: SPACING.md + 40 + SPACING.md,
-    backgroundColor: COLORS.border,
-  },
-  testSection: {
-    paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
-  },
-  testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  testButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  tokenInfo: {
-    padding: SPACING.md,
-    backgroundColor: COLORS.surface,
-    margin: SPACING.lg,
-    marginTop: SPACING.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  tokenLabel: {
-    fontWeight: 'bold',
-    marginBottom: SPACING.xs,
-    color: COLORS.text,
-    fontSize: 13,
-  },
-  tokenText: {
-    color: COLORS.textSecondary,
-    fontFamily: 'monospace',
-    fontSize: 11,
-  },
-});

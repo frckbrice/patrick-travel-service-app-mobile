@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,9 +9,11 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { Text as PaperText, Chip, Menu, Button, Divider } from 'react-native-paper';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -22,7 +24,7 @@ import {
   StatusBadge,
   EmptyState,
 } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import {
   SPACING,
@@ -31,6 +33,9 @@ import {
 } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format } from 'date-fns';
+import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { logger } from '../../lib/utils/logger';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type SortOption = 'date-desc' | 'date-asc' | 'status' | 'priority';
 
@@ -39,6 +44,8 @@ export default function CasesScreen() {
   const router = useRouter();
   const { cases, isLoading, fetchCases } = useCasesStore();
   const colors = useThemeColors();
+  const scrollProps = useTabBarScroll();
+  const insets = useSafeAreaInsets();
 
   // State management
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,19 +56,61 @@ export default function CasesScreen() {
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
   const [serviceTypeMenuVisible, setServiceTypeMenuVisible] = useState(false);
 
+  // Performance: Debounce ref to prevent excessive refreshes
+  const lastRefreshRef = useRef<number>(0);
+  const REFRESH_DEBOUNCE_MS = 2000; // Minimum 2 seconds between refreshes
+
   // Memoize fetchCases to prevent unnecessary re-renders
   const handleFetchCases = useCallback(
-    (status?: CaseStatus, refresh = true) => {
+    (status?: CaseStatus, refresh = true, force = false) => {
+      const now = Date.now();
+      // Skip if recently refreshed (unless forced) to prevent excessive API calls
+      if (!force && now - lastRefreshRef.current < REFRESH_DEBOUNCE_MS) {
+        logger.debug('Skipping refresh - too soon since last refresh');
+        return;
+      }
+      lastRefreshRef.current = now;
       fetchCases(status, refresh);
     },
     [fetchCases]
   );
 
-  // Only fetch when selectedStatus actually changes
+  // Initial fetch when selectedStatus changes
   useEffect(() => {
-    handleFetchCases(selectedStatus, true);
+    handleFetchCases(selectedStatus, true, true); // Force initial fetch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStatus]); // Only depend on selectedStatus to prevent unnecessary fetches
+
+  // Refresh when screen comes into focus (e.g., returning from case details)
+  // Performance: Only refresh if screen was away for more than debounce time
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      // Only refresh if enough time has passed since last refresh
+      if (now - lastRefreshRef.current >= REFRESH_DEBOUNCE_MS) {
+        logger.debug('Screen focused - refreshing cases list');
+        handleFetchCases(selectedStatus, true, false);
+      }
+    }, [selectedStatus, handleFetchCases])
+  );
+
+  // Refresh when app resumes from background
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        // App resumed - refresh to get latest status updates
+        const now = Date.now();
+        if (now - lastRefreshRef.current >= REFRESH_DEBOUNCE_MS) {
+          logger.debug('App resumed - refreshing cases list');
+          handleFetchCases(selectedStatus, true, false);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [selectedStatus, handleFetchCases]);
 
   // Memoized filtered and sorted cases for performance
   const filteredAndSortedCases = useMemo(() => {
@@ -128,7 +177,7 @@ export default function CasesScreen() {
                   color={colors.primary}
                   style={styles.icon}
                 />
-                <PaperText style={styles.reference}>{item.referenceNumber}</PaperText>
+                <PaperText style={[styles.reference, { color: colors.text }]}>{item.referenceNumber}</PaperText>
               </View>
               <StatusBadge status={item.status} />
             </View>
@@ -152,7 +201,7 @@ export default function CasesScreen() {
                   color={colors.textSecondary}
                   style={styles.serviceIcon}
                 />
-                <PaperText style={styles.serviceTypeText}>
+                <PaperText style={[styles.serviceTypeText, { color: colors.textSecondary }]}>
                   {SERVICE_TYPE_LABELS[item.serviceType]}
                 </PaperText>
               </View>
@@ -166,7 +215,7 @@ export default function CasesScreen() {
                   size={14}
                   color={colors.textSecondary}
                 />
-                <PaperText style={styles.infoText}>
+                <PaperText style={[styles.infoText, { color: colors.textSecondary }]}>
                   {format(new Date(item.submissionDate), 'MMM dd, yyyy')}
                 </PaperText>
               </View>
@@ -178,7 +227,7 @@ export default function CasesScreen() {
                     size={14}
                     color={colors.textSecondary}
                   />
-                  <PaperText style={styles.infoText} numberOfLines={1}>
+                  <PaperText style={[styles.infoText, { color: colors.textSecondary }]} numberOfLines={1}>
                     {item.assignedAgent.firstName} {item.assignedAgent.lastName}
                   </PaperText>
                 </View>
@@ -196,17 +245,17 @@ export default function CasesScreen() {
         </Card>
       </Animated.View>
     ),
-    [router]
+    [router, colors]
   );
 
 
   return (
     <TouchDetector>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: insets.bottom + SPACING.lg }]}>
       {/* Modern Gradient Header */}
-      <ModernHeader
+        <ThemeAwareHeader
         variant="gradient"
-        gradientColors={[colors.primary, '#7A9BB8', '#94B5A0']}
+        gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title="Cases"
         subtitle="Manage your legal cases"
         showBackButton
@@ -423,7 +472,7 @@ export default function CasesScreen() {
             {filteredAndSortedCases.length} {filteredAndSortedCases.length === 1 ? 'case' : 'cases'} found
           </PaperText>
         </View>
-      </ModernHeader>
+        </ThemeAwareHeader>
 
       {/* Cases List */}
       <FlatList
@@ -434,6 +483,8 @@ export default function CasesScreen() {
           styles.list,
           { paddingBottom: Platform.OS === 'ios' ? 100 : 80 }
         ]}
+        onScroll={scrollProps.onScroll}
+        scrollEventThrottle={scrollProps.scrollEventThrottle}
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
@@ -536,6 +587,10 @@ const styles = StyleSheet.create({
   filterButtonText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   clearButton: {
     flexDirection: 'row',

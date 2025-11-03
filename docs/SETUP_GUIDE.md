@@ -1,6 +1,8 @@
 # Patrick Travel Services Mobile App - Complete Setup Guide
 
-## 📋 Prerequisites
+> Scope: End-to-end mobile project setup (prereqs, env, running locally). This guide intentionally does not cover authentication deep-dives, FCM specifics, or Android emulator details. See also: `AUTHENTICATION_SETUP.md`, `PUSH_NOTIFICATIONS_SETUP.md`, `ANDROID_DEV_GUIDE.md`.
+
+##  Prerequisites
 
 Ensure you have the following installed:
 - **Node.js** 18 or higher
@@ -9,7 +11,7 @@ Ensure you have the following installed:
 - **iOS Simulator** (Mac only) or **Android Studio** (for Android development)
 - **Git**
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Step 1: Install Dependencies
 
@@ -24,7 +26,10 @@ pnpm install
 
 ```bash
 # API Configuration
-EXPO_PUBLIC_API_URL=http://localhost:3000
+# Local/dev API base URL
+EXPO_PUBLIC_API_URL=http://localhost:3000/api
+# Production API base URL (used in production builds)
+EXPO_PUBLIC_API_PROD_URL=https://api.your-domain.com/api
 
 # Firebase Configuration
 EXPO_PUBLIC_FIREBASE_API_KEY=your-firebase-api-key
@@ -102,7 +107,7 @@ pnpm android  # Android Emulator
 pnpm web      # Web browser
 ```
 
-## 📱 Running on Devices
+##  Running on Devices
 
 ### iOS (Mac only)
 
@@ -149,7 +154,7 @@ The mobile app requires a running backend API. Make sure:
    - `/faq` - FAQs
    - `/users/*` - User management
 
-## 🗂️ Project Structure
+##  Project Structure
 
 ```
 mobile/
@@ -185,7 +190,7 @@ mobile/
 └── tsconfig.json
 ```
 
-## 🎯 Features Overview
+##  Features Overview
 
 ### Authentication
 - Email/password login
@@ -227,7 +232,7 @@ mobile/
 - Contact support form
 - Email integration
 
-## 🔐 Security
+##  Security
 
 - All sensitive data encrypted in secure storage
 - JWT token-based authentication
@@ -236,7 +241,7 @@ mobile/
 - File upload validation
 - Input sanitization
 
-## 🧪 Testing
+##  Testing
 
 ```bash
 # Type checking
@@ -249,7 +254,7 @@ pnpm lint
 pnpm format
 ```
 
-## 🚢 Building for Production
+##  Building for Production
 
 ### iOS
 
@@ -274,7 +279,7 @@ eas build --platform ios
 eas build --platform android
 ```
 
-## 🐛 Troubleshooting
+##  Troubleshooting
 
 ### Cannot connect to backend
 
@@ -317,7 +322,7 @@ pnpm install
 npx expo start -c
 ```
 
-## 📚 Additional Resources
+##  Additional Resources
 
 - [Expo Documentation](https://docs.expo.dev/)
 - [React Native Documentation](https://reactnative.dev/)
@@ -326,7 +331,7 @@ npx expo start -c
 - [React Native Paper](https://callstack.github.io/react-native-paper/)
 - [Expo Router](https://docs.expo.dev/router/introduction/)
 
-## 🆘 Support
+##  Support
 
 If you encounter issues:
 1. Check this guide first
@@ -334,7 +339,7 @@ If you encounter issues:
 3. Check console errors
 4. Verify all environment variables are set correctly
 
-## ✅ Checklist
+##  Checklist
 
 Before running the app, ensure:
 - [ ] Dependencies installed (`pnpm install`)
@@ -345,8 +350,4 @@ Before running the app, ensure:
 - [ ] Correct API URL in `.env` (use IP for physical devices)
 - [ ] Firebase Authentication enabled
 - [ ] Firebase Realtime Database created
-
----
-
-**Happy Coding! 🚀**
 

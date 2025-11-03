@@ -3,11 +3,11 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  Alert,
   Text,
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Modal,
 } from 'react-native';
 import { Text as PaperText, Button, Card } from 'react-native-paper';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -16,13 +16,14 @@ import * as FileSystem from 'expo-file-system';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { templatesApi, UploadFilledTemplateRequest } from '../../lib/api/templates.api';
-import { uploadThingService } from '../../lib/services/uploadthing';
+import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { useCasesStore } from '../../stores/cases/casesStore';
 import { useCaseRequirementGuard } from '../../lib/guards/useCaseRequirementGuard';
 import { DocumentTemplate } from '../../lib/types';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { DocumentFiller } from '../../components/ui/DocumentFiller';
 import {
@@ -30,14 +31,18 @@ import {
   SPACING,
   MAX_FILE_SIZE,
 } from '../../lib/constants';
+import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
 import { toast } from '../../lib/services/toast';
+import { Alert } from '../../lib/utils/alert';
 
 export default function TemplateDownloadUploadScreen() {
   useRequireAuth();
   const { t } = useTranslation();
   const router = useRouter();
-  const { templateId } = useLocalSearchParams<{ templateId: string }>();
+  const themeColors = useThemeColors();
+  const { id, caseId: initialCaseId } = useLocalSearchParams<{ id: string; caseId?: string }>();
+  const insets = useSafeAreaInsets();
   
   const cases = useCasesStore((state) => state.cases);
   const { requiresActiveCase, activeCases } = useCaseRequirementGuard();
@@ -54,6 +59,7 @@ export default function TemplateDownloadUploadScreen() {
   const [downloadedTemplateUri, setDownloadedTemplateUri] = useState('');
   const [showInAppFiller, setShowInAppFiller] = useState(false);
   const [formFields, setFormFields] = useState<any[]>([]);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   // Memoize case options for performance
   const caseOptions = useMemo(
@@ -65,31 +71,53 @@ export default function TemplateDownloadUploadScreen() {
     [cases]
   );
 
-  // Guard: Check if user has active cases on mount
-  useEffect(() => {
-    requiresActiveCase('download and upload templates');
-  }, []);
+  // Get selected case details
+  const selectedCase = useMemo(() => {
+    if (!selectedCaseId) return null;
+    return cases.find((c) => c.id === selectedCaseId);
+  }, [cases, selectedCaseId]);
 
-  // Auto-select first case when cases are loaded
+  // Check if we have a valid case (either from selection or preselected)
+  const hasValidCase = useMemo(() => {
+    return selectedCaseId && selectedCase !== null;
+  }, [selectedCaseId, selectedCase]);
+
+  // Check if we have a preselected case (from route params)
+  const hasPreselectedCase = useMemo(() => {
+    return !!initialCaseId && !!selectedCaseId;
+  }, [initialCaseId, selectedCaseId]);
+
+  // Guard: Only show if no case preselected and no active cases
   useEffect(() => {
+    if (!initialCaseId) {
+      requiresActiveCase('download and upload templates');
+    }
+  }, [initialCaseId]);
+
+  // Apply preselected case from params, or auto-select first case when cases are loaded
+  useEffect(() => {
+    if (initialCaseId) {
+      setSelectedCaseId(initialCaseId);
+      return;
+    }
     if (caseOptions.length > 0 && !selectedCaseId) {
       setSelectedCaseId(caseOptions[0].value);
     }
-  }, [caseOptions]);
+  }, [caseOptions, initialCaseId, selectedCaseId]);
 
   // Load template details
   useEffect(() => {
-    if (templateId) {
+    if (id) {
       loadTemplate();
     }
-  }, [templateId]);
+  }, [id]);
 
   const loadTemplate = async () => {
-    if (!templateId) return;
+    if (!id) return;
     
     setIsLoading(true);
     try {
-      const response = await templatesApi.getTemplate(templateId);
+      const response = await templatesApi.getTemplate(id);
       if (response.success && response.data) {
         setTemplate(response.data);
       } else {
@@ -126,17 +154,8 @@ export default function TemplateDownloadUploadScreen() {
         message: t('templates.downloadSuccess') || 'Template downloaded successfully',
       });
 
-      // Show instructions for filling
-      Alert.alert(
-        t('templates.downloadComplete') || 'Download Complete',
-        t('templates.fillInstructions') || 'The template has been downloaded. Please fill it out using your preferred app and then upload it back.',
-        [
-          {
-            text: t('common.ok'),
-            style: 'default',
-          },
-        ]
-      );
+      // Show bottom modal with instructions
+      setShowDownloadModal(true);
     } catch (error) {
       logger.error('Error downloading template', error);
       toast.error({
@@ -152,6 +171,16 @@ export default function TemplateDownloadUploadScreen() {
     if (!template) return;
 
     try {
+      // Short-circuit for files that cannot be filled in-app (e.g., PDFs)
+      if (template.mimeType && template.mimeType.toLowerCase().includes('pdf')) {
+        Alert.alert(
+          t('templates.inAppFillNotAvailable') || 'In-App Filling Not Available',
+          t('templates.useExternalApp') || 'This template cannot be filled in-app. Please download and fill using an external app.',
+          [{ text: t('common.ok') || 'OK' }]
+        );
+        return;
+      }
+
       // Try to get form fields for in-app filling
       const response = await templatesApi.getTemplateFormFields(template.id);
       
@@ -159,20 +188,21 @@ export default function TemplateDownloadUploadScreen() {
         setFormFields(response.data.fields);
         setShowInAppFiller(true);
       } else {
-        // Fallback to external download if no form fields available
+        // Inform-only: no extra actions (download likely already done)
         Alert.alert(
           t('templates.inAppFillNotAvailable') || 'In-App Filling Not Available',
           t('templates.useExternalApp') || 'This template cannot be filled in-app. Please download and fill using an external app.',
-          [
-            { text: t('common.cancel'), style: 'cancel' },
-            { text: t('templates.download'), onPress: handleDownloadTemplate },
-          ]
+          [{ text: t('common.ok') || 'OK' }]
         );
       }
     } catch (error) {
-      logger.error('Error loading form fields', error);
-      // Fallback to external download
-      handleDownloadTemplate();
+      logger.warn('In-app fill not available (form fields fetch)', error);
+      // Inform-only: do not trigger an extra download
+      Alert.alert(
+        t('templates.inAppFillNotAvailable') || 'In-App Filling Not Available',
+        t('templates.useExternalApp') || 'This template cannot be filled in-app. Please download and fill using an external app.',
+        [{ text: t('common.ok') || 'OK' }]
+      );
     }
   };
 
@@ -192,11 +222,15 @@ export default function TemplateDownloadUploadScreen() {
       const fileContent = JSON.stringify(filledData, null, 2);
       
       // Save to local file system
-      const fileUri = FileSystem.documentDirectory + fileName;
+      const docDir = ((FileSystem as any).documentDirectory || (FileSystem as any).cacheDirectory || '') as string;
+      const fileUri = docDir + fileName;
       await FileSystem.writeAsStringAsync(fileUri, fileContent);
       
-      // Get file info
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      // Calculate file size from content (more reliable than FileInfo.size)
+      // Use TextEncoder for accurate UTF-8 byte length in React Native
+      const fileSize = typeof TextEncoder !== 'undefined'
+        ? new TextEncoder().encode(fileContent).length
+        : new Uint8Array(fileContent.split('').map(c => c.charCodeAt(0))).length || fileContent.length;
       
       // Upload the filled data
       const uploadData: UploadFilledTemplateRequest = {
@@ -204,7 +238,7 @@ export default function TemplateDownloadUploadScreen() {
         caseId: selectedCaseId,
         fileName: fileName,
         filePath: fileUri,
-        fileSize: fileInfo.size || 0,
+        fileSize: fileSize,
         mimeType: 'text/plain',
         filledData: filledData,
       };
@@ -293,23 +327,23 @@ export default function TemplateDownloadUploadScreen() {
         fileName: filledFileName,
       });
 
-      // Upload file to cloud storage
-      const uploadResult = await uploadThingService.uploadFile(
+      // Upload file to API
+      const uploadResult = await uploadFileToAPI(
         filledFileUri,
         filledFileName,
         filledMimeType
       );
 
       if (!uploadResult.success || !uploadResult.url) {
-        throw new Error(uploadResult.error || t('errors.uploadFailed'));
+        throw new Error(uploadResult.error || t('errors.uploadFailed') || 'Upload failed');
       }
 
       // Upload filled template metadata
       const uploadData: UploadFilledTemplateRequest = {
         templateId: template.id,
         caseId: selectedCaseId,
-        fileName: uploadResult.name || filledFileName,
-        filePath: uploadResult.url,
+        fileName: filledFileName,
+        filePath: uploadResult.url!,
         fileSize: filledFileSize,
         mimeType: filledMimeType,
       };
@@ -379,14 +413,14 @@ export default function TemplateDownloadUploadScreen() {
   }
 
   return (
-    <TouchDetector>
+    // <TouchDetector>
       <View style={styles.container}>
-        <ModernHeader
-          variant="default"
+        <ThemeAwareHeader
+        variant="gradient"
+        gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
           title={template.name}
-          subtitle={template.description || 'Download and upload template'}
-          showBackButton
-          onBackPress={() => router.back()}
+        subtitle={template.description || (t('templates.subtitle') || 'Download and fill required documents')}
+        showBackButton
         />
 
         {showInAppFiller ? (
@@ -398,7 +432,14 @@ export default function TemplateDownloadUploadScreen() {
             onCancel={() => setShowInAppFiller(false)}
           />
         ) : (
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={[
+              styles.contentContainer,
+              { paddingBottom: SPACING.xl * 2 + insets.bottom + 24 },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
           {/* Template Info */}
           <Animated.View entering={FadeInDown.delay(0).duration(400)}>
             <Card style={styles.templateCard}>
@@ -431,7 +472,7 @@ export default function TemplateDownloadUploadScreen() {
           {/* Download Section */}
           <Animated.View entering={FadeInDown.delay(100).duration(400)}>
             <Text style={styles.sectionTitle}>
-              {t('templates.fillTemplate') || 'Fill Template'}
+                {t('templates.completeTemplate') || 'Complete template'}
             </Text>
             
             {/* In-App Fill Option */}
@@ -444,10 +485,10 @@ export default function TemplateDownloadUploadScreen() {
                 />
                 <View style={styles.actionText}>
                   <Text style={styles.actionTitle}>
-                    {t('templates.fillInApp') || 'Fill In-App'}
+                      {t('templates.fillNow') || 'Fill now'}
                   </Text>
                   <Text style={styles.actionDescription}>
-                    {t('templates.fillInAppDescription') || 'Fill out the form directly in the app'}
+                      {t('templates.fillNowDesc') || 'Complete the form directly in the app'}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -469,10 +510,10 @@ export default function TemplateDownloadUploadScreen() {
                 />
                 <View style={styles.actionText}>
                   <Text style={styles.actionTitle}>
-                    {t('templates.downloadExternal') || 'Download for External App'}
+                      {t('templates.downloadBlank') || 'Download blank'}
                   </Text>
                   <Text style={styles.actionDescription}>
-                    {t('templates.downloadDescription') || 'Download the template to fill it out offline'}
+                      {t('templates.downloadBlankDesc') || 'Save a blank copy to fill later'}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -493,20 +534,115 @@ export default function TemplateDownloadUploadScreen() {
           {/* Upload Section */}
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
             <Text style={styles.sectionTitle}>
-              {t('templates.uploadFilled') || 'Upload Filled Template'}
-            </Text>
+                {t('templates.submitCompleted') || 'Submit completed file'}
+              </Text>
 
-            {caseOptions.length === 0 ? (
+              {hasPreselectedCase && (!hasValidCase || caseOptions.length === 0) ? (
+                /* Case preselected but not yet found in cases list - show ready state */
+                <>
+                  <Card style={styles.readyCard}>
+                    <View style={styles.readyCardContent}>
+                      <View style={[styles.readyIcon, { backgroundColor: COLORS.success + '15' }]}>
+                        <MaterialCommunityIcons
+                          name="check-circle"
+                          size={32}
+                          color={COLORS.success}
+                        />
+                      </View>
+                      <View style={styles.readyText}>
+                        <Text style={styles.readyTitle}>
+                          {t('templates.caseReady') || 'Case Ready'}
+                        </Text>
+                        <Text style={styles.readyDescription}>
+                          {selectedCase
+                            ? t('templates.caseReadyDesc', { caseNumber: selectedCase.referenceNumber }) || `Case ${selectedCase.referenceNumber} is ready for document upload.`
+                            : t('templates.casePreselected') || 'Your case is preselected. You can now upload your filled template.'}
+                        </Text>
+                      </View>
+                    </View>
+                  </Card>
+
+                  {/* File Selection */}
+                  <Card style={styles.selectionCard}>
+                    <Text style={styles.selectionTitle}>
+                      {t('templates.selectFilledFile') || 'Choose file'}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.filePicker}
+                      onPress={handlePickFilledTemplate}
+                    >
+                      <MaterialCommunityIcons
+                        name="file-upload"
+                        size={24}
+                        color={COLORS.primary}
+                      />
+                      <Text style={styles.filePickerText}>
+                        {filledFileName || (t('templates.selectFile') || 'Select File')}
+                      </Text>
+                    </TouchableOpacity>
+                  </Card>
+
+                  {/* Upload Button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.uploadButton,
+                      (!filledFileName || !selectedCaseId || isUploading) && styles.uploadButtonDisabled,
+                    ]}
+                    onPress={handleUploadFilledTemplate}
+                    disabled={!filledFileName || !selectedCaseId || isUploading}
+                  >
+                    {isUploading ? (
+                      <View style={styles.buttonContent}>
+                        <ActivityIndicator color="white" size="small" />
+                        <Text style={styles.buttonText}>
+                          {t('templates.uploading') || 'Uploading...'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.buttonContent}>
+                        <MaterialCommunityIcons name="upload" size={20} color="white" />
+                        <Text style={styles.buttonText}>
+                          {t('templates.uploadFilled') || 'Upload Filled Template'}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : !hasPreselectedCase && !hasValidCase && caseOptions.length === 0 ? (
+              /* No cases available and no preselected case - show rich empty state */
               <Card style={styles.noCasesCard}>
                 <View style={styles.noCasesContent}>
-                  <MaterialCommunityIcons
-                    name="folder-open"
-                    size={48}
-                    color={COLORS.textSecondary}
-                  />
+                      <View style={[styles.noCasesIconWrap, { backgroundColor: COLORS.primary + '12' }]}>
+                        <MaterialCommunityIcons
+                          name="briefcase-off"
+                          size={36}
+                          color={COLORS.primary}
+                        />
+                      </View>
+                      <Text style={styles.noCasesTitle}>
+                        {t('templates.createCaseFirst') || 'Create a case first'}
+                      </Text>
                   <Text style={styles.noCasesText}>
                     {t('templates.noCasesAvailable') || 'No cases available. Please create a case first.'}
                   </Text>
+                      <View style={styles.ctaRow}>
+                        <TouchableOpacity
+                          style={[styles.primaryCta, { backgroundColor: COLORS.primary }]}
+                          onPress={() => router.push('/case/new')}
+                        >
+                          <MaterialCommunityIcons name="plus-circle" size={18} color="white" />
+                          <Text style={styles.primaryCtaText}>{t('cases.createCase') || 'Create Case'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.secondaryCta, { borderColor: COLORS.primary }]}
+                          onPress={handleDownloadTemplate}
+                        >
+                          <MaterialCommunityIcons name="download" size={18} color={COLORS.primary} />
+                          <Text style={[styles.secondaryCtaText, { color: COLORS.primary }]}>
+                            {t('templates.downloadWithoutCase') || 'Download without case'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                 </View>
               </Card>
             ) : (
@@ -558,7 +694,7 @@ export default function TemplateDownloadUploadScreen() {
                 {/* File Selection */}
                 <Card style={styles.selectionCard}>
                   <Text style={styles.selectionTitle}>
-                    {t('templates.selectFilledFile') || 'Select Filled Template'}
+                          {t('templates.selectFilledFile') || 'Choose file'}
                   </Text>
                   <TouchableOpacity
                     style={styles.filePicker}
@@ -603,10 +739,57 @@ export default function TemplateDownloadUploadScreen() {
               </>
             )}
           </Animated.View>
+            {/* Footer safe-area spacer to ensure last card is fully visible */}
+            <View style={{ height: insets.bottom + 32 }} />
         </ScrollView>
         )}
+
+      {/* Download Complete Modal (Bottom Modal) */}
+      <Modal
+        visible={showDownloadModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDownloadModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: COLORS.surface }]}>
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalIconContainer, { backgroundColor: COLORS.success + '15' }]}>
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={32}
+                  color={COLORS.success}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowDownloadModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <MaterialCommunityIcons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalTitle, { color: COLORS.text }]}>
+              {t('templates.downloadComplete') || 'Download Complete'}
+            </Text>
+
+            <Text style={[styles.modalDescription, { color: COLORS.textSecondary }]}>
+              {t('templates.fillInstructions') || 'The template has been downloaded. Please fill it out using your preferred app and then upload it back.'}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.modalButton, { backgroundColor: COLORS.primary }]}
+              onPress={() => setShowDownloadModal(false)}
+            >
+              <Text style={styles.modalButtonText}>
+                {t('common.ok') || 'OK'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       </View>
-    </TouchDetector>
+    // </TouchDetector>
   );
 }
 
@@ -641,7 +824,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
     padding: SPACING.lg,
+    paddingBottom: SPACING.xl * 2, // Extra bottom padding to ensure last section is fully visible
   },
   templateCard: {
     marginBottom: SPACING.lg,
@@ -727,11 +914,92 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: SPACING.xl,
   },
+  noCasesIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+  },
+  noCasesTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
   noCasesText: {
     marginTop: SPACING.md,
     fontSize: 16,
     color: COLORS.textSecondary,
     textAlign: 'center',
+  },
+  ctaRow: {
+    marginTop: SPACING.lg,
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  primaryCta: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  primaryCtaText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  secondaryCta: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    borderWidth: 1.5,
+    backgroundColor: COLORS.surface,
+  },
+  secondaryCtaText: {
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  readyCard: {
+    borderRadius: 16,
+    marginBottom: SPACING.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.success + '30',
+    backgroundColor: COLORS.success + '08',
+  },
+  readyCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  readyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  readyText: {
+    flex: 1,
+  },
+  readyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.success,
+    marginBottom: 4,
+  },
+  readyDescription: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
   },
   selectionCard: {
     borderRadius: 16,
@@ -810,6 +1078,57 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: SPACING.lg,
+    maxHeight: '60%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  modalIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseButton: {
+    padding: SPACING.xs,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: SPACING.sm,
+    textAlign: 'center',
+  },
+  modalDescription: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: SPACING.lg,
+    textAlign: 'center',
+  },
+  modalButton: {
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
