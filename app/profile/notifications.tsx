@@ -24,6 +24,7 @@ import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { toast } from '../../lib/services/toast';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { logger } from '../../lib/utils/logger';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface NotificationPreferences {
   pushEnabled: boolean;
@@ -39,6 +40,7 @@ export default function NotificationPreferencesScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const registerPushToken = useAuthStore((state) => state.registerPushToken);
   const pushTokenFromStore = useAuthStore((state) => state.pushToken);
   const [preferences, setPreferences] = useState<NotificationPreferences>({
@@ -306,7 +308,7 @@ export default function NotificationPreferencesScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: insets.bottom + SPACING.lg }]}>
       <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
@@ -315,7 +317,7 @@ export default function NotificationPreferencesScreen() {
         showBackButton
       />
       <ScrollView
-        style={styles.scrollContainer}
+        style={[styles.scrollContainer, { paddingBottom: insets.bottom + SPACING.lg + SPACING.xl }]}
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.section}>
@@ -505,7 +507,7 @@ export default function NotificationPreferencesScreen() {
           </View>
         </View>
 
-        {preferences.pushEnabled && (
+        {/* {preferences.pushEnabled && (
           <View style={styles.testSection}>
             <TouchableOpacity
               style={styles.testButton}
@@ -522,9 +524,9 @@ export default function NotificationPreferencesScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        )}
+        )} */}
 
-        {pushToken && (
+        {/* {pushToken && (
           <View style={styles.tokenInfo}>
             <Text variant="bodySmall" style={styles.tokenLabel}>
               {t('notifications.pushToken')}
@@ -537,7 +539,7 @@ export default function NotificationPreferencesScreen() {
               {pushToken}
             </Text>
           </View>
-        )}
+        )} */}
       </ScrollView>
     </View>
   );

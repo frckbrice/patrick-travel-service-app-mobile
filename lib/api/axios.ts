@@ -10,10 +10,19 @@ const getAuthStore = () => {
 };
 
 // Get API URL from environment or config
-const API_BASE_URL = 
-  Constants.expoConfig?.extra?.apiUrl || 
-  process.env.EXPO_PUBLIC_API_URL || 
-  'http://localhost:3000/api';
+// Priority: expo extra.apiUrl → explicit PROD/DEV envs → localhost
+const isProduction = process.env.NODE_ENV === 'production';
+const PROD_API = process.env.EXPO_PUBLIC_API_PROD_URL;
+const DEV_API = process.env.EXPO_PUBLIC_API_URL;
+
+const envSelectedApi = isProduction
+  ? (PROD_API || DEV_API)
+  : (DEV_API || PROD_API);
+
+const API_BASE_URL =
+  Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
+
+console.log('API_BASE_URL', API_BASE_URL);
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

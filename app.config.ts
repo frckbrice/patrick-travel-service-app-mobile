@@ -66,7 +66,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     typedRoutes: true,
   },
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api',
+    // Always prefer explicit PROD URL if present, otherwise fall back to DEV URL
+    // Default to the production API if nothing is set
+    apiUrl:
+      (process.env.EXPO_PUBLIC_API_PROD_URL || process.env.EXPO_PUBLIC_API_URL)
+      || 'https://patrick-travel-services-web-app.vercel.app/api',
     firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
     firebaseAuthDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
     firebaseProjectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,

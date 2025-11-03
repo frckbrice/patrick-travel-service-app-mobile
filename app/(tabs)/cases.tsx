@@ -35,6 +35,7 @@ import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format } from 'date-fns';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 import { logger } from '../../lib/utils/logger';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type SortOption = 'date-desc' | 'date-asc' | 'status' | 'priority';
 
@@ -44,6 +45,7 @@ export default function CasesScreen() {
   const { cases, isLoading, fetchCases } = useCasesStore();
   const colors = useThemeColors();
   const scrollProps = useTabBarScroll();
+  const insets = useSafeAreaInsets();
 
   // State management
   const [searchQuery, setSearchQuery] = useState('');
@@ -249,7 +251,7 @@ export default function CasesScreen() {
 
   return (
     <TouchDetector>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: insets.bottom + SPACING.lg }]}>
       {/* Modern Gradient Header */}
         <ThemeAwareHeader
         variant="gradient"

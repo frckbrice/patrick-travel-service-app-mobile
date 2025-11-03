@@ -36,9 +36,18 @@ import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { toast } from '../../lib/services/toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { downloadsService, DownloadedFile } from '../../lib/services/downloadsService';
+import {
+  downloadAndShareFile,
+  formatFileSize,
+  getFileIconForMimeType,
+} from '../../lib/utils/fileDownload';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { logger } from '../../lib/utils/logger';
 
 type SortOption = 'date-desc' | 'date-asc' | 'type' | 'size';
-type TabType = 'documents' | 'templates';
+type TabType = 'documents' | 'templates' | 'downloads';
 
 export default function DocumentsScreen() {
   useRequireAuth();
@@ -66,6 +75,10 @@ export default function DocumentsScreen() {
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
 
+  // Downloads state
+  const [downloads, setDownloads] = useState<DownloadedFile[]>([]);
+  const [isLoadingDownloads, setIsLoadingDownloads] = useState(false);
+
   // Preview state
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<DocumentTemplate | null>(null);
@@ -92,7 +105,7 @@ export default function DocumentsScreen() {
 
   // Update active tab when URL params change
   useEffect(() => {
-    if (params.tab === 'templates' || params.tab === 'documents') {
+    if (params.tab === 'templates' || params.tab === 'documents' || params.tab === 'downloads') {
       setActiveTab(params.tab as TabType);
     }
   }, [params.tab]);
@@ -126,11 +139,26 @@ export default function DocumentsScreen() {
     }
   };
 
+  // Fetch downloads
+  const fetchDownloads = async () => {
+    setIsLoadingDownloads(true);
+    try {
+      const downloadedFiles = await downloadsService.getDownloads();
+      setDownloads(downloadedFiles);
+    } catch (error) {
+      console.error('Error fetching downloads:', error);
+    } finally {
+      setIsLoadingDownloads(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'documents') {
       fetchDocuments();
-    } else {
+    } else if (activeTab === 'templates') {
       fetchTemplates();
+    } else if (activeTab === 'downloads') {
+      fetchDownloads();
     }
   }, [activeTab]);
 
@@ -348,6 +376,25 @@ export default function DocumentsScreen() {
   const handleDownload = async (template: DocumentTemplate) => {
     try {
       const localUri = await templatesApi.downloadTemplate(template.id);
+
+      // Track the download
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(localUri);
+        if (fileInfo.exists) {
+          await downloadsService.addDownloadedFile({
+            name: template.fileName || template.name,
+            localUri,
+            originalUrl: template.fileUrl || '',
+            mimeType: template.mimeType,
+            size: fileInfo.size || template.fileSize || 0,
+            source: 'template',
+            sourceId: template.id,
+          });
+        }
+      } catch (trackError) {
+        // Don't fail download if tracking fails
+        logger.warn('Failed to track template download', { error: trackError, templateId: template.id });
+      }
 
       // Share the downloaded template
       const { shareAsync, isAvailableAsync } = await import('expo-sharing');
@@ -736,10 +783,171 @@ export default function DocumentsScreen() {
   const handleSearchChange = (value: string) => {
     if (activeTab === 'documents') {
       setSearchQuery(value);
-    } else {
+    } else if (activeTab === 'templates') {
       setTemplateSearchQuery(value);
     }
+    // Downloads tab doesn't have search yet
   };
+
+  // Handle download file share/open
+  const handleDownloadShare = async (file: DownloadedFile) => {
+    try {
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        toast.error({
+          title: t('common.error') || 'Error',
+          message: t('downloads.sharingNotAvailable') || 'Sharing is not available on this device',
+        });
+        return;
+      }
+
+      // Verify file still exists
+      const fileInfo = await FileSystem.getInfoAsync(file.localUri);
+      if (!fileInfo.exists) {
+        toast.error({
+          title: t('common.error') || 'Error',
+          message: t('downloads.fileNotFound') || 'File no longer exists',
+        });
+        // Remove from list
+        await downloadsService.deleteDownload(file.id);
+        fetchDownloads();
+        return;
+      }
+
+      await Sharing.shareAsync(file.localUri, {
+        mimeType: file.mimeType,
+        dialogTitle: `Share ${file.name}`,
+        UTI: file.mimeType,
+      });
+    } catch (error: any) {
+      logger.error('Failed to share download', error);
+      toast.error({
+        title: t('common.error') || 'Error',
+        message: error.message || t('downloads.shareFailed') || 'Failed to share file',
+      });
+    }
+  };
+
+  // Handle download file delete
+  const handleDownloadDelete = async (file: DownloadedFile) => {
+    try {
+      const deleted = await downloadsService.deleteDownload(file.id);
+      if (deleted) {
+        toast.success({
+          title: t('common.success') || 'Success',
+          message: t('downloads.deleteSuccess') || 'File deleted successfully',
+        });
+        fetchDownloads();
+      } else {
+        throw new Error(t('downloads.deleteFailed') || 'Failed to delete file');
+      }
+    } catch (error: any) {
+      logger.error('Failed to delete download', error);
+      toast.error({
+        title: t('common.error') || 'Error',
+        message: error.message || t('downloads.deleteFailed') || 'Failed to delete file',
+      });
+    }
+  };
+
+  // Render download item
+  const renderDownloadItem = useCallback(
+    ({ item, index }: { item: DownloadedFile; index: number }) => {
+      return (
+        <Animated.View entering={FadeInDown.delay(Math.min(index * 30, 200)).springify()}>
+          <Card style={{ ...styles.card, backgroundColor: colors.card }}>
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <View style={styles.documentContainer}>
+                  <MaterialCommunityIcons
+                    name={getFileIconForMimeType(item.mimeType) as any}
+                    size={20}
+                    color={colors.primary}
+                    style={styles.icon}
+                  />
+                  <PaperText style={styles.documentName} numberOfLines={1}>
+                    {item.name}
+                  </PaperText>
+                </View>
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    onPress={() => handleDownloadShare(item)}
+                    style={styles.previewButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name="share-variant"
+                      size={20}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDownloadDelete(item)}
+                    style={styles.previewButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialCommunityIcons
+                      name="delete"
+                      size={20}
+                      color={colors.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.metaRow}>
+                <View style={[styles.typeBadge, { backgroundColor: colors.secondary + '15' }]}>
+                  <MaterialCommunityIcons
+                    name={item.source === 'email' ? 'email' : item.source === 'template' ? 'file-document-edit' : 'file'}
+                    size={12}
+                    color={colors.secondary}
+                  />
+                  <PaperText style={[styles.typeText, { color: colors.secondary }]}>
+                    {item.source === 'email' ? 'Email' : item.source === 'template' ? 'Template' : 'Other'}
+                  </PaperText>
+                </View>
+                <View style={styles.sizeChip}>
+                  <MaterialCommunityIcons
+                    name="file"
+                    size={12}
+                    color={colors.textSecondary}
+                    style={styles.sizeIcon}
+                  />
+                  <PaperText style={styles.sizeText}>
+                    {formatFileSize(item.size)}
+                  </PaperText>
+                </View>
+              </View>
+
+              <View style={styles.infoContainer}>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons
+                    name="calendar"
+                    size={14}
+                    color={colors.textSecondary}
+                  />
+                  <PaperText style={styles.infoText}>
+                    {format(new Date(item.downloadedAt), 'MMM dd, yyyy')}
+                  </PaperText>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons
+                    name="clock"
+                    size={14}
+                    color={colors.textSecondary}
+                  />
+                  <PaperText style={styles.infoText}>
+                    {format(new Date(item.downloadedAt), 'HH:mm')}
+                  </PaperText>
+                </View>
+              </View>
+            </View>
+          </Card>
+        </Animated.View>
+      );
+    },
+    [colors, handleDownloadShare, handleDownloadDelete]
+  );
 
   return (
     // <TouchDetector>
@@ -747,8 +955,16 @@ export default function DocumentsScreen() {
       <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
-        title={activeTab === 'documents' ? t('documents.title') || 'Documents' : t('templates.title') || 'Templates'}
-        subtitle={activeTab === 'documents' ? (t('documents.subtitle') || 'Upload and manage your files') : (t('templates.subtitle') || 'Download and fill required documents')}
+        title={
+          activeTab === 'documents' ? t('documents.title') || 'Documents' :
+          activeTab === 'templates' ? t('templates.title') || 'Templates' :
+          t('downloads.title') || 'Downloads'
+        }
+        subtitle={
+          activeTab === 'documents' ? (t('documents.subtitle') || 'Upload and manage your files') :
+          activeTab === 'templates' ? (t('templates.subtitle') || 'Download and fill required documents') :
+          (t('downloads.subtitle') || 'View your downloaded files')
+        }
         showBackButton
         showSearch={false}
         showAddButton={activeTab === 'documents'}
@@ -795,6 +1011,25 @@ export default function DocumentsScreen() {
               { color: activeTab === 'templates' ? 'white' : colors.textSecondary }
             ]}>
               {t('templates.title') || 'Templates'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.segment,
+              activeTab === 'downloads' && [styles.segmentActive, { backgroundColor: colors.secondary }],
+            ]}
+            onPress={() => setActiveTab('downloads')}
+          >
+            <MaterialCommunityIcons
+              name="download"
+              size={18}
+              color={activeTab === 'downloads' ? 'white' : colors.textSecondary}
+            />
+            <Text style={[
+              styles.segmentText,
+              { color: activeTab === 'downloads' ? 'white' : colors.textSecondary }
+            ]}>
+              {t('downloads.title') || 'Downloads'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1081,6 +1316,38 @@ export default function DocumentsScreen() {
                 icon="file-document-outline"
                 title={t('templates.noTemplates')}
                 description={t('templates.noTemplatesDescription')}
+              />
+            }
+          />
+        )
+      )}
+
+      {/* Downloads List */}
+      {activeTab === 'downloads' && (
+        isLoadingDownloads ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <FlatList
+            data={downloads}
+            renderItem={renderDownloadItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.list}
+            onScroll={scrollProps.onScroll}
+            scrollEventThrottle={scrollProps.scrollEventThrottle}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoadingDownloads}
+                onRefresh={fetchDownloads}
+                tintColor={colors.primary}
+              />
+            }
+            ListEmptyComponent={
+              <EmptyState
+                icon="download-off"
+                title={t('downloads.noDownloads') || 'No Downloads'}
+                description={t('downloads.noDownloadsDescription') || 'Files you download will appear here'}
               />
             }
           />

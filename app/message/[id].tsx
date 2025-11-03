@@ -8,7 +8,7 @@ import {
   Text,
   TextInput as RNTextInput,
   TouchableOpacity,
-  Keyboard, KeyboardEvent 
+  Keyboard, KeyboardEvent
 } from 'react-native';
 import { Avatar } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -22,7 +22,6 @@ import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { chatService, ChatMessage, Conversation } from '../../lib/services/chat';
 import { auth } from '../../lib/firebase/config';
-import { useChatPagination } from '../../lib/hooks/usePagination';
 import { useThrottle } from '../../lib/hooks';
 import {
   downloadAndShareFile,
@@ -43,21 +42,21 @@ import { Alert } from '../../lib/utils/alert';
 import { useTabBarContext } from '../../lib/context/TabBarContext';
 
 
- // Standalone memoized chat input prevents parent re-renders on keystrokes
- const ChatInput = memo(function ChatInput({
+// Standalone memoized chat input prevents parent re-renders on keystrokes
+const ChatInput = memo(function ChatInput({
   value,
   onChangeText,
   placeholder,
   editable,
-   placeholderTextColor,
-   textColor,
+  placeholderTextColor,
+  textColor,
 }: {
   value: string;
   onChangeText: (text: string) => void;
   placeholder: string;
   editable: boolean;
-     placeholderTextColor: string;
-     textColor: string;
+  placeholderTextColor: string;
+  textColor: string;
 }) {
   const onChange = React.useCallback((text: string) => onChangeText(text), [onChangeText]);
   return (
@@ -131,43 +130,38 @@ export default function ChatScreen() {
 
     const subs = Platform.OS === 'ios'
       ? [
-          Keyboard.addListener('keyboardWillShow', onShow),
-          Keyboard.addListener('keyboardWillHide', onHide),
-        ]
+        Keyboard.addListener('keyboardWillShow', onShow),
+        Keyboard.addListener('keyboardWillHide', onHide),
+      ]
       : [
-          Keyboard.addListener('keyboardDidShow', onShow),
-          Keyboard.addListener('keyboardDidHide', onHide),
-        ];
+        Keyboard.addListener('keyboardDidShow', onShow),
+        Keyboard.addListener('keyboardDidHide', onHide),
+      ];
 
     return () => {
       subs.forEach(sub => sub.remove());
     };
   }, []);
 
-  // Use pagination hook for messages
-  const {
-    data: messages,
-    setData: setMessages,
-    prependData,
-    appendData: appendMessages,
-    isLoading,
-    isLoadingMore,
-    hasMore,
-    error: paginationError,
-    loadInitial,
-    loadMore,
-    refresh,
-  } = useChatPagination(
-    caseId || '',
-    chatService.loadInitialMessages,
-    chatService.loadOlderMessages
-  );
+  // Optimized Firebase message loading (no cache, incremental, on-demand)
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [resolvedRoomId, setResolvedRoomId] = useState<string | null>(null);
+  const lastMessageTimestampRef = useRef<number>(0);
 
 
+  // Resolve chat room ID and set up Firebase subscription
   useEffect(() => {
-    if (!caseId) return;
+    if (!caseId) {
+      setMessages([]);
+      setIsLoading(false);
+      setResolvedRoomId(null);
+      return;
+    }
 
-    logger.info('Chat screen mounted', { caseId });
+    logger.info('Chat screen mounted - initializing Firebase subscription', { caseId });
 
     // Clear processed messages ref for new chat
     processedMessagesRef.current.clear();
@@ -175,112 +169,177 @@ export default function ChatScreen() {
     hasInitialScrolledRef.current = false;
     shouldAutoScrollRef.current = true;
     isUserScrollingRef.current = false;
+    setIsLoading(true);
 
-    // Load initial messages using pagination hook
+    let unsubscribe: (() => void) | null = null;
+
     const initializeChat = async () => {
       try {
-        logger.info('Starting chat initialization', { caseId });
-        const result = await loadInitial();
-        
-        console.log("\n\n messages: ", result);
-        // Note: messages state updates asynchronously after loadInitial
-        // Scroll to bottom after initial load completes
+        // Step 1: Resolve chat room ID
+        let roomId = caseId;
+        const clientFirebaseId = auth.currentUser?.uid || user?.id;
+        const agentFirebaseId = agentInfo?.id;
+
+        if (clientFirebaseId && agentFirebaseId) {
+          const resolvedId = await chatService.resolveChatRoomIdFromCase(caseId, clientFirebaseId, agentFirebaseId);
+          if (resolvedId) {
+            roomId = resolvedId;
+          } else {
+            // Room doesn't exist yet, create room ID from client-agent pair
+            roomId = chatService.getChatRoomIdFromPair(clientFirebaseId, agentFirebaseId);
+          }
+        }
+
+        setResolvedRoomId(roomId);
+        logger.info('Chat room ID resolved', { caseId, roomId: roomId.substring(0, 12) + '...' });
+
+        // Step 2: Load initial messages from Firebase (optimized, only last 50)
+        try {
+          const initialResult = await chatService.loadInitialMessages(caseId, clientFirebaseId, agentFirebaseId);
+          setMessages(initialResult.messages);
+          setHasMore(initialResult.hasMore);
+          setIsLoading(false);
+
+          // Track last message timestamp for incremental updates
+          if (initialResult.messages.length > 0) {
+            lastMessageTimestampRef.current = Math.max(
+              ...initialResult.messages.map(m => m.timestamp)
+            );
+          }
+
+          logger.info('Initial messages loaded (optimized)', {
+            count: initialResult.messages.length,
+            hasMore: initialResult.hasMore
+          });
+        } catch (error) {
+          logger.error('Failed to load initial messages', error);
+          setMessages([]);
+          setIsLoading(false);
+        }
+
+        // Step 3: Set up real-time listener for NEW messages only (performance optimized)
+        // This listens only to new messages using child_added, not all messages
+        // Much more efficient - only receives incremental updates
+        unsubscribe = chatService.subscribeToNewMessagesOptimized(
+          roomId,
+          (newMessage) => {
+            // Add new message to existing messages (incremental update)
+            setMessages(prev => {
+              // Check if message already exists (prevent duplicates)
+              const exists = prev.some(m => m.id === newMessage.id || m.tempId === newMessage.id);
+              if (exists) {
+                // If it's a temp message being replaced, remove the temp one
+                const tempIndex = prev.findIndex(m => m.tempId && m.id === newMessage.id);
+                if (tempIndex !== -1) {
+                  const updated = [...prev];
+                  updated[tempIndex] = newMessage; // Replace temp with real message
+                  return updated.sort((a, b) => a.timestamp - b.timestamp);
+                }
+                return prev;
+              }
+
+              // Remove any optimistic message with matching content (replace with real message)
+              const updated = prev
+                .filter(m => !(m.tempId && m.message === newMessage.message && Math.abs(m.timestamp - newMessage.timestamp) < 5000))
+                .concat([newMessage])
+                .sort((a, b) => a.timestamp - b.timestamp);
+
+              // Update last known timestamp
+              if (newMessage.timestamp > lastMessageTimestampRef.current) {
+                lastMessageTimestampRef.current = newMessage.timestamp;
+              }
+
+              return updated;
+            });
+
+            // Auto-scroll to bottom if user is near bottom
+            if (shouldAutoScrollRef.current && !isUserScrollingRef.current && scrollPositionRef.current < 300) {
+              setTimeout(() => {
+                if (shouldAutoScrollRef.current && !isUserScrollingRef.current) {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }
+              }, 100);
+            }
+          },
+          lastMessageTimestampRef.current // Only get messages newer than what we already have
+        );
+
+        setUnsubscribeMessages(() => unsubscribe!);
+
+        // Step 4: Scroll to bottom after initial load completes
+        // Delay to ensure messages are rendered
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: false });
           shouldAutoScrollRef.current = true;
           isUserScrollingRef.current = false;
+          hasInitialScrolledRef.current = true;
         }, 300);
-        logger.info('Chat initialization completed', { caseId });
+
+        // Step 5: Mark messages as read
+        if (user && roomId) {
+          chatService.markChatRoomAsRead(caseId, user.id).catch(error => {
+            logger.warn('Failed to mark messages as read (non-blocking)', error);
+          });
+        }
+
+        logger.info('Chat initialization completed', { caseId, roomId: roomId.substring(0, 12) + '...' });
       } catch (error) {
         logger.error('Failed to initialize chat', error);
+        setIsLoading(false);
+        setMessages([]);
       }
     };
 
     initializeChat();
 
-    // Mark messages as read when opening chat - update both Firebase and database
-    if (user) {
-      chatService.markChatRoomAsRead(caseId, user.id).catch(error => {
-        // Silently handle permission errors - user may not have permission to mark messages as read
-        logger.warn('Failed to mark messages as read (non-blocking)', error);
-      });
-    }
-
     return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
       if (unsubscribeMessages) {
         unsubscribeMessages();
       }
       if (scrollToEndTimeoutRef.current) {
         clearTimeout(scrollToEndTimeoutRef.current);
       }
-      
-      // Clean up cache when chat is closed (FIFO - keep only last 20 messages)
-      if (caseId) {
-        chatService.cleanupCacheOnChatClose(caseId).catch(error => {
-          logger.warn('Failed to cleanup cache on chat close', error);
+    };
+  }, [caseId, user, agentInfo?.id]);
+
+
+
+  // Load more messages when scrolling up (pagination)
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore || !caseId || messages.length === 0) return;
+
+    setIsLoadingMore(true);
+    try {
+      const oldestTimestamp = Math.min(...messages.map(m => m.timestamp));
+      const result = await chatService.loadOlderMessages(
+        caseId,
+        oldestTimestamp,
+        20,
+        auth.currentUser?.uid || user?.id,
+        agentInfo?.id
+      );
+
+      if (result.messages.length > 0) {
+        // Prepend older messages to the beginning
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const uniqueNew = result.messages.filter(m => !existingIds.has(m.id));
+          const combined = [...uniqueNew, ...prev];
+          return combined.sort((a, b) => a.timestamp - b.timestamp);
         });
       }
-    };
-  }, [caseId, user]);
 
-  
-
-  useEffect(() => {
-    if (!caseId) return;
-
-    // Ensure only one listener at a time
-    if (unsubscribeMessages) {
-      unsubscribeMessages();
-      setUnsubscribeMessages(null);
+      setHasMore(result.hasMore);
+      logger.info('Older messages loaded', { count: result.messages.length, hasMore: result.hasMore });
+    } catch (error) {
+      logger.error('Failed to load older messages', error);
+    } finally {
+      setIsLoadingMore(false);
     }
-
-    logger.info('Setting up real-time listener (child_added) for case', { caseId });
-
-    // Use incremental child_added listener to get messages as they arrive
-    const unsubscribe = chatService.listenToChatMessages(
-      caseId,
-      (incoming) => {
-        if (!incoming || incoming.length === 0) return;
-
-        // Exclude messages sent by current user (optimistic already added)
-        const currentUserFirebaseId = auth.currentUser?.uid || user?.id;
-        const fromOthers = incoming.filter(m => m.senderId !== currentUserFirebaseId);
-
-        if (fromOthers.length === 0) return;
-
-        // Deduplicate against current state snapshot
-        const existingIds = new Set(messages.map(m => m.id));
-        const deduped = fromOthers.filter(m => !existingIds.has(m.id));
-        if (deduped.length === 0) return;
-
-        // Update latest timestamp ref for any logic relying on it
-        latestTimestampRef.current = deduped[deduped.length - 1].timestamp;
-
-        // Append via pagination hook helper to avoid unnecessary re-renders
-        appendMessages(deduped as any);
-
-        // Only auto-scroll if user is near bottom (within 300px) and not actively scrolling
-        if (shouldAutoScrollRef.current && !isUserScrollingRef.current && scrollPositionRef.current < 300) {
-          if (scrollToEndTimeoutRef.current) {
-            clearTimeout(scrollToEndTimeoutRef.current);
-          }
-          scrollToEndTimeoutRef.current = setTimeout(() => {
-            // Double-check user hasn't started scrolling
-            if (shouldAutoScrollRef.current && !isUserScrollingRef.current && scrollPositionRef.current < 300) {
-              flatListRef.current?.scrollToEnd({ animated: true });
-            }
-          }, 100);
-        }
-      },
-      50
-    );
-
-    setUnsubscribeMessages(() => unsubscribe);
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [caseId, user]);
+  }, [caseId, messages, isLoadingMore, hasMore, user, agentInfo?.id]);
 
   // Sort messages chronologically to ensure correct display order
   const sortedMessages = useMemo(() => {
@@ -362,7 +421,7 @@ export default function ChatScreen() {
 
 
 
-  
+
 
   const handleSendMessage = useCallback(async () => {
     if (
@@ -418,7 +477,7 @@ export default function ChatScreen() {
         if (shouldAutoScrollRef.current &&
           !isUserScrollingRef.current &&
           timeSinceLastScrollNow > 500) {
-        // Scroll to bottom to show sent message (WhatsApp behavior)
+          // Scroll to bottom to show sent message (WhatsApp behavior)
           flatListRef.current?.scrollToEnd({ animated: false });
         }
       }, 50);
@@ -426,23 +485,57 @@ export default function ChatScreen() {
 
     try {
       // 4. Send to server in background
-      await chatService.sendMessage(
+      // CRITICAL: Use Firebase UIDs for clientId and agentId to match new format
+      // auth.currentUser?.uid is already a Firebase UID
+      // For agent, try to get Firebase UID from metadata or use agentInfo.id if it's already a Firebase UID
+      const clientFirebaseId = auth.currentUser?.uid || user.id;
+      let agentFirebaseId: string | undefined = agentInfo?.id;
+
+      // If agentInfo.id looks like a PostgreSQL UUID (has hyphens), try to get Firebase UID
+      // Otherwise assume it's already a Firebase UID
+      if (agentInfo?.id && agentInfo.id.includes('-') && agentInfo.id.length > 30) {
+        // Looks like PostgreSQL UUID, try to get Firebase UID from metadata
+        try {
+          const metadata = await chatService.getChatMetadata(caseId);
+          if (metadata?.participants?.agentId) {
+            agentFirebaseId = metadata.participants.agentId;
+            logger.info('Using agent Firebase UID from metadata', { agentFirebaseId: agentFirebaseId.substring(0, 8) + '...' });
+          }
+        } catch (error) {
+          logger.warn('Failed to get agent Firebase UID from metadata, using provided ID', { error });
+        }
+      }
+
+      const sendResult = await chatService.sendMessage(
         caseId,
         auth.currentUser?.uid || user.id,
         `${user.firstName} ${user.lastName}`,
         (user.role === 'CLIENT' ? 'CLIENT' : 'AGENT'),
         messageText || '📎 Attachment',
-        attachments.length > 0 ? attachments : undefined
+        attachments.length > 0 ? attachments : undefined,
+        clientFirebaseId, // Use Firebase UID for client
+        agentFirebaseId // Use Firebase UID for agent (or PostgreSQL ID if conversion fails)
       );
 
-      // 5. Update message status to sent (setData expects array, not updater fn)
-      {
-        const index = messages.findIndex((m) => m.tempId === tempId);
-        if (index !== -1) {
-          const updated = [...messages];
-          updated[index] = { ...updated[index], status: 'sent' };
-          setMessages(updated);
-        }
+      // 5. Update message status to sent
+      // The Firebase listener will receive the actual message and replace the optimistic one
+      if (sendResult) {
+        // Message sent successfully - Firebase listener will handle the real message
+        // Remove optimistic message after a delay to allow Firebase message to arrive
+        setTimeout(() => {
+          setMessages(prev => prev.filter(m => m.tempId !== tempId));
+        }, 1000);
+      } else {
+        // Send failed - mark optimistic message as failed
+        setMessages(prev => {
+          const index = prev.findIndex((m) => m.tempId === tempId);
+          if (index !== -1) {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], status: 'failed', error: 'Failed to send message' };
+            return updated;
+          }
+          return prev;
+        });
       }
 
       logger.info('Message sent successfully', {
@@ -479,56 +572,91 @@ export default function ChatScreen() {
     }
   }, [newMessage, selectedAttachments, user, caseId]);
 
-// Ensure Firebase conversation exists (metadata + userChats) before messaging
-useEffect(() => {
-  const ensureConversation = async () => {
-    if (chatInitializedRef.current) return;
-    if (!user || !caseId) return;
-    try {
-      logger.info('Ensuring conversation exists', { caseId, userId: user.id });
-      // Resolve true case reference via chat metadata (Firebase chat ID -> caseReference)
-      const metadata = await chatService.getChatMetadata(caseId);
-      const trueCaseId = metadata?.caseReferences?.[0]?.caseId || caseId;
-      logger.info('Case metadata retrieved', { metadata, trueCaseId });
-      // Prefer agent info from metadata if present
-      if (metadata?.participants?.agentId || metadata?.participants?.agentName) {
-        setAgentInfo({
-          id: metadata.participants.agentId,
-          name: metadata.participants.agentName,
-          isOnline: false // Default to offline if no metadata available
-        });
-      }
+  // Ensure Firebase conversation exists (metadata + userChats) before messaging
+  useEffect(() => {
+    const ensureConversation = async () => {
+      if (chatInitializedRef.current) return;
+      if (!user || !caseId) return;
+      try {
+        logger.info('Ensuring conversation exists', { caseId, userId: user.id });
+        // Resolve true case reference via chat metadata (Firebase chat ID -> caseReference)
+        const metadata = await chatService.getChatMetadata(caseId);
+        const trueCaseId = metadata?.caseReferences?.[0]?.caseId || caseId;
+        logger.info('Case metadata retrieved', { metadata, trueCaseId });
+        // Prefer agent info from metadata if present
+        if (metadata?.participants?.agentId || metadata?.participants?.agentName) {
+          setAgentInfo({
+            id: metadata.participants.agentId,
+            name: metadata.participants.agentName,
+            isOnline: false // Default to offline if no metadata available
+          });
+        }
 
-      const resp = await casesApi.getCaseById(trueCaseId);
-      logger.info('Case data retrieved', { success: resp?.success, hasData: !!resp?.data, hasAgent: !!resp?.data?.assignedAgent });
-      const c: any = resp?.data;
-      if (resp?.success && c?.assignedAgent) {
-        await chatService.initializeConversation(
-          caseId,
-          c.referenceNumber || trueCaseId,
-          user.id,
-          `${user.firstName} ${user.lastName}`,
-          c.assignedAgent.id,
-          `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim()
-        );
-        logger.info('Conversation initialized', { caseId, agentId: c.assignedAgent.id });
-        // Ensure UI header shows correct agent info
-        setAgentInfo({
-          id: c.assignedAgent.id,
-          name: `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim(),
-          profilePicture: c.assignedAgent.profilePicture,
-          isOnline: true // Assume online for now, can be updated with real-time status later
-        });
-        chatInitializedRef.current = true;
-      } else {
-        logger.warn('Cannot initialize conversation - missing agent', { hasSuccess: resp?.success, hasAgent: !!resp?.data?.assignedAgent });
+        const resp = await casesApi.getCaseById(trueCaseId);
+        logger.info('Case data retrieved', { success: resp?.success, hasData: !!resp?.data, hasAgent: !!resp?.data?.assignedAgent });
+        const c: any = resp?.data;
+        if (resp?.success && c?.assignedAgent) {
+          // CRITICAL: Use Firebase UIDs for initializeConversation
+          // auth.currentUser?.uid is already a Firebase UID for the client
+          const clientFirebaseId = auth.currentUser?.uid || user.id;
+
+          // For agent, try to get Firebase UID from metadata first, then from API
+          let agentFirebaseId = c.assignedAgent.firebaseId || c.assignedAgent.id;
+
+          // If agent ID looks like PostgreSQL UUID, try to get Firebase UID
+          if (agentFirebaseId.includes('-') && agentFirebaseId.length > 30) {
+            // Check if metadata already has agent Firebase UID
+            if (metadata?.participants?.agentId) {
+              agentFirebaseId = metadata.participants.agentId;
+              logger.info('Using agent Firebase UID from metadata for initialization', { agentFirebaseId: agentFirebaseId.substring(0, 8) + '...' });
+            } else {
+              // Try API to get Firebase UID
+              try {
+                const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+                const uidResponse = await fetch(`${apiUrl}/api/users/${c.assignedAgent.id}/firebase-uid`);
+                if (uidResponse.ok) {
+                  const uidData = (await uidResponse.json()) as { data?: { firebaseId?: string } };
+                  agentFirebaseId = uidData.data?.firebaseId || agentFirebaseId;
+                  logger.info('Got agent Firebase UID from API', { agentFirebaseId: agentFirebaseId.substring(0, 8) + '...' });
+                }
+              } catch (apiError) {
+                logger.warn('Failed to get agent Firebase UID from API, using provided ID', { error: apiError });
+              }
+            }
+          }
+
+          await chatService.initializeConversation(
+            caseId,
+            c.referenceNumber || trueCaseId,
+            clientFirebaseId, // Use Firebase UID
+            `${user.firstName} ${user.lastName}`,
+            agentFirebaseId, // Use Firebase UID
+            `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim()
+          );
+          logger.info('Conversation initialized', { caseId, agentFirebaseId: agentFirebaseId.substring(0, 8) + '...' });
+          // Ensure UI header shows correct agent info (store Firebase UID)
+          setAgentInfo({
+            id: agentFirebaseId, // Store Firebase UID
+            name: `${c.assignedAgent.firstName || ''} ${c.assignedAgent.lastName || ''}`.trim(),
+            profilePicture: c.assignedAgent.profilePicture,
+            isOnline: true // Assume online for now, can be updated with real-time status later
+          });
+          chatInitializedRef.current = true;
+
+          // Refresh messages once agent info is available to load from correct room
+          if (agentFirebaseId) {
+            logger.info('Agent Firebase UID obtained, messages will auto-refresh via subscription', { agentFirebaseId: agentFirebaseId.substring(0, 8) + '...' });
+            // Messages will automatically update via Firebase subscription when room ID changes
+          }
+        } else {
+          logger.warn('Cannot initialize conversation - missing agent', { hasSuccess: resp?.success, hasAgent: !!resp?.data?.assignedAgent });
+        }
+      } catch (error) {
+        logger.error('Failed to ensure conversation', error);
       }
-    } catch (error) {
-      logger.error('Failed to ensure conversation', error);
-    }
-  };
-  ensureConversation();
-}, [user, caseId]);
+    };
+    ensureConversation();
+  }, [user, caseId]);
 
   // Hide tab bar when this screen mounts (stack screen)
   useEffect(() => {
@@ -538,162 +666,180 @@ useEffect(() => {
     };
   }, [hideTabBar, showTabBar]);
 
- // RETRY: Retry sending a failed message
- const handleRetryMessage = useCallback(
-  async (failedMessage: ChatMessage) => {
-    if (!user || !caseId) return;
+  // RETRY: Retry sending a failed message
+  const handleRetryMessage = useCallback(
+    async (failedMessage: ChatMessage) => {
+      if (!user || !caseId) return;
 
-     // PERFORMANCE: Mark as pending efficiently (setData expects array, not updater fn)
-     {
-       const index = messages.findIndex((m) => m.id === failedMessage.id);
-       if (index !== -1) {
-         const updated = [...messages];
-         updated[index] = { ...updated[index], status: 'pending', error: undefined };
-         setMessages(updated);
-       }
-     }
+      // PERFORMANCE: Mark as pending efficiently (setData expects array, not updater fn)
+      {
+        const index = messages.findIndex((m) => m.id === failedMessage.id);
+        if (index !== -1) {
+          const updated = [...messages];
+          updated[index] = { ...updated[index], status: 'pending', error: undefined };
+          setMessages(updated);
+        }
+      }
 
-    try {
+      try {
+        // Use Firebase UIDs for clientId and agentId to match new format
+        const clientFirebaseId = auth.currentUser?.uid || user.id;
+        let agentFirebaseId: string | undefined = agentInfo?.id;
+
+        // Try to get Firebase UID from metadata if agentInfo.id looks like PostgreSQL UUID
+        if (agentInfo?.id && agentInfo.id.includes('-') && agentInfo.id.length > 30) {
+          try {
+            const metadata = await chatService.getChatMetadata(caseId);
+            if (metadata?.participants?.agentId) {
+              agentFirebaseId = metadata.participants.agentId;
+            }
+          } catch (error) {
+            logger.warn('Failed to get agent Firebase UID from metadata during retry', { error });
+          }
+        }
+
         await chatService.sendMessage(
-        caseId,
+          caseId,
           auth.currentUser?.uid || user.id,
-        `${user.firstName} ${user.lastName}`,
+          `${user.firstName} ${user.lastName}`,
           (user.role === 'CLIENT' ? 'CLIENT' : 'AGENT'),
-        failedMessage.message,
-        failedMessage.attachments
-      );
-
-      // PERFORMANCE: Mark as sent efficiently (setData expects array, not updater fn)
-      {
-        const index = messages.findIndex((m) => m.id === failedMessage.id);
-        if (index !== -1) {
-          const updated = [...messages];
-          updated[index] = { ...updated[index], status: 'sent' };
-          setMessages(updated);
-        }
-      }
-
-      logger.info('Message retry successful', { messageId: failedMessage.id });
-    } catch (error: any) {
-      logger.error('Message retry failed', error);
-
-      // PERFORMANCE: Mark as failed efficiently (setData expects array, not updater fn)
-      {
-        const index = messages.findIndex((m) => m.id === failedMessage.id);
-        if (index !== -1) {
-          const updated = [...messages];
-          updated[index] = {
-            ...updated[index],
-            status: 'failed',
-            error: error.message || 'Failed'
-          };
-          setMessages(updated);
-        }
-      }
-    }
-  },
-   [user, caseId, messages, setMessages]
-);
-
- // DELETE: Remove a failed message
- const handleDeleteFailedMessage = useCallback(
-  (messageId: string) => {
-    Alert.alert(
-      t('common.confirm'),
-      t('messages.deleteFailedMessage'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: () => {
-            setMessages(messages.filter((m) => m.id !== messageId));
-            logger.info('Failed message deleted', { messageId });
-          },
-        },
-      ]
-    );
-  },
-   [t, messages, setMessages]
-);
-
-
-const handlePickFile = useCallback(async () => {
-  try {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
-      quality: 0.8,
-      allowsMultipleSelection: false,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      const file = result.assets[0];
-
-      // Get file info
-      const fileName =
-        file.fileName ||
-        `file_${Date.now()}.${file.type === 'image' ? 'jpg' : 'mp4'}`;
-      const mimeType =
-        file.mimeType || (file.type === 'image' ? 'image/jpeg' : 'video/mp4');
-      const fileSize = file.fileSize || 0;
-
-      // Validate file before uploading
-      const validation = validateFile(fileSize, mimeType);
-      if (!validation.valid) {
-        Alert.alert(
-          t('common.error'),
-          validation.error || t('errors.invalidFile')
+          failedMessage.message,
+          failedMessage.attachments,
+          clientFirebaseId, // Use Firebase UID for client
+          agentFirebaseId // Use Firebase UID for agent
         );
-        return;
+
+        // PERFORMANCE: Mark as sent efficiently (setData expects array, not updater fn)
+        {
+          const index = messages.findIndex((m) => m.id === failedMessage.id);
+          if (index !== -1) {
+            const updated = [...messages];
+            updated[index] = { ...updated[index], status: 'sent' };
+            setMessages(updated);
+          }
+        }
+
+        logger.info('Message retry successful', { messageId: failedMessage.id });
+      } catch (error: any) {
+        logger.error('Message retry failed', error);
+
+        // PERFORMANCE: Mark as failed efficiently (setData expects array, not updater fn)
+        {
+          const index = messages.findIndex((m) => m.id === failedMessage.id);
+          if (index !== -1) {
+            const updated = [...messages];
+            updated[index] = {
+              ...updated[index],
+              status: 'failed',
+              error: error.message || 'Failed'
+            };
+            setMessages(updated);
+          }
+        }
       }
+    },
+    [user, caseId, messages, setMessages]
+  );
 
-      // Show uploading state
-      setIsUploading(true);
-      setUploadProgress(0);
-
-      logger.info('Starting file upload', { fileName, fileSize, mimeType });
-
-      // Upload file to API
-      const uploadResult = await uploadFileToAPI(
-        file.uri,
-        fileName,
-        mimeType
+  // DELETE: Remove a failed message
+  const handleDeleteFailedMessage = useCallback(
+    (messageId: string) => {
+      Alert.alert(
+        t('common.confirm'),
+        t('messages.deleteFailedMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('common.delete'),
+            style: 'destructive',
+            onPress: () => {
+              setMessages(messages.filter((m) => m.id !== messageId));
+              logger.info('Failed message deleted', { messageId });
+            },
+          },
+        ]
       );
+    },
+    [t, messages, setMessages]
+  );
 
+
+  const handlePickFile = useCallback(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const file = result.assets[0];
+
+        // Get file info
+        const fileName =
+          file.fileName ||
+          `file_${Date.now()}.${file.type === 'image' ? 'jpg' : 'mp4'}`;
+        const mimeType =
+          file.mimeType || (file.type === 'image' ? 'image/jpeg' : 'video/mp4');
+        const fileSize = file.fileSize || 0;
+
+        // Validate file before uploading
+        const validation = validateFile(fileSize, mimeType);
+        if (!validation.valid) {
+          Alert.alert(
+            t('common.error'),
+            validation.error || t('errors.invalidFile')
+          );
+          return;
+        }
+
+        // Show uploading state
+        setIsUploading(true);
+        setUploadProgress(0);
+
+        logger.info('Starting file upload', { fileName, fileSize, mimeType });
+
+        // Upload file to API
+        const uploadResult = await uploadFileToAPI(
+          file.uri,
+          fileName,
+          mimeType
+        );
+
+        setIsUploading(false);
+        setUploadProgress(0);
+
+        if (!uploadResult.success || !uploadResult.url) {
+          Alert.alert(
+            t('common.error'),
+            uploadResult.error || t('errors.uploadFailed') || 'Upload failed'
+          );
+          return;
+        }
+
+        // Add to selected attachments
+        setSelectedAttachments((prev) => [
+          ...prev,
+          {
+            name: fileName,
+            url: uploadResult.url!,
+            type: mimeType,
+            size: fileSize,
+          },
+        ]);
+
+        logger.info('File uploaded successfully', {
+          fileName,
+          url: uploadResult.url,
+        });
+      }
+    } catch (error) {
+      logger.error('File picker error', error);
       setIsUploading(false);
       setUploadProgress(0);
-
-      if (!uploadResult.success || !uploadResult.url) {
-        Alert.alert(
-          t('common.error'),
-          uploadResult.error || t('errors.uploadFailed') || 'Upload failed'
-        );
-        return;
-      }
-
-      // Add to selected attachments
-      setSelectedAttachments((prev) => [
-        ...prev,
-        {
-          name: fileName,
-          url: uploadResult.url!,
-          type: mimeType,
-          size: fileSize,
-        },
-      ]);
-
-      logger.info('File uploaded successfully', {
-        fileName,
-        url: uploadResult.url,
-      });
+      Alert.alert(t('common.error'), t('errors.somethingWrong'));
     }
-  } catch (error) {
-    logger.error('File picker error', error);
-    setIsUploading(false);
-    setUploadProgress(0);
-    Alert.alert(t('common.error'), t('errors.somethingWrong'));
-  }
-}, [caseId, user, t]);
+  }, [caseId, user, t]);
 
 
   const handleDownloadAttachment = useCallback(
@@ -730,14 +876,14 @@ const handlePickFile = useCallback(async () => {
     if (!timestamp || isNaN(timestamp) || timestamp <= 0) {
       return 'Invalid date';
     }
-    
+
     try {
       const date = new Date(timestamp);
       // Check if date is valid
       if (isNaN(date.getTime())) {
         return 'Invalid date';
       }
-      
+
       if (isToday(date)) {
         return format(date, 'h:mm a');
       } else if (isYesterday(date)) {
@@ -775,19 +921,19 @@ const handlePickFile = useCallback(async () => {
       formatTime: (timestamp: number) => string;
     }) => {
       const isMyMessage = item.senderId === currentUserId;
-    const AnimatedView = isMyMessage
-      ? Animated.createAnimatedComponent(View)
-      : Animated.createAnimatedComponent(View);
+      const AnimatedView = isMyMessage
+        ? Animated.createAnimatedComponent(View)
+        : Animated.createAnimatedComponent(View);
 
-    return (
-      <AnimatedView
-        entering={Platform.OS === 'android' ? undefined : (isMyMessage ? FadeInRight.delay(index * 20) : FadeInLeft.delay(index * 20))}
-        style={[
-          styles.messageContainer,
-          isMyMessage && styles.myMessageContainer,
-        ]}
-      >
-        {/* {!isMyMessage && (
+      return (
+        <AnimatedView
+          entering={Platform.OS === 'android' ? undefined : (isMyMessage ? FadeInRight.delay(index * 20) : FadeInLeft.delay(index * 20))}
+          style={[
+            styles.messageContainer,
+            isMyMessage && styles.myMessageContainer,
+          ]}
+        >
+          {/* {!isMyMessage && (
           <Avatar.Text
             size={36}
             label={item.senderName.charAt(0)}
@@ -796,163 +942,163 @@ const handlePickFile = useCallback(async () => {
             labelStyle={styles.avatarLabel}
           />
         )} */}
-        <View
-          style={[
-            dynamicStyles.messageBubble,
-            isMyMessage && dynamicStyles.myMessageBubble,
-          ]}
-        >
-          {/* Bubble tails - WhatsApp/Telegram style (rounded) */}
-          {!isMyMessage ? (
-            <>
-              <View style={dynamicStyles.tailLeftBubble} />
-              <View style={[styles.tailLeftMask, { backgroundColor: themeColors.background }]} />
-            </>
-          ) : (
-            <>
+          <View
+            style={[
+              dynamicStyles.messageBubble,
+              isMyMessage && dynamicStyles.myMessageBubble,
+            ]}
+          >
+            {/* Bubble tails - WhatsApp/Telegram style (rounded) */}
+            {!isMyMessage ? (
+              <>
+                <View style={dynamicStyles.tailLeftBubble} />
+                <View style={[styles.tailLeftMask, { backgroundColor: themeColors.background }]} />
+              </>
+            ) : (
+              <>
                 <View style={dynamicStyles.tailRightBubble} />
                 <View style={[styles.tailRightMask, { backgroundColor: themeColors.background }]} />
-            </>
-          )}
+              </>
+            )}
 
-          {!isMyMessage && (
-            <Text style={[styles.senderName, { color: themeColors.textSecondary }]}>{item.senderName}</Text>
-          )}
-          {(item.message && item.message.trim() !== '') && (
-            <Text
-              style={[
-                styles.messageText,
-                { color: themeColors.text },
-                isMyMessage && [styles.myMessageText, { color: themeColors.surface }],
-                item.status === 'pending' && styles.pendingMessageText,
-                item.status === 'failed' && styles.failedMessageText,
-              ]}
-              numberOfLines={100}
-            >
-              {item.message}
-            </Text>
-          )}
+            {!isMyMessage && (
+              <Text style={[styles.senderName, { color: themeColors.textSecondary }]}>{item.senderName}</Text>
+            )}
+            {(item.message && item.message.trim() !== '') && (
+              <Text
+                style={[
+                  styles.messageText,
+                  { color: themeColors.text },
+                  isMyMessage && [styles.myMessageText, { color: themeColors.surface }],
+                  item.status === 'pending' && styles.pendingMessageText,
+                  item.status === 'failed' && styles.failedMessageText,
+                ]}
+                numberOfLines={100}
+              >
+                {item.message}
+              </Text>
+            )}
 
-          {/* Render attachments */}
-          {item.attachments && item.attachments.length > 0 && (
-            <View style={styles.attachmentsContainer}>
-              {item.attachments.map((attachment, idx) => (
+            {/* Render attachments */}
+            {item.attachments && item.attachments.length > 0 && (
+              <View style={styles.attachmentsContainer}>
+                {item.attachments.map((attachment, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[
+                      styles.attachmentCard,
+                      { backgroundColor: themeColors.surface },
+                      isMyMessage && [styles.myAttachmentCard, { backgroundColor: themeColors.primary + '20' }],
+                    ]}
+                    onPress={() => onDownloadAttachment(attachment)}
+                  >
+                    <MaterialCommunityIcons
+                      name={getFileIconForMimeType(attachment.type) as any}
+                      size={32}
+                      color={isMyMessage ? themeColors.surface : themeColors.primary}
+                    />
+                    <View style={styles.attachmentInfo}>
+                      <Text
+                        style={[
+                          styles.attachmentName,
+                          { color: themeColors.text },
+                          isMyMessage && [styles.myAttachmentName, { color: themeColors.surface }],
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {attachment.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.attachmentSize,
+                          { color: themeColors.textSecondary },
+                          isMyMessage && [styles.myAttachmentSize, { color: themeColors.surface, opacity: 0.8 }],
+                        ]}
+                      >
+                        {formatFileSize(attachment.size)}
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons
+                      name="download"
+                      size={20}
+                      color={isMyMessage ? themeColors.surface : themeColors.primary}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Timestamp and Status Indicators */}
+            <View style={styles.messageFooter}>
+              <Text style={[
+                styles.timestamp,
+                { color: themeColors.textSecondary },
+                isMyMessage && [styles.myTimestamp, { color: themeColors.surface, opacity: 0.8 }],
+              ]}>
+                {formatTime(item.timestamp)}
+              </Text>
+
+              {/* Status Indicator for My Messages */}
+              {isMyMessage && (
+                <View style={styles.statusIndicator}>
+                  {item.status === 'pending' && (
+                    <MaterialCommunityIcons
+                      name="clock-outline"
+                      size={14}
+                      color={themeColors.textSecondary}
+                    />
+                  )}
+                  {item.status === 'sent' && (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={14}
+                      color={themeColors.success}
+                    />
+                  )}
+                  {item.status === 'failed' && (
+                    <MaterialCommunityIcons
+                      name="alert-circle"
+                      size={14}
+                      color={themeColors.error}
+                    />
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Failed Message Actions */}
+            {item.status === 'failed' && isMyMessage && (
+              <View style={styles.failedActions}>
                 <TouchableOpacity
-                  key={idx}
-                  style={[
-                    styles.attachmentCard,
-                    { backgroundColor: themeColors.surface },
-                    isMyMessage && [styles.myAttachmentCard, { backgroundColor: themeColors.primary + '20' }],
-                  ]}
-                  onPress={() => onDownloadAttachment(attachment)}
+                  style={styles.retryButton}
+                  onPress={() => onRetryMessage(item)}
+                  activeOpacity={0.7}
                 >
                   <MaterialCommunityIcons
-                    name={getFileIconForMimeType(attachment.type) as any}
-                    size={32}
-                    color={isMyMessage ? themeColors.surface : themeColors.primary}
+                    name="refresh"
+                    size={16}
+                    color={themeColors.primary}
                   />
-                  <View style={styles.attachmentInfo}>
-                    <Text
-                      style={[
-                        styles.attachmentName,
-                        { color: themeColors.text },
-                        isMyMessage && [styles.myAttachmentName, { color: themeColors.surface }],
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {attachment.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.attachmentSize,
-                        { color: themeColors.textSecondary },
-                        isMyMessage && [styles.myAttachmentSize, { color: themeColors.surface, opacity: 0.8 }],
-                      ]}
-                    >
-                      {formatFileSize(attachment.size)}
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons
-                    name="download"
-                    size={20}
-                    color={isMyMessage ? themeColors.surface : themeColors.primary}
-                  />
+                  <Text style={styles.retryButtonText}>Retry</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Timestamp and Status Indicators */}
-          <View style={styles.messageFooter}>
-            <Text style={[
-              styles.timestamp,
-              { color: themeColors.textSecondary },
-              isMyMessage && [styles.myTimestamp, { color: themeColors.surface, opacity: 0.8 }],
-            ]}>
-              {formatTime(item.timestamp)}
-            </Text>
-
-            {/* Status Indicator for My Messages */}
-            {isMyMessage && (
-              <View style={styles.statusIndicator}>
-                {item.status === 'pending' && (
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => onDeleteFailedMessage(item.id)}
+                  activeOpacity={0.7}
+                >
                   <MaterialCommunityIcons
-                    name="clock-outline"
-                    size={14}
-                    color={themeColors.textSecondary}
-                  />
-                )}
-                {item.status === 'sent' && (
-                  <MaterialCommunityIcons
-                    name="check"
-                    size={14}
-                    color={themeColors.success}
-                  />
-                )}
-                {item.status === 'failed' && (
-                  <MaterialCommunityIcons
-                    name="alert-circle"
-                    size={14}
+                    name="delete"
+                    size={16}
                     color={themeColors.error}
                   />
-                )}
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
-
-          {/* Failed Message Actions */}
-          {item.status === 'failed' && isMyMessage && (
-            <View style={styles.failedActions}>
-              <TouchableOpacity
-                style={styles.retryButton}
-                onPress={() => onRetryMessage(item)}
-                activeOpacity={0.7}
-              >
-                <MaterialCommunityIcons
-                  name="refresh"
-                  size={16}
-                  color={themeColors.primary}
-                />
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => onDeleteFailedMessage(item.id)}
-                activeOpacity={0.7}
-              >
-                <MaterialCommunityIcons
-                  name="delete"
-                  size={16}
-                  color={themeColors.error}
-                />
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </AnimatedView>
-    );
-  },
+        </AnimatedView>
+      );
+    },
     (prevProps, nextProps) => {
       const p = prevProps.item;
       const n = nextProps.item;
@@ -972,10 +1118,10 @@ const handlePickFile = useCallback(async () => {
   );
 
   // Memoize key extractor with unique key generation
- const keyExtractor = useCallback((item: ChatMessage, index: number) => {
-  // Use tempId for optimistic messages, otherwise use id with index for uniqueness
-  return item.tempId || `${item.id}-${index}`;
-}, []);
+  const keyExtractor = useCallback((item: ChatMessage, index: number) => {
+    // Use tempId for optimistic messages, otherwise use id with index for uniqueness
+    return item.tempId || `${item.id}-${index}`;
+  }, []);
 
   // Smart content size change handler - only scrolls if user is near bottom
   const handleContentSizeChange = useCallback((width: number, height: number) => {
@@ -1019,31 +1165,27 @@ const handlePickFile = useCallback(async () => {
   }, []);
 
   // Handle load more (load older messages when scrolling to top)
-  // Note: This is now called directly from handleScrollData when user scrolls up to top
-  const handleLoadMore = useCallback(() => {
-    if (hasMore && !isLoadingMore && messages.length > 0 && !isLoadingMoreRef.current) {
-      isLoadingMoreRef.current = true;
-      const oldestMessage = messages[messages.length - 1];
-      if (oldestMessage) {
-        loadMore().finally(() => {
-          // Reset loading flag after a delay to prevent rapid-fire requests
-          setTimeout(() => {
-            isLoadingMoreRef.current = false;
-          }, 1000);
-        });
-      } else {
-        isLoadingMoreRef.current = false;
-      }
+  // Handle pull to refresh - reload messages from Firebase
+  const handleRefresh = useCallback(async () => {
+    if (!caseId || isLoading) return;
+
+    setIsLoading(true);
+    try {
+      const clientFirebaseId = auth.currentUser?.uid || user?.id;
+      const agentFirebaseId = agentInfo?.id;
+      const result = await chatService.loadInitialMessages(caseId, clientFirebaseId, agentFirebaseId);
+      setMessages(result.messages);
+      setHasMore(result.hasMore);
+      logger.info('Messages refreshed', { count: result.messages.length });
+    } catch (error) {
+      logger.error('Failed to refresh messages', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [hasMore, isLoadingMore, messages.length, loadMore]);
+  }, [caseId, isLoading, user, agentInfo?.id]);
 
-// Handle pull to refresh
-const handleRefresh = useCallback(() => {
-  refresh();
-}, [refresh]);
-
- // Dynamically measure input container height (includes safe area) to avoid overlap
- const [inputHeight, setInputHeight] = useState(0);
+  // Dynamically measure input container height (includes safe area) to avoid overlap
+  const [inputHeight, setInputHeight] = useState(0);
 
   // Dynamic theme-aware styles for input area
   const dynamicStyles = useMemo(() => ({
@@ -1193,29 +1335,29 @@ const handleRefresh = useCallback(() => {
     flexGrow: 1,
   }), [inputHeight, keyboardHeight, insets.bottom]);
 
-// Memoize ListHeaderComponent to prevent re-renders
-const ListHeaderComponent = useMemo(() => {
-  if (!isLoadingMore) return null;
-  return (
-    <View style={styles.loadingIndicator}>
-      <Text style={dynamicStyles.loadingText}>{t('common.loading')}...</Text>
-    </View>
-  );
-}, [isLoadingMore, t, dynamicStyles.loadingText]);
+  // Memoize ListHeaderComponent to prevent re-renders
+  const ListHeaderComponent = useMemo(() => {
+    if (!isLoadingMore) return null;
+    return (
+      <View style={styles.loadingIndicator}>
+        <Text style={dynamicStyles.loadingText}>{t('common.loading')}...</Text>
+      </View>
+    );
+  }, [isLoadingMore, t, dynamicStyles.loadingText]);
 
   // Memoize FlatList props for better performance
-const flatListProps = useMemo(() => ({
-  removeClippedSubviews: true,
-  maxToRenderPerBatch: 10,
-  updateCellsBatchingPeriod: 50,
-  initialNumToRender: 10,
-  windowSize: 5,
-  inverted: false,
-  showsVerticalScrollIndicator: false,
-  keyboardShouldPersistTaps: 'handled' as const,
-  // Removed onEndReachedThreshold - loading at top is handled manually via scroll handler
-  maintainVisibleContentPosition: undefined,
-}), []);
+  const flatListProps = useMemo(() => ({
+    removeClippedSubviews: true,
+    maxToRenderPerBatch: 10,
+    updateCellsBatchingPeriod: 50,
+    initialNumToRender: 10,
+    windowSize: 5,
+    inverted: false,
+    showsVerticalScrollIndicator: false,
+    keyboardShouldPersistTaps: 'handled' as const,
+    // Removed onEndReachedThreshold - loading at top is handled manually via scroll handler
+    maintainVisibleContentPosition: undefined,
+  }), []);
 
   // WhatsApp-like: Allow full scrolling, only prevent auto-scroll when user is viewing older messages
 
@@ -1253,23 +1395,15 @@ const flatListProps = useMemo(() => ({
       !hasTriggeredLoadAtTopRef.current) {
       // User scrolled to top - load older messages
       hasTriggeredLoadAtTopRef.current = true;
-      isLoadingMoreRef.current = true;
-      const oldestMessage = messages[messages.length - 1];
-      if (oldestMessage) {
-        loadMore().finally(() => {
-          // Reset flags after loading completes
+      handleLoadMore().finally(() => {
+        // Reset flags after loading completes
+        setTimeout(() => {
+          // Allow another load after delay
           setTimeout(() => {
-            isLoadingMoreRef.current = false;
-            // Allow another load after delay
-            setTimeout(() => {
-              hasTriggeredLoadAtTopRef.current = false;
-            }, 1500);
-          }, 300);
-        });
-      } else {
-        isLoadingMoreRef.current = false;
-        hasTriggeredLoadAtTopRef.current = false;
-      }
+            hasTriggeredLoadAtTopRef.current = false;
+          }, 1500);
+        }, 300);
+      });
     }
 
     // Reset trigger flag when user scrolls away from top
@@ -1288,7 +1422,7 @@ const flatListProps = useMemo(() => ({
       // User scrolled away from bottom - disable auto-scroll
       shouldAutoScrollRef.current = false;
     }
-  }, [hasMore, isLoadingMore, messages.length, loadMore]);
+  }, [hasMore, isLoadingMore, messages.length, handleLoadMore]);
 
   // Throttle the scroll data handler
   const handleScrollThrottled = useThrottle(handleScrollData, 100);
@@ -1315,152 +1449,152 @@ const flatListProps = useMemo(() => ({
   }, []);
 
 
-return (
-  // <TouchDetector>
+  return (
+    // <TouchDetector>
     <KeyboardAvoidingView
-    style={[styles.container, { backgroundColor: themeColors.background }]}
+      style={[styles.container, { backgroundColor: themeColors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
-    {/* Header consistent with profile page, with WhatsApp-like agent info */}
-    <ThemeAwareHeader
-      title={agentInfo?.name || (t('messages.chat') as string) || 'Chat'}
-      subtitle={agentInfo?.isOnline ? (t('messages.online') as string) || 'online' : (t('messages.offline') as string) || 'offline'}
-      showBackButton
-      leftActions={(
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={styles.headerAvatarContainer}>
-            {agentInfo?.profilePicture ? (
-              <Avatar.Image
-                size={36}
-                source={{ uri: agentInfo.profilePicture }}
-                style={styles.headerAvatar}
-              />
-            ) : (
+      {/* Header consistent with profile page, with WhatsApp-like agent info */}
+      <ThemeAwareHeader
+        title={agentInfo?.name || (t('messages.chat') as string) || 'Chat'}
+        subtitle={agentInfo?.isOnline ? (t('messages.online') as string) || 'online' : (t('messages.offline') as string) || 'offline'}
+        showBackButton
+        leftActions={(
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={styles.headerAvatarContainer}>
+              {agentInfo?.profilePicture ? (
+                <Avatar.Image
+                  size={36}
+                  source={{ uri: agentInfo.profilePicture }}
+                  style={styles.headerAvatar}
+                />
+              ) : (
                 <View style={styles.headerAvatar}>
                   <Text style={styles.headerAvatarLabel}>
                     {(agentInfo?.name || 'A').charAt(0).toUpperCase()}
                   </Text>
-              </View>
-            )}
-            {/* Online/Offline Status Badge */}
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: agentInfo?.isOnline ? '#4CAF50' : '#F44336' }
-            ]} />
+                </View>
+              )}
+              {/* Online/Offline Status Badge */}
+              <View style={[
+                styles.statusBadge,
+                { backgroundColor: agentInfo?.isOnline ? '#4CAF50' : '#F44336' }
+              ]} />
+            </View>
           </View>
-        </View>
-      )}
-      rightActions={(
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity
-            style={{ paddingHorizontal: 8 }}
-            onPress={() => Alert.alert(t('common.comingSoon') || 'Coming Soon', t('messages.videoCallComingSoon') || 'Video call feature coming soon!')}
-          >
-            <MaterialCommunityIcons name="video" size={22} color={'#FFF'} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{ paddingHorizontal: 8 }}
-            onPress={() => Alert.alert(t('common.comingSoon') || 'Coming Soon', t('messages.voiceCallComingSoon') || 'Voice call feature coming soon!')}
-          >
-            <MaterialCommunityIcons name="phone" size={22} color={'#FFF'} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{ paddingHorizontal: 8 }}
-            onPress={() => router.push('/profile/settings')}
-          >
-            <MaterialCommunityIcons name="cog-outline" size={22} color={'#FFF'} />
-          </TouchableOpacity>
-        </View>
-      )}
-      variant="gradient"
-      gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
-    />
+        )}
+        rightActions={(
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity
+              style={{ paddingHorizontal: 8 }}
+              onPress={() => Alert.alert(t('common.comingSoon') || 'Coming Soon', t('messages.videoCallComingSoon') || 'Video call feature coming soon!')}
+            >
+              <MaterialCommunityIcons name="video" size={22} color={'#FFF'} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ paddingHorizontal: 8 }}
+              onPress={() => Alert.alert(t('common.comingSoon') || 'Coming Soon', t('messages.voiceCallComingSoon') || 'Voice call feature coming soon!')}
+            >
+              <MaterialCommunityIcons name="phone" size={22} color={'#FFF'} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ paddingHorizontal: 8 }}
+              onPress={() => router.push('/profile/settings')}
+            >
+              <MaterialCommunityIcons name="cog-outline" size={22} color={'#FFF'} />
+            </TouchableOpacity>
+          </View>
+        )}
+        variant="gradient"
+        gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
+      />
       <FlatList
         ref={flatListRef}
-      data={sortedMessages}
+        data={sortedMessages}
         renderItem={renderMessage}
         keyExtractor={keyExtractor}
         contentContainerStyle={flatListContentStyle}
-      onContentSizeChange={handleContentSizeChange}
-      onScroll={handleScroll}
-      scrollEventThrottle={100}
-      ListHeaderComponent={ListHeaderComponent}
-      // Remove onEndReached - we handle loading at top via scroll handler
-      refreshing={isLoadingMore}
-      onRefresh={handleLoadMore}
-      {...flatListProps}
-      onScrollBeginDrag={() => {
-        // User started scrolling manually - immediately disable auto-scroll
-        userScrollStartTimeRef.current = Date.now();
-        isUserScrollingRef.current = true;
-        shouldAutoScrollRef.current = false;
-        // Reset trigger flag when user starts new scroll session
-        hasTriggeredLoadAtTopRef.current = false;
-
-        // Cancel any pending auto-scroll timeouts
-        if (scrollToEndTimeoutRef.current) {
-          clearTimeout(scrollToEndTimeoutRef.current);
-          scrollToEndTimeoutRef.current = null;
-        }
-      }}
-      onScrollEndDrag={(event) => {
-        const offsetY = event.nativeEvent.contentOffset.y;
-        const contentHeight = event.nativeEvent.contentSize.height;
-        const layoutHeight = event.nativeEvent.layoutMeasurement.height;
-        const distanceFromBottom = contentHeight - (offsetY + layoutHeight);
-        const distanceFromTop = offsetY;
-
-        scrollPositionRef.current = distanceFromBottom;
-
-        // WhatsApp-like: Update auto-scroll state based on position
-        // If user is near bottom, enable auto-scroll for new messages
-        // If user scrolled up to view older messages, disable auto-scroll
-        if (distanceFromBottom <= 300) {
-          // User ended near bottom - enable auto-scroll for new messages
-          shouldAutoScrollRef.current = true;
-          isUserScrollingRef.current = false;
-        } else {
-          // User scrolled up - disable auto-scroll (they're viewing older messages)
+        onContentSizeChange={handleContentSizeChange}
+        onScroll={handleScroll}
+        scrollEventThrottle={100}
+        ListHeaderComponent={ListHeaderComponent}
+        // Remove onEndReached - we handle loading at top via scroll handler
+        refreshing={isLoading}
+        onRefresh={handleRefresh}
+        {...flatListProps}
+        onScrollBeginDrag={() => {
+          // User started scrolling manually - immediately disable auto-scroll
+          userScrollStartTimeRef.current = Date.now();
+          isUserScrollingRef.current = true;
           shouldAutoScrollRef.current = false;
-          isUserScrollingRef.current = false;
-        }
-      }}
-      onMomentumScrollEnd={(event) => {
-        const offsetY = event.nativeEvent.contentOffset.y;
-        const contentHeight = event.nativeEvent.contentSize.height;
-        const layoutHeight = event.nativeEvent.layoutMeasurement.height;
-        const distanceFromBottom = contentHeight - (offsetY + layoutHeight);
+          // Reset trigger flag when user starts new scroll session
+          hasTriggeredLoadAtTopRef.current = false;
 
-        scrollPositionRef.current = distanceFromBottom;
+          // Cancel any pending auto-scroll timeouts
+          if (scrollToEndTimeoutRef.current) {
+            clearTimeout(scrollToEndTimeoutRef.current);
+            scrollToEndTimeoutRef.current = null;
+          }
+        }}
+        onScrollEndDrag={(event) => {
+          const offsetY = event.nativeEvent.contentOffset.y;
+          const contentHeight = event.nativeEvent.contentSize.height;
+          const layoutHeight = event.nativeEvent.layoutMeasurement.height;
+          const distanceFromBottom = contentHeight - (offsetY + layoutHeight);
+          const distanceFromTop = offsetY;
 
-        // WhatsApp-like: Update state after momentum ends
-        setTimeout(() => {
+          scrollPositionRef.current = distanceFromBottom;
+
+          // WhatsApp-like: Update auto-scroll state based on position
+          // If user is near bottom, enable auto-scroll for new messages
+          // If user scrolled up to view older messages, disable auto-scroll
           if (distanceFromBottom <= 300) {
-            // User ended near bottom - re-enable auto-scroll for new messages
+            // User ended near bottom - enable auto-scroll for new messages
             shouldAutoScrollRef.current = true;
             isUserScrollingRef.current = false;
-            // Reset scroll start time after a delay
-            setTimeout(() => {
-              userScrollStartTimeRef.current = null;
-            }, 500);
           } else {
-            // User is viewing older messages - keep auto-scroll disabled
-            isUserScrollingRef.current = false;
+            // User scrolled up - disable auto-scroll (they're viewing older messages)
             shouldAutoScrollRef.current = false;
+            isUserScrollingRef.current = false;
           }
-        }, 300); // Wait 300ms after momentum ends
-      }}
+        }}
+        onMomentumScrollEnd={(event) => {
+          const offsetY = event.nativeEvent.contentOffset.y;
+          const contentHeight = event.nativeEvent.contentSize.height;
+          const layoutHeight = event.nativeEvent.layoutMeasurement.height;
+          const distanceFromBottom = contentHeight - (offsetY + layoutHeight);
+
+          scrollPositionRef.current = distanceFromBottom;
+
+          // WhatsApp-like: Update state after momentum ends
+          setTimeout(() => {
+            if (distanceFromBottom <= 300) {
+              // User ended near bottom - re-enable auto-scroll for new messages
+              shouldAutoScrollRef.current = true;
+              isUserScrollingRef.current = false;
+              // Reset scroll start time after a delay
+              setTimeout(() => {
+                userScrollStartTimeRef.current = null;
+              }, 500);
+            } else {
+              // User is viewing older messages - keep auto-scroll disabled
+              isUserScrollingRef.current = false;
+              shouldAutoScrollRef.current = false;
+            }
+          }, 300); // Wait 300ms after momentum ends
+        }}
         {...flatListProps}
         removeClippedSubviews={
           Platform.OS === 'android' ? false : flatListProps.removeClippedSubviews
         }
       />
 
-<View
-  style={inputContainerStyle}
-  onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
->
+      <View
+        style={inputContainerStyle}
+        onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
+      >
         {selectedAttachments.length > 0 && (
           <View style={styles.selectedAttachmentsContainer}>
             {selectedAttachments.map((attachment, index) => (
@@ -1486,10 +1620,10 @@ return (
 
         {isUploading && (
           <View style={styles.uploadProgressContainer}>
-          <View style={dynamicStyles.progressBar}>
-            <View style={[dynamicStyles.progressFill, { width: `${uploadProgress}%` }]} />
+            <View style={dynamicStyles.progressBar}>
+              <View style={[dynamicStyles.progressFill, { width: `${uploadProgress}%` }]} />
             </View>
-          <Text style={dynamicStyles.uploadProgressText}>
+            <Text style={dynamicStyles.uploadProgressText}>
               {t('common.uploading')} {Math.round(uploadProgress)}%
             </Text>
           </View>
@@ -1504,18 +1638,18 @@ return (
             <MaterialCommunityIcons
               name="attachment"
               size={24}
-            color={isUploading ? themeColors.disabled : themeColors.textSecondary}
+              color={isUploading ? themeColors.disabled : themeColors.textSecondary}
             />
           </TouchableOpacity>
 
-        <View style={dynamicStyles.inputWrapper}>
+          <View style={dynamicStyles.inputWrapper}>
             <ChatInput
               value={newMessage}
               onChangeText={setNewMessage}
               placeholder={t('messages.typeMessage') || 'Type your message...'}
               editable={!isUploading}
-            placeholderTextColor={themeColors.textSecondary}
-            textColor={themeColors.text}
+              placeholderTextColor={themeColors.textSecondary}
+              textColor={themeColors.text}
             />
           </View>
 
@@ -1527,7 +1661,7 @@ return (
             style={[
               styles.sendButton,
               ((!newMessage.trim() && selectedAttachments.length === 0) || isUploading) &&
-                styles.sendButtonDisabled,
+              styles.sendButtonDisabled,
             ]}
           >
             <MaterialCommunityIcons name="send" size={22} color="#FFFFFF" />
@@ -1535,15 +1669,15 @@ return (
         </View>
       </View>
     </KeyboardAvoidingView>
-  // </TouchDetector>
-);
+    // </TouchDetector>
+  );
 }
 
 const styles = StyleSheet.create({
-container: {
-  flex: 1,
+  container: {
+    flex: 1,
     // backgroundColor will be set dynamically by theme
-},
+  },
 
   headerContainer: {
     flexDirection: 'row',
@@ -1597,52 +1731,52 @@ container: {
     fontSize: 12,
   },
 
-messagesList: {
-  paddingHorizontal: SPACING.md,
-  paddingTop: SPACING.md,
-  paddingBottom: SPACING.lg,
-},
-messageContainer: {
-  flexDirection: 'row',
-  marginBottom: 8,
-  alignItems: 'flex-end',
-  paddingHorizontal: 0,
-},
-myMessageContainer: {
-  justifyContent: 'flex-end',
-  alignItems: 'flex-end',
-},
-avatar: {
-  marginRight: 8,
-  backgroundColor: '#D1D5DB',
-  marginBottom: 2,
-},
-avatarLabel: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: '#4B5563',
-},
-messageBubble: {
-  maxWidth: '75%',
-  minWidth: 80,
-  backgroundColor: '#FFFFFF',
-  borderRadius: 8,
-  paddingHorizontal: 12,
-  paddingVertical: 8,
-  shadowColor: '#000',
-  shadowOffset: {
-    width: 0,
-    height: 1,
+  messagesList: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.lg,
   },
-  shadowOpacity: 0.1,
-  shadowRadius: 1.5,
-  elevation: 1,
-  position: 'relative',
-},
-myMessageBubble: {
-  backgroundColor: '#1F7CE6',
-  alignSelf: 'flex-end',
-},
+  messageContainer: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    alignItems: 'flex-end',
+    paddingHorizontal: 0,
+  },
+  myMessageContainer: {
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+  },
+  avatar: {
+    marginRight: 8,
+    backgroundColor: '#D1D5DB',
+    marginBottom: 2,
+  },
+  avatarLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  messageBubble: {
+    maxWidth: '75%',
+    minWidth: 80,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 1.5,
+    elevation: 1,
+    position: 'relative',
+  },
+  myMessageBubble: {
+    backgroundColor: '#1F7CE6',
+    alignSelf: 'flex-end',
+  },
   // Bubble tails - WhatsApp/Telegram-like curved tails using layered circles
   tailLeftBubble: {
     position: 'absolute',
@@ -1684,261 +1818,261 @@ myMessageBubble: {
     backgroundColor: '#E5DDD5', // same as chat background to carve the curve
     zIndex: 2,
   },
-senderName: {
-  fontSize: 12,
-  fontWeight: '600',
-  marginBottom: 4,
-  color: '#6B7280',
-},
-messageText: {
-  fontSize: 15,
-  lineHeight: 20,
-  color: '#000000',
-  marginBottom: 4,
-},
-myMessageText: {
-  color: '#FFFFFF',
-},
-timestamp: {
-  fontSize: 11,
-  marginTop: 2,
-  color: '#9CA3AF',
-  fontWeight: '400',
-},
-myTimestamp: {
-  color: '#FFFFFF',
-  opacity: 0.8,
-},
-attachmentsContainer: {
-  marginTop: 8,
-  marginBottom: 4,
-},
-attachmentCard: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: '#F3F4F6',
-  padding: 12,
-  borderRadius: 12,
-  marginBottom: 6,
-},
-myAttachmentCard: {
-  backgroundColor: 'rgba(255, 255, 255, 0.2)',
-},
-attachmentIconContainer: {
-  width: 40,
-  height: 40,
-  borderRadius: 8,
-  backgroundColor: 'rgba(31, 124, 230, 0.1)',
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginRight: 10,
-},
-attachmentInfo: {
-  flex: 1,
-},
-attachmentName: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: '#1F2937',
-  marginBottom: 2,
-},
-myAttachmentName: {
-  color: '#FFFFFF',
-},
-attachmentSize: {
-  fontSize: 12,
-  color: '#6B7280',
-  fontWeight: '400',
-},
-myAttachmentSize: {
-  color: '#FFFFFF',
-  opacity: 0.8,
-},
+  senderName: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: '#6B7280',
+  },
+  messageText: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#000000',
+    marginBottom: 4,
+  },
+  myMessageText: {
+    color: '#FFFFFF',
+  },
+  timestamp: {
+    fontSize: 11,
+    marginTop: 2,
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  myTimestamp: {
+    color: '#FFFFFF',
+    opacity: 0.8,
+  },
+  attachmentsContainer: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  attachmentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  myAttachmentCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  attachmentIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: 'rgba(31, 124, 230, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  attachmentInfo: {
+    flex: 1,
+  },
+  attachmentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  myAttachmentName: {
+    color: '#FFFFFF',
+  },
+  attachmentSize: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '400',
+  },
+  myAttachmentSize: {
+    color: '#FFFFFF',
+    opacity: 0.8,
+  },
 
-inputContainer: {
-  paddingTop: 8,
-  paddingHorizontal: 8,
-  backgroundColor: '#F7F7F7',
-  borderTopWidth: 1,
-  borderTopColor: '#E5E7EB',
-  borderTopLeftRadius: 16,
-  borderTopRightRadius: 16,
-  position: 'absolute',
-  left: 0,
-  right: 0,
-  bottom: 0,
-},
-// inputContainer: {
-//   paddingTop: SPACING.xs,
-//   paddingHorizontal: SPACING.sm,
-//   backgroundColor: COLORS.surface,
-//   borderTopWidth: 1,
-//   borderTopColor: COLORS.border,
+  inputContainer: {
+    paddingTop: 8,
+    paddingHorizontal: 8,
+    backgroundColor: '#F7F7F7',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  // inputContainer: {
+  //   paddingTop: SPACING.xs,
+  //   paddingHorizontal: SPACING.sm,
+  //   backgroundColor: COLORS.surface,
+  //   borderTopWidth: 1,
+  //   borderTopColor: COLORS.border,
 
-//   // Remove border radius to make it flush with bottom
-  
-//   shadowColor: '#000',
-//   shadowOffset: { width: 0, height: -3 },
-//   shadowOpacity: 0.08,
-//   shadowRadius: 8,
-//   elevation: 6,
-//   // Remove any bottom margin/padding that might create space
-//   marginBottom: 0,
-//   paddingBottom: 0,
-// },
-selectedAttachmentsContainer: {
-  marginBottom: 8,
-  gap: 6,
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-},
-selectedAttachment: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: '#E0F2FE',
-  padding: 8,
-  borderRadius: 16,
-  gap: 6,
-  marginRight: 6,
-},
-selectedAttachmentName: {
-  flex: 1,
-  fontSize: 12,
-  color: '#1F2937',
-  fontWeight: '500',
-},
-uploadProgressContainer: {
-  marginBottom: 8,
-},
-progressBar: {
-  height: 3,
-  backgroundColor: '#E5E7EB',
-  borderRadius: 3,
-  overflow: 'hidden',
-  marginBottom: 4,
-},
-progressFill: {
-  height: '100%',
-  backgroundColor: '#1F7CE6',
-  borderRadius: 3,
-},
-uploadProgressText: {
-  fontSize: 11,
-  color: '#6B7280',
-  textAlign: 'center',
-  fontWeight: '500',
-},
-inputRow: {
-  flexDirection: 'row',
-  alignItems: 'flex-end',
-  paddingBottom: 8,
-  gap: 6,
-},
-attachButton: {
-  width: 40,
-  height: 40,
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: 20,
-},
-inputWrapper: {
-  flex: 1,
-  backgroundColor: '#FFFFFF',
-  borderRadius: 20,
-  paddingHorizontal: 16,
-  paddingVertical: 10,
-  minHeight: 40,
-  maxHeight: 120,
-  justifyContent: 'center',
-  borderWidth: 1,
-  borderColor: '#E5E7EB',
-},
-input: {
-  fontSize: 15,
-  color: '#1F2937',
-  maxHeight: 100,
-  lineHeight: 20,
-  paddingVertical: 0,
-},
-sendButton: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: '#1F7CE6',
-  alignItems: 'center',
-  justifyContent: 'center',
-  shadowColor: '#1F7CE6',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 3,
-  elevation: 3,
-},
-sendButtonDisabled: {
-  backgroundColor: '#9CA3AF',
-  opacity: 0.5,
-  shadowOpacity: 0,
-  elevation: 0,
-},
-// OPTIMISTIC UPDATE STYLES
-pendingMessageText: {
-  opacity: 0.6,
-},
-failedMessageText: {
-  color: '#FF3B30',
-},
-messageFooter: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 4,
-  marginTop: 2,
-},
-statusIndicator: {
-  marginLeft: 4,
-},
-failedActions: {
-  flexDirection: 'row',
-  marginTop: 8,
-  gap: 8,
-  paddingTop: 8,
-  borderTopWidth: 1,
-  borderTopColor: 'rgba(255, 59, 48, 0.2)',
-},
-retryButton: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: 'rgba(31, 124, 230, 0.1)',
-  paddingHorizontal: 12,
-  paddingVertical: 6,
-  borderRadius: 16,
-  gap: 4,
-},
-retryButtonText: {
-  fontSize: 12,
-  fontWeight: '600',
-  color: '#1F7CE6',
-},
-deleteButton: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: 'rgba(255, 59, 48, 0.1)',
-  paddingHorizontal: 12,
-  paddingVertical: 6,
-  borderRadius: 16,
-  gap: 4,
-},
-deleteButtonText: {
-  fontSize: 12,
-  fontWeight: '600',
-  color: '#FF3B30',
-},
-loadingIndicator: {
-  paddingVertical: SPACING.md,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-loadingText: {
-  fontSize: 14,
-  color: '#6B7280',
-  fontWeight: '500',
-},
+  //   // Remove border radius to make it flush with bottom
+
+  //   shadowColor: '#000',
+  //   shadowOffset: { width: 0, height: -3 },
+  //   shadowOpacity: 0.08,
+  //   shadowRadius: 8,
+  //   elevation: 6,
+  //   // Remove any bottom margin/padding that might create space
+  //   marginBottom: 0,
+  //   paddingBottom: 0,
+  // },
+  selectedAttachmentsContainer: {
+    marginBottom: 8,
+    gap: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  selectedAttachment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E0F2FE',
+    padding: 8,
+    borderRadius: 16,
+    gap: 6,
+    marginRight: 6,
+  },
+  selectedAttachmentName: {
+    flex: 1,
+    fontSize: 12,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  uploadProgressContainer: {
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: 3,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#1F7CE6',
+    borderRadius: 3,
+  },
+  uploadProgressText: {
+    fontSize: 11,
+    color: '#6B7280',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingBottom: 8,
+    gap: 6,
+  },
+  attachButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  inputWrapper: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: 40,
+    maxHeight: 120,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  input: {
+    fontSize: 15,
+    color: '#1F2937',
+    maxHeight: 100,
+    lineHeight: 20,
+    paddingVertical: 0,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1F7CE6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1F7CE6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.5,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  // OPTIMISTIC UPDATE STYLES
+  pendingMessageText: {
+    opacity: 0.6,
+  },
+  failedMessageText: {
+    color: '#FF3B30',
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  statusIndicator: {
+    marginLeft: 4,
+  },
+  failedActions: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 59, 48, 0.2)',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(31, 124, 230, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
+  },
+  retryButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1F7CE6',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF3B30',
+  },
+  loadingIndicator: {
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
 });

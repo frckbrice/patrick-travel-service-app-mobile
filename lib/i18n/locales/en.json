@@ -119,7 +119,11 @@
       "activeCases": "Active",
       "documents": "Documents",
       "messages": "Messages",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "activeLabel": "Active: {{count}}",
+      "totalLabel": "Total: {{count}}",
+      "pendingLabel": "Pending review",
+      "unreadBreakdown": "Emails + Chat + System"
     },
     "actions": {
       "title": "Quick Actions",
@@ -364,7 +368,17 @@
     "noNotificationsDesc": "You're all caught up! New notifications will appear here.",
     "chatMessages": "Chat Messages"
   },
+  "downloads": {
+    "title": "Downloads",
+    "subtitle": "Downloaded files will appear here.",
+    "noDownloads": "No Downloads",
+    "noDownloadsDesc": "You haven't downloaded any files yet.",
+    "downloading": "Downloading...",
+    "downloadedSuccess": "Downloaded Successfully",
+    "deleteSuccess": "Deleted Successfully"
+  },
   "email": {
+    "downloadSuccess": "Attachment downloaded successfully.",
     "send": "Send",
     "replyMessage": "Reply to this email",
     "cannotReply": "Cannot Reply",

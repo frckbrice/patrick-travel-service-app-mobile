@@ -285,31 +285,35 @@ export const LightModernHeader: React.FC<LightModernHeaderProps> = ({
         <View style={[
           styles.searchBar,
           { 
+            // In light mode, ensure strong contrast on gradient headers too
             backgroundColor: variant === 'gradient' 
-              ? 'rgba(255,255,255,0.25)' 
+              ? '#FFFFFF' 
               : '#F9FAFB',
             borderColor: variant === 'gradient' 
-              ? 'rgba(255,255,255,0.35)' 
+              ? '#E5E7EB' 
               : '#E5E7EB',
           }
         ]}>
           <MaterialCommunityIcons
             name="magnify"
             size={20}
-            color={variant === 'gradient' ? '#FFF' : '#6B7280'}
+            color={variant === 'gradient' ? '#6B7280' : '#6B7280'}
             style={styles.searchIcon}
           />
           <TextInput
             placeholder={searchPlaceholder}
             placeholderTextColor={variant === 'gradient' 
-              ? 'rgba(255,255,255,0.8)' 
+              ? '#9CA3AF' 
               : '#9CA3AF'}
             value={searchValue}
             onChangeText={onSearchChange}
             style={[
               styles.searchInput,
-              { color: variant === 'gradient' ? '#FFF' : '#1A1F2E' }
+              { color: variant === 'gradient' ? '#1A1F2E' : '#1A1F2E' }
             ]}
+            selectionColor={'#2563EB'}
+            autoCorrect={false}
+            autoCapitalize="none"
           />
           {searchValue.length > 0 && (
             <TouchableOpacity onPress={() => onSearchChange?.('')}>
@@ -317,7 +321,7 @@ export const LightModernHeader: React.FC<LightModernHeaderProps> = ({
                 name="close-circle"
                 size={20}
                 color={variant === 'gradient' 
-                  ? 'rgba(255,255,255,0.8)' 
+                  ? '#9CA3AF' 
                   : '#9CA3AF'}
               />
             </TouchableOpacity>

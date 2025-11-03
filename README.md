@@ -7,9 +7,9 @@
 
 > React Native + Expo app for Patrick Travel Services immigration management.
 
-> ✅ Feature-complete (mobile) | 🚀 Optimized | 📱 iOS & Android | 🔒 GDPR-ready
+>  Feature-complete (mobile) |  Optimized | 📱 iOS & Android | 🔒 GDPR-ready
 
-## 🌟 Overview
+##  Overview
 
 The app enables clients to:
 - Manage immigration cases
@@ -19,18 +19,15 @@ The app enables clients to:
 - View case progress
 - Access FAQs and support
 
-## 🆕 Recent Updates (November 2025)
+##  Recent Updates (November 2025)
 
 - New theme-aware headers and notification banners
 - i18n refreshed (EN/FR) across auth and tabs
 - Push notifications stabilization and deep link fixes
-- Docs consolidation under `docs/` with updated guides
 
-See: `docs/IMPLEMENTATION_SUMMARY.md`
+##  Features
 
-## ✨ Features
-
-### 🔐 Authentication & Security
+###  Authentication & Security
 - Email/password with Firebase Auth
 - Google OAuth 2.0
 - Optional Biometric Auth (Face ID/Touch ID)
@@ -38,29 +35,29 @@ See: `docs/IMPLEMENTATION_SUMMARY.md`
 - Secure token storage (expo-secure-store)
 - GDPR: Privacy Policy, Terms, consent tracking
 
-### 📊 Dashboard
+###  Dashboard
 - Stats overview, recent activity, quick actions, pull-to-refresh
 
-### 📂 Case Management
+###  Case Management
 - Cases list, filters, details with status timeline
 - New case flow scaffolded
 
-### 📄 Document Management
+###  Document Management
 - Upload images/PDFs, preview, status tracking
 - Camera and gallery integration
 
-### 💬 Messaging
+###  Messaging
 - Real-time chat (Firebase) with read receipts and history
 
-### 🔔 Notifications
+###  Notifications
 - Push notifications with deep links
 - Android channels and badge counts
 
-### 🚀 Performance
+###  Performance
 - Optimized lists, memoization, debounced search
 - React Query caching, Hermes engine, Reanimated
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - Node.js 18+
@@ -79,8 +76,11 @@ pnpm install
 Create a `.env` in `mobile/` with at least:
 
 ```bash
-# API
-EXPO_PUBLIC_API_URL=https://your-api.example.com
+# API (local/dev and production)
+# Local/dev API base URL (used in development)
+EXPO_PUBLIC_API_URL=http://localhost:3000/api
+# Production API base URL (used when NODE_ENV=production)
+EXPO_PUBLIC_API_PROD_URL=https://api.your-domain.com/api
 
 # Firebase
 EXPO_PUBLIC_FIREBASE_API_KEY=...
@@ -91,8 +91,6 @@ EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
 EXPO_PUBLIC_FIREBASE_APP_ID=...
 EXPO_PUBLIC_FIREBASE_DATABASE_URL=...
 ```
-
-Follow `docs/PUSH_NOTIFICATIONS_SETUP.md` for FCM setup.
 
 ### Run
 
@@ -146,7 +144,7 @@ mobile/
 └── eas.json                          # EAS build profiles
 ```
 
-## 🔧 Development
+##  Development
 
 ```bash
 pnpm type-check
@@ -154,7 +152,7 @@ pnpm lint
 pnpm format
 ```
 
-## 📦 Builds (EAS)
+##  Builds (EAS)
 
 ```bash
 pnpm run build:dev:android
@@ -164,37 +162,32 @@ pnpm run build:prod:{android,ios}
 pnpm run submit:{android,ios}
 ```
 
-## 🔐 Security
+##  Security
 
 - Token auth, secure storage, HTTPS-only in production
 - Input/file validation, authenticated routes
 
-## 📚 Key Docs
+##  Key Docs
 
-- `docs/SETUP_GUIDE.md` – Setup & environment
-- `docs/ANDROID_DEV_GUIDE.md` – Android emulator & builds
-- `docs/PUSH_NOTIFICATIONS_SETUP.md` – FCM setup
-- `docs/AUTHENTICATION_SETUP.md` – Firebase Auth
-- `docs/IMPLEMENTATION_SUMMARY.md` – Feature details
-- `docs/GDPR_COMPLIANCE.md` – Compliance checklist
-- `docs/BACKEND_GDPR_REQUIREMENTS.md` – Backend actions for GDPR
+- `COMPLETE_USER_FLOW_AND_FEATURES.md` – understand the whole project.
 
-## 🐛 Troubleshooting
+
+##  Troubleshooting
 
 - Backend connection: verify API URL in `.env` and device IP
 - Firebase: confirm config and enabled services
 - Metro cache: `npx expo start -c`
 
-## 🌳 Git Workflow
+##  Git Workflow
 
 - Use feature branches: `feat/...`, `chore/...`, `fix/...`
 - Current: `chore/i18n-and-feature-updates`
 
-## 📄 License
+##  License
 
 Proprietary - Patrick Travel Services
 
 ---
 
-Built with ❤️ for Patrick Travel Services
+Built with ❤️ By Avom brice, check at https://maebrieporfolio.vercel.app
 

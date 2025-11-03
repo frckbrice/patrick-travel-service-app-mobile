@@ -1,5 +1,7 @@
 # Push Notifications Setup Documentation
 
+> Scope: Push notifications only (Expo Notifications + FCM/APNs). This doc focuses on credentials, channels, handling, and testing. It does not re-cover general setup or auth; see `SETUP_GUIDE.md` and `AUTHENTICATION_SETUP.md` for those.
+
 ## Overview
 
 This document describes the push notifications system implemented using Expo Notifications with Firebase Cloud Messaging (FCM) integration for the Patrick Travel Services mobile app.
@@ -56,21 +58,21 @@ This document describes the push notifications system implemented using Expo Not
 
 ## Features
 
-### ✅ Push Notification Types
+###  Push Notification Types
 
 - **Case Updates**: Status changes, assignments
 - **New Messages**: Chat message alerts
 - **Document Updates**: Upload, approval, rejection
 - **System Announcements**: Important app-wide notifications
 
-### ✅ Notification Channels (Android)
+###  Notification Channels (Android)
 
 - **Default**: General notifications
 - **Case Updates**: Case-related notifications
 - **Messages**: Chat notifications (high priority)
 - **Documents**: Document-related notifications
 
-### ✅ Notification Handling
+###  Notification Handling
 
 - **Foreground**: Display alert while app is open
 - **Background**: Show notification in tray
@@ -78,7 +80,7 @@ This document describes the push notifications system implemented using Expo Not
 - **Badge Count**: Update app icon badge
 - **Sound & Vibration**: Customizable per channel
 
-### ✅ User Permissions
+###  User Permissions
 
 - **Request on login**: Ask for notification permissions
 - **Configurable**: User can enable/disable in settings
@@ -88,23 +90,23 @@ This document describes the push notifications system implemented using Expo Not
 
 ## Setup Instructions
 
-### Prerequisites ✅
+### Prerequisites 
 
-1. ✅ Expo account created (ubuntu-dev-group)
-2. ✅ EAS project configured (ID: 2c78e03f-b77b-4a17-afde-9d7cd2171610)
-3. ✅ Firebase project configured
-4. ✅ EAS Build configured (see eas.json)
+1.  Expo account created (ubuntu-dev-group)
+2.  EAS project configured (ID: 2c78e03f-b77b-4a17-afde-9d7cd2171610)
+3.  Firebase project configured
+4.  EAS Build configured (see eas.json)
 4. Firebase Service Account JSON file (e.g., `patrick-travel-agency-firebase-adminsdk-fbsvc-aa437e075c.json`)
 
 ### What You'll Set Up
 
 This guide will walk you through:
 
-1. ✅ **EAS Project Configuration** - Verify your Expo project is configured
-2. ✅ **Android Keystore** - Required to sign your Android app
-3. ✅ **FCM v1 Credentials** - Enable push notifications using Firebase Service Account
-4. ✅ **iOS APNs** (Optional) - Enable iOS push notifications
-5. ✅ **Build & Test** - Create a build and test push notifications
+1.  **EAS Project Configuration** - Verify your Expo project is configured
+2.  **Android Keystore** - Required to sign your Android app
+3.  **FCM v1 Credentials** - Enable push notifications using Firebase Service Account
+4.  **iOS APNs** (Optional) - Enable iOS push notifications
+5.  **Build & Test** - Create a build and test push notifications
 
 ### Step 1: Expo Project Setup
 
@@ -115,7 +117,7 @@ eas whoami
 ```
 
 2. **EAS Configuration File** (`eas.json`):
-   - ✅ Already created with three build profiles:
+   -  Already created with three build profiles:
      - **development**: For testing on physical devices with development client
      - **preview**: For internal testing/staging builds
      - **production**: For production app store releases
@@ -154,7 +156,7 @@ eas credentials
    - Select: **`Keystore: Manage everything needed to build your project`**
    - Select: **`Set up a new keystore`**
    - Assign a name or press Enter to use the default name
-   - ✅ Keystore will be generated and stored securely by EAS
+   -  Keystore will be generated and stored securely by EAS
 
 4. **Configure Push Notifications (FCM v1)**:
    - Select: **`Go back`** to return to the main credentials menu
@@ -162,12 +164,12 @@ eas credentials
    - Select: **`Manage your Google Service Account Key for Push Notifications (FCM V1)`**
    - Select: **`Set up a Google Service Account Key for Push Notifications (FCM V1)`**
    - When prompted, select **`yes`** to use the detected `patrick-travel-agency-firebase-adminsdk-fbsvc-aa437e075c.json` file
-   - ✅ Your Firebase service account will be uploaded and configured
+   -  Your Firebase service account will be uploaded and configured
 
 5. **Verify the configuration**:
    - You should see:
-     - ✅ **Keystore**: Configured with fingerprints
-     - ✅ **Push Notifications (FCM V1)**: Configured with your Firebase project details
+     -  **Keystore**: Configured with fingerprints
+     -  **Push Notifications (FCM V1)**: Configured with your Firebase project details
 
 6. **Exit credentials menu**:
    - Select: **`Go back`** and then **`Exit`**
@@ -182,14 +184,14 @@ Application Identifier  com.patricktravel.mobile
 Push Notifications (FCM V1): Google Service Account Key For FCM V1  
   Project ID      patrick-travel-agency
   Client Email    firebase-adminsdk-fbsvc@patrick-travel-agency...
-  ✅ Configured
+   Configured
 
 Configuration: patrick-travel-mobile-production (Default)  
 Keystore  
   Type                JKS
   Key Alias           xxxxxxxxxx
   SHA256 Fingerprint  xxxxxxxxxx
-  ✅ Configured
+   Configured
 ```
 
 #### Firebase Cloud Messaging - Understanding FCM v1 vs Legacy
@@ -198,7 +200,7 @@ Keystore
 
 ##### FCM API v1 (Current Standard - What You Just Set Up)
 
-✅ **Recommended approach** - Modern, secure OAuth 2.0 based authentication
+ **Recommended approach** - Modern, secure OAuth 2.0 based authentication
 
 **What you need:**
 - Firebase Service Account JSON file (e.g., `patrick-travel-agency-firebase-adminsdk-fbsvc-aa437e075c.json`)
@@ -235,7 +237,7 @@ eas credentials
 
 ### Step 3: App Configuration
 
-✅ **Already Configured** in `app.config.ts`:
+ **Already Configured** in `app.config.ts`:
 
 ```typescript
 plugins: [
@@ -305,9 +307,9 @@ pnpm run build:prod:ios
 3. **Or scan QR code** from the Expo dashboard to download directly on device
 
 **Important Notes:**
-- ✅ Push notifications work on physical Android devices and Android emulators with Google Play
+-  Push notifications work on physical Android devices and Android emulators with Google Play
 - ❌ iOS Simulator does NOT support push notifications - must use physical iOS device
-- ✅ Development builds include dev tools and can connect to Metro bundler
+-  Development builds include dev tools and can connect to Metro bundler
 
 ---
 
@@ -766,6 +768,6 @@ await userApi.updateSettings({
 
 **Last Updated:** October 19, 2025  
 **Version:** 1.0.0  
-**Author:** Senior Mobile Developer
+**Author:** Avom brice, Senior Mobile Developer
 
 

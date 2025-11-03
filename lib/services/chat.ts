@@ -144,12 +144,59 @@ class ChatService {
   getChatRoomIdFromPair(clientId: string, agentId: string): string {
     return getChatRoomId(clientId, agentId);
   }
+  // Helper method to get Firebase UID from PostgreSQL ID
+  // First tries to get from metadata, then from API if needed
+  async getFirebaseUidFromPostgresId(postgresId: string, metadata?: ChatMetadata | null): Promise<string | null> {
+    try {
+      // If metadata is provided, check participants first
+      if (metadata) {
+        if (metadata.participants.clientId === postgresId || metadata.participants.agentId === postgresId) {
+          // These should already be Firebase UIDs in metadata
+          return postgresId; // If it matches, it's likely already a Firebase UID
+        }
+      }
+
+      // Check if it's already a Firebase UID (Firebase UIDs are typically 28 chars)
+      // PostgreSQL UUIDs are 36 chars with hyphens
+      if (postgresId.length < 30 && !postgresId.includes('-')) {
+        // Likely already a Firebase UID
+        return postgresId;
+      }
+
+      // Try to get from API (if available)
+      try {
+        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+        const response = await fetch(`${apiUrl}/api/users/${postgresId}/firebase-uid`);
+        if (response.ok) {
+          const data = (await response.json()) as { data?: { firebaseId?: string } };
+          return data.data?.firebaseId || null;
+        }
+      } catch (apiError) {
+        logger.warn('Failed to get Firebase UID from API', { postgresId, error: apiError });
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('Failed to get Firebase UID from PostgreSQL ID', error);
+      return null;
+    }
+  }
+
   // Helper method to resolve chat room ID from caseId
   // Tries new format first (client-agent pair), then falls back to old format (caseId)
+  // IMPORTANT: clientId and agentId should be Firebase UIDs, not PostgreSQL IDs
   async resolveChatRoomIdFromCase(caseId: string, clientId?: string, agentId?: string): Promise<string | null> {
     try {
       // If we have both clientId and agentId, try new format first
       if (clientId && agentId) {
+        // Check if IDs are Firebase UIDs (Firebase UIDs are typically 28 chars, no hyphens)
+        // PostgreSQL UUIDs are 36 chars with hyphens
+        const clientIsFirebaseUid = clientId.length < 30 && !clientId.includes('-');
+        const agentIsFirebaseUid = agentId.length < 30 && !agentId.includes('-');
+
+        // Use IDs as-is if they look like Firebase UIDs
+        // Otherwise, they might be PostgreSQL IDs - try to use them anyway
+        // (metadata lookup will handle conversion)
         const newRoomId = getChatRoomId(clientId, agentId);
         const newMetadataRef = ref(database, `chats/${newRoomId}/metadata`);
         const newMetadataSnap = await get(newMetadataRef);
@@ -159,6 +206,22 @@ class ChatService {
           // Check if this case is in the caseReferences array
           const caseRefs = metadata.caseReferences || [];
           if (caseRefs.some((ref: CaseReference) => ref.caseId === caseId)) {
+            return newRoomId;
+          }
+        }
+
+        // If metadata exists but case not found, still return the room ID
+        // (it's the correct room, just doesn't have this case reference yet)
+        if (newMetadataSnap.exists()) {
+          const metadata = newMetadataSnap.val();
+          // Check if participants match (accounting for possible ID format mismatch)
+          const participants = metadata.participants || {};
+          const matchesClient = participants.clientId === clientId ||
+            (!clientIsFirebaseUid && participants.clientId?.endsWith?.(clientId.slice(-8)));
+          const matchesAgent = participants.agentId === agentId ||
+            (!agentIsFirebaseUid && participants.agentId?.endsWith?.(agentId.slice(-8)));
+
+          if (matchesClient && matchesAgent) {
             return newRoomId;
           }
         }
@@ -280,22 +343,8 @@ class ChatService {
 
       // Update cache with the new message (use chatRoomId for cache key)
 
-      const newMessage: ChatMessage = {
-        id: messageId,
-        caseId: messageCaseId,
-        senderId,
-        senderName,
-        senderRole,
-        message,
-        timestamp,
-        isRead: false,
-        attachments,
-        status: 'sent',
-      };
-      
-      await chatCacheService.addMessageToCache(chatRoomId, newMessage);
-
       logger.info('Message sent successfully', { caseIdOrRoomId, chatRoomId, messageId });
+      // Note: No cache update - messages are loaded directly from Firebase in real-time
       return true;
     } catch (error) {
       logger.error('Failed to send message', error);
@@ -346,13 +395,101 @@ class ChatService {
     };
   }
 
+  /**
+   * Optimized Firebase subscription for NEW messages only (performance optimized)
+   * Listens only to new messages using child_added, not all messages
+   * This is much more efficient - only receives new messages as they arrive
+   * Use loadInitialMessages for initial load, then this for real-time updates
+   */
+  subscribeToNewMessagesOptimized(
+    chatRoomId: string,
+    onNewMessage: (message: ChatMessage) => void,
+    lastKnownTimestamp?: number
+  ): () => void {
+    const messagesRef = ref(database, `chats/${chatRoomId}/messages`);
+
+    // Use child_added to listen only to NEW messages (incremental updates)
+    // This is much more efficient than listening to all messages
+    const unsubscribe = onChildAdded(
+      messagesRef,
+      (snapshot) => {
+        const firebaseData = snapshot.val();
+        if (!firebaseData || typeof firebaseData !== 'object') return;
+
+        const timestamp = firebaseData.sentAt || firebaseData.timestamp || Date.now();
+
+        // Only process messages newer than last known timestamp (if provided)
+        if (lastKnownTimestamp && timestamp <= lastKnownTimestamp) {
+          return;
+        }
+
+        const mapped: ChatMessage = {
+          id: snapshot.key!,
+          caseId: firebaseData.caseId || '',
+          senderId: firebaseData.senderId || '',
+          senderName: firebaseData.senderName || 'Unknown',
+          senderRole: firebaseData.senderRole || 'CLIENT',
+          message: firebaseData.content || firebaseData.message || '',
+          timestamp,
+          isRead: firebaseData.isRead || false,
+          attachments: firebaseData.attachments || [],
+        };
+
+        logger.debug(
+          `[Firebase New Message] Received new message ${snapshot.key?.substring(0, 8)}... for room ${chatRoomId.substring(0, 8)}...`
+        );
+
+        onNewMessage(mapped);
+      },
+      (error) => {
+        logger.error(
+          `[Firebase New Message] Error listening to new messages for room ${chatRoomId.substring(0, 8)}...`,
+          error
+        );
+      }
+    );
+
+    return () => off(messagesRef, 'child_added', unsubscribe);
+  }
+
   // Listen to messages for an active chat only (attach when chat is open)
-  listenToChatMessages(
+  // Supports both old (case-based) and new (client-agent pair) format
+  // DEPRECATED: Use subscribeToRoomMessagesOptimized instead for better performance
+  async listenToChatMessages(
     caseId: string,
     onNew: (messages: ChatMessage[]) => void,
-    limit: number = 30
-  ): () => void {
-    const messagesRef = ref(database, `chats/${caseId}/messages`);
+    limit: number = 30,
+    clientId?: string,
+    agentId?: string
+  ): Promise<() => void> {
+    // Resolve the actual chat room ID (could be clientId-agentId format)
+    let resolvedRoomId = caseId;
+
+    // Check if caseId is already in clientId-agentId format
+    // Room IDs are exactly two IDs separated by a single hyphen (e.g., "clientId-agentId")
+    // UUIDs have 4 hyphens (5 parts), so they won't match
+    const parts = caseId.split('-');
+    const isAlreadyRoomId = parts.length === 2 && parts[0].length > 10 && parts[1].length > 10;
+
+    if (!isAlreadyRoomId && clientId && agentId) {
+      // Try to resolve room ID from caseId if clientId and agentId are provided
+      try {
+        const resolvedId = await this.resolveChatRoomIdFromCase(caseId, clientId, agentId);
+        if (resolvedId) {
+          resolvedRoomId = resolvedId;
+          logger.info('Resolved chat room ID for listener', { caseId, resolvedRoomId });
+        } else {
+          // Room doesn't exist yet, create room ID from clientId-agentId
+          resolvedRoomId = getChatRoomId(clientId, agentId);
+          logger.info('Created new room ID for listener', { resolvedRoomId });
+        }
+      } catch (error) {
+        logger.warn('Failed to resolve room ID for listener, using caseId', { error, caseId });
+        resolvedRoomId = caseId;
+      }
+    }
+
+    const messagesRef = ref(database, `chats/${resolvedRoomId}/messages`);
     const q = query(messagesRef, orderByChild('sentAt'), limitToLast(limit));
 
     const listener = onChildAdded(q, async (snap) => {
@@ -370,8 +507,7 @@ class ChatService {
         attachments: firebaseData.attachments || [],
       };
 
-      // Update cache and emit to UI
-      await chatCacheService.addMessageToCache(caseId, mapped);
+      // Emit to UI (no cache - messages loaded directly from Firebase)
       onNew([mapped]);
     });
 
@@ -483,116 +619,131 @@ class ChatService {
     }
   }
 
-  // Load initial messages (last 20) with caching
+  // Load initial messages directly from Firebase (optimized, no cache)
   // Supports both old (case-based) and new (client-agent pair) format
-  async loadInitialMessages(caseIdOrRoomId: string): Promise<{
+  async loadInitialMessages(caseIdOrRoomId: string, clientId?: string, agentId?: string): Promise<{
     messages: ChatMessage[];
     hasMore: boolean;
     totalCount: number;
   }> {
     try {
-      logger.info('\n\n loadInitialMessages from chat service called', { caseIdOrRoomId });
-      
-      // Clear corrupted cache entries first
-      await chatCacheService.clearCorruptedCache();
-      
-      // Try cache first (use the room ID as cache key)
-      const cachedData = await chatCacheService.getCachedMessages(caseIdOrRoomId);
-      logger.info('\n\n Cache check completed', { caseIdOrRoomId, hasCache: !!cachedData, cachedData });
-      
-      if (cachedData && cachedData.messages && Array.isArray(cachedData.messages)) {
-        logger.info('\n\n Initial messages loaded from cache', { caseIdOrRoomId, count: cachedData.messages.length });
-        const latest = cachedData.messages.slice(-50);
-        latest.sort((a, b) => a.timestamp - b.timestamp); // Ensure chronological order
-        return {
-          messages: latest,
-          hasMore: cachedData.hasMore || false,
-          totalCount: cachedData.totalCount || 0,
-        };
+      logger.info('loadInitialMessages from Firebase (optimized)', { caseIdOrRoomId, clientId, agentId });
+
+      // Resolve the actual chat room ID (could be clientId-agentId format)
+      let resolvedRoomId = caseIdOrRoomId;
+
+      // Check if caseIdOrRoomId is already in clientId-agentId format
+      const parts = caseIdOrRoomId.split('-');
+      const isAlreadyRoomId = parts.length === 2 && parts[0].length > 10 && parts[1].length > 10;
+
+      if (isAlreadyRoomId) {
+        resolvedRoomId = caseIdOrRoomId;
+        logger.info('Using provided room ID directly', { resolvedRoomId });
+      } else if (clientId && agentId) {
+        try {
+          const resolvedId = await this.resolveChatRoomIdFromCase(caseIdOrRoomId, clientId, agentId);
+          if (resolvedId) {
+            resolvedRoomId = resolvedId;
+            logger.info('Resolved chat room ID', { caseId: caseIdOrRoomId, resolvedRoomId });
+          } else {
+            resolvedRoomId = getChatRoomId(clientId, agentId);
+            logger.info('Created new room ID from client-agent pair', { resolvedRoomId });
+          }
+        } catch (error) {
+          logger.warn('Failed to resolve room ID, using caseId', { error, caseIdOrRoomId });
+          resolvedRoomId = caseIdOrRoomId;
+        }
+      } else {
+        logger.info('Using caseId directly (no clientId/agentId provided)', { caseIdOrRoomId });
+        resolvedRoomId = caseIdOrRoomId;
       }
 
-      // Load from Firebase
-      logger.info('\n\n Loading from Firebase', { caseIdOrRoomId });
-      const messagesRef = ref(database, `chats/${caseIdOrRoomId}/messages`);
-      logger.info('\n\n Messages ref created', { path: messagesRef.toString() });
-      
-      // Load ALL messages first (no limit/query restrictions) to ensure we get both incoming and outgoing
-      // This ensures we capture all messages regardless of whether they use 'sentAt' or 'timestamp'
-      const snapshot = await get(messagesRef);
-      logger.info('\n\n Firebase snapshot received', { caseIdOrRoomId, size: snapshot.size, exists: snapshot.exists() });
+      // Load from Firebase using optimized query (limitToLast for performance)
+      const messagesRef = ref(database, `chats/${resolvedRoomId}/messages`);
 
-      // Log the actual data structure
+      // PERFORMANCE: Load only last 50 messages initially (on-demand loading)
+      // This dramatically reduces initial data transfer and improves load time
+      let messagesQuery;
+      try {
+        messagesQuery = query(
+          messagesRef,
+          orderByChild('sentAt'),
+          limitToLast(50) // Load ONLY last 50 messages for initial display
+        );
+      } catch (error: any) {
+        // Fallback if ordering fails
+        logger.warn('Ordered query failed, using basic query with limit', { error: error.message });
+        messagesQuery = query(messagesRef, limitToLast(50));
+      }
+
+      const snapshot = await get(messagesQuery);
+
+      const messages: ChatMessage[] = [];
+
       if (snapshot.exists()) {
-        logger.info('Snapshot data structure', { 
-          caseIdOrRoomId, 
-          keys: Object.keys(snapshot.val() || {}),
-          firstKey: Object.keys(snapshot.val() || {})[0]
+        snapshot.forEach((childSnapshot) => {
+          const firebaseData = childSnapshot.val();
+          if (!firebaseData || typeof firebaseData !== 'object') return;
+
+          const mappedMessage: ChatMessage = {
+            id: childSnapshot.key!,
+            caseId: firebaseData.caseId || '',
+            senderId: firebaseData.senderId || '',
+            senderName: firebaseData.senderName || 'Unknown',
+            senderRole: firebaseData.senderRole || 'CLIENT',
+            message: firebaseData.content || firebaseData.message || '',
+            timestamp: firebaseData.sentAt || firebaseData.timestamp || Date.now(),
+            isRead: firebaseData.isRead || false,
+            attachments: firebaseData.attachments || [],
+          };
+
+          messages.push(mappedMessage);
         });
       }
 
-      const allMessages: ChatMessage[] = [];
+      // Sort chronologically (oldest → newest)
+      messages.sort((a, b) => a.timestamp - b.timestamp);
 
-      snapshot.forEach((childSnapshot) => {
-        const firebaseData = childSnapshot.val();
+      // Check if there are more messages efficiently
+      // If we got exactly 50 messages, there might be more
+      let totalCount = messages.length;
+      let hasMore = false;
 
-        // Skip if firebaseData is null or undefined
-        if (!firebaseData || typeof firebaseData !== 'object') {
-          logger.warn('Skipping invalid message data', { key: childSnapshot.key });
-          return;
+      if (messages.length === 50) {
+        // Check if there are more by getting a count efficiently
+        // Use a single query to check total count without loading all messages
+        try {
+          // Query for messages older than the oldest one we have
+          const oldestTimestamp = Math.min(...messages.map(m => m.timestamp));
+          const olderQuery = query(
+            messagesRef,
+            orderByChild('sentAt'),
+            endAt(oldestTimestamp - 1),
+            limitToLast(1) // Just check if any exist, don't load them
+          );
+          const olderSnapshot = await get(olderQuery);
+          hasMore = olderSnapshot.exists();
+          // Estimate total count (we have 50, plus any older ones)
+          totalCount = messages.length + (hasMore ? 1 : 0); // Conservative estimate
+        } catch (error) {
+          // If check fails, assume there might be more if we got exactly 50
+          hasMore = true;
+          totalCount = messages.length;
         }
+      }
 
-        const mappedMessage: ChatMessage = {
-          id: childSnapshot.key!,
-          caseId: firebaseData.caseId || '',
-          senderId: firebaseData.senderId || '',
-          senderName: firebaseData.senderName || 'Unknown',
-          senderRole: firebaseData.senderRole || 'CLIENT',
-          message: firebaseData.content || firebaseData.message || '',
-          timestamp: firebaseData.sentAt || firebaseData.timestamp || Date.now(),
-          isRead: firebaseData.isRead || false,
-          attachments: firebaseData.attachments || [],
-          status: firebaseData.status,
-          tempId: firebaseData.tempId,
-          error: firebaseData.error,
-        };
-
-        allMessages.push(mappedMessage);
-      });
-
-      // Sort ALL messages chronologically (oldest → newest)
-      allMessages.sort((a, b) => a.timestamp - b.timestamp);
-
-      // Get total count for pagination info
-      const totalCount = allMessages.length;
-
-      // Take the last 50 messages (most recent) for initial display
-      // This ensures we show recent conversation with proper chronological order
-      const initialMessages = allMessages.slice(-50);
-
-      logger.info('Messages processed from Firebase', {
+      logger.info('Initial messages loaded from Firebase (optimized)', {
         caseIdOrRoomId,
-        totalCount: allMessages.length,
-        initialDisplayCount: initialMessages.length
-      });
-
-      // Cache ALL messages (use room ID as cache key) - cache the full set for faster subsequent loads
-      await chatCacheService.setCachedMessages(
-        caseIdOrRoomId, 
-        allMessages, // Cache all messages, not just initial 50
-        totalCount > 50, // hasMore - true if there are more than 50 messages
-        totalCount
-      );
-
-      logger.info('Initial messages loaded from Firebase', {
-        caseIdOrRoomId,
-        initialCount: initialMessages.length,
+        resolvedRoomId,
+        count: messages.length,
+        hasMore,
         totalCount
       });
 
       return {
-        messages: Array.isArray(initialMessages) ? initialMessages : [],
-        hasMore: totalCount > 50, // More messages available if total > 50
-        totalCount: totalCount || 0,
+        messages,
+        hasMore,
+        totalCount,
       };
     } catch (error) {
       logger.error('Error loading initial messages', error);
@@ -600,83 +751,102 @@ class ChatService {
     }
   }
 
-  // Load older messages (pagination)
+  // Load older messages (pagination) - optimized, no cache
   async loadOlderMessages(
     caseId: string,
     beforeTimestamp: number,
-    limit: number = 20
+    limit: number = 20,
+    clientId?: string,
+    agentId?: string
   ): Promise<{
     messages: ChatMessage[];
     hasMore: boolean;
   }> {
     try {
-      const messagesRef = ref(database, `chats/${caseId}/messages`);
-      let snapshot;
-      let allMessages: ChatMessage[] = [];
+      // Resolve the actual chat room ID (could be clientId-agentId format)
+      let resolvedRoomId = caseId;
 
-      // Try to use ordered query first (more efficient)
+      const parts = caseId.split('-');
+      const isAlreadyRoomId = parts.length === 2 && parts[0].length > 10 && parts[1].length > 10;
+
+      if (!isAlreadyRoomId && clientId && agentId) {
+        try {
+          const resolvedId = await this.resolveChatRoomIdFromCase(caseId, clientId, agentId);
+          if (resolvedId) {
+            resolvedRoomId = resolvedId;
+            logger.info('Resolved chat room ID for loadOlderMessages', { caseId, resolvedRoomId });
+          } else {
+            resolvedRoomId = getChatRoomId(clientId, agentId);
+            logger.info('Created new room ID for loadOlderMessages', { resolvedRoomId });
+          }
+        } catch (error) {
+          logger.warn('Failed to resolve room ID for loadOlderMessages, using caseId', { error, caseId });
+          resolvedRoomId = caseId;
+        }
+      }
+
+      const messagesRef = ref(database, `chats/${resolvedRoomId}/messages`);
+
+      // Use optimized ordered query with endAt for efficient pagination
+      let snapshot;
       try {
         const messagesQuery = query(
           messagesRef,
           orderByChild('sentAt'),
           endAt(beforeTimestamp - 1),
-          limitToLast(limit * 2) // Get more than needed to account for messages with only 'timestamp'
+          limitToLast(limit) // Get last 'limit' messages before the timestamp
         );
         snapshot = await get(messagesQuery);
       } catch (queryError: any) {
-        // If ordered query fails, fall back to loading all and filtering in memory
-        logger.warn('Ordered query failed, falling back to full load', { caseId, error: queryError.message });
+        // Fallback if ordered query fails
+        logger.warn('Ordered query failed, falling back to full load', { caseId, resolvedRoomId, error: queryError.message });
         snapshot = await get(messagesRef);
       }
 
-      // Process all messages from snapshot
-      snapshot.forEach((childSnapshot) => {
-        const firebaseData = childSnapshot.val();
-        
-        // Skip if firebaseData is null or undefined
-        if (!firebaseData || typeof firebaseData !== 'object') {
-          logger.warn('Skipping invalid message data in loadOlderMessages', { key: childSnapshot.key });
-          return;
-        }
-        
-        const mappedMessage: ChatMessage = {
-          id: childSnapshot.key!,
-          caseId: firebaseData.caseId || '',
-          senderId: firebaseData.senderId || '',
-          senderName: firebaseData.senderName || 'Unknown',
-          senderRole: firebaseData.senderRole || 'CLIENT',
-          message: firebaseData.content || firebaseData.message || '',
-          timestamp: firebaseData.sentAt || firebaseData.timestamp || Date.now(),
-          isRead: firebaseData.isRead || false,
-          attachments: firebaseData.attachments || [],
-          status: firebaseData.status,
-          tempId: firebaseData.tempId,
-          error: firebaseData.error,
-        };
+      const messages: ChatMessage[] = [];
 
-        allMessages.push(mappedMessage);
-      });
+      if (snapshot.exists()) {
+        snapshot.forEach((childSnapshot) => {
+          const firebaseData = childSnapshot.val();
+          if (!firebaseData || typeof firebaseData !== 'object') return;
 
-      // Filter to strictly older than the boundary and ensure chronological order (oldest → newest)
-      const filtered = allMessages
+          const mappedMessage: ChatMessage = {
+            id: childSnapshot.key!,
+            caseId: firebaseData.caseId || '',
+            senderId: firebaseData.senderId || '',
+            senderName: firebaseData.senderName || 'Unknown',
+            senderRole: firebaseData.senderRole || 'CLIENT',
+            message: firebaseData.content || firebaseData.message || '',
+            timestamp: firebaseData.sentAt || firebaseData.timestamp || Date.now(),
+            isRead: firebaseData.isRead || false,
+            attachments: firebaseData.attachments || [],
+          };
+
+          messages.push(mappedMessage);
+        });
+      }
+
+      // Filter to strictly older than boundary and sort chronologically
+      const filtered = messages
         .filter(m => m.timestamp < beforeTimestamp)
         .sort((a, b) => a.timestamp - b.timestamp);
 
       // Take the last 'limit' messages (most recent before boundary)
       const resultMessages = filtered.slice(-limit);
 
-      // Update cache with older messages
-      await chatCacheService.prependMessagesToCache(caseId, resultMessages);
+      // Check if there are more by seeing if we got exactly 'limit' messages
+      const hasMore = filtered.length >= limit;
 
-      logger.info('Older messages loaded from Firebase', {
+      logger.info('Older messages loaded from Firebase (optimized)', {
         caseId,
+        resolvedRoomId,
         count: resultMessages.length,
-        hasMore: filtered.length > limit
+        hasMore
       });
 
       return {
-        messages: Array.isArray(resultMessages) ? resultMessages : [],
-        hasMore: filtered.length > limit, // More available if we got more than the limit
+        messages: resultMessages,
+        hasMore,
       };
     } catch (error) {
       logger.error('Error loading older messages', error);
@@ -692,23 +862,23 @@ class ChatService {
   ): () => void {
     const messagesRef = ref(database, `chats/${caseId}/messages`);
     const messagesQuery = query(
-      messagesRef, 
+      messagesRef,
       orderByChild('sentAt'),
       limitToLast(20) // Only listen to last 20 messages for real-time updates
     );
 
     const listener = onValue(messagesQuery, async (snapshot) => {
       const messages: ChatMessage[] = [];
-      
+
       snapshot.forEach((childSnapshot) => {
         const firebaseData = childSnapshot.val();
-        
+
         // Skip if firebaseData is null or undefined
         if (!firebaseData || typeof firebaseData !== 'object') {
           logger.warn('Skipping invalid message data in onNewMessagesChange', { key: childSnapshot.key });
           return;
         }
-        
+
         const mappedMessage: ChatMessage = {
           id: childSnapshot.key!,
           caseId: firebaseData.caseId || '',
@@ -728,7 +898,7 @@ class ChatService {
       });
 
       // Filter only new messages if lastKnownTimestamp is provided
-      const newMessages = lastKnownTimestamp 
+      const newMessages = lastKnownTimestamp
         ? messages.filter(msg => msg.timestamp > lastKnownTimestamp)
         : messages;
 
@@ -737,12 +907,12 @@ class ChatService {
         const cachedData = await chatCacheService.getCachedMessages(caseId);
         if (cachedData && cachedData.messages && Array.isArray(cachedData.messages)) {
           // Filter out duplicates before updating cache
-          const uniqueNewMessages = newMessages.filter(newMsg => 
-            !cachedData.messages.some(existingMsg => 
+          const uniqueNewMessages = newMessages.filter(newMsg =>
+            !cachedData.messages.some(existingMsg =>
               existingMsg.id === newMsg.id || existingMsg.tempId === newMsg.tempId
             )
           );
-          
+
           if (uniqueNewMessages.length > 0) {
             const updatedMessages = [...cachedData.messages, ...uniqueNewMessages];
             await chatCacheService.setCachedMessages(caseId, updatedMessages, cachedData.hasMore, cachedData.totalCount);
@@ -835,10 +1005,10 @@ class ChatService {
       // Get unread counts for all cases in parallel
       const countPromises = caseIds.map(caseId => this.getUnreadCount(caseId, userId));
       const counts = await Promise.all(countPromises);
-      
+
       // Sum all counts
       const total = counts.reduce((sum, count) => sum + count, 0);
-      
+
       logger.info('Total unread chat messages', { userId, total, caseCount: caseIds.length });
       return total;
     } catch (error) {
@@ -912,7 +1082,7 @@ class ChatService {
       // Use client-agent pair for room ID instead of caseId
       const chatRoomId = getChatRoomId(clientId, agentId);
       const conversationRef = ref(database, `chats/${chatRoomId}/metadata`);
-      
+
       // Check if conversation already exists
       const snapshot = await get(conversationRef);
 
@@ -1253,7 +1423,7 @@ class ChatService {
   async markMessageAsReadApi(messageId: string, chatRoomId?: string): Promise<boolean> {
     try {
       const result = await messagesApi.markChatMessageAsRead(messageId);
-      
+
       if (result.success) {
         logger.info('Message marked as read via API', { messageId });
 
@@ -1310,7 +1480,7 @@ class ChatService {
         const result = await messagesApi.markChatMessagesAsRead(batch, chatRoomId);
 
         if (result.success) {
-          logger.info('Messages marked as read via API', { 
+          logger.info('Messages marked as read via API', {
             messageCount: batch.length,
             chatRoomId,
             batchNumber: batches.indexOf(batch) + 1,
@@ -1363,7 +1533,7 @@ class ChatService {
   async getChatMessageApi(messageId: string): Promise<ChatMessage | null> {
     try {
       const result = await messagesApi.getChatMessage(messageId);
-      
+
       if (result.success && result.data) {
         // Convert API message format to ChatMessage format
         const apiMessage = result.data as unknown as ApiChatMessage;
@@ -1410,7 +1580,7 @@ class ChatService {
   async markChatRoomAsRead(caseId: string, userId: string): Promise<boolean> {
     try {
       logger.info('Marking chat room as read', { caseId, userId });
-      
+
       // Use Firebase-only method since messages are stored in Firebase
       // This updates the isRead flag directly in Firebase
       await this.markMessagesAsRead(caseId, userId);

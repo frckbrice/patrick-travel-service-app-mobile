@@ -118,7 +118,11 @@
       "activeCases": "Actifs",
       "documents": "Documents",
       "messages": "Messages",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "activeLabel": "Actifs : {{count}}",
+      "totalLabel": "Total : {{count}}",
+      "pendingLabel": "En attente de vérification",
+      "unreadBreakdown": "Emails + Chat + Système"
     },
     "actions": {
       "title": "Actions rapides",
@@ -361,7 +365,17 @@
     "noNotificationsDesc": "Vous êtes à jour ! De nouvelles notifications apparaîtront ici.",
     "chatMessages": "Messages de chat"
   },
+  "downloads": {
+    "title": "Téléchargements",
+    "subtitle": "Les fichiers téléchargés apparaîtront ici.",
+    "noDownloads": "Aucun téléchargement",
+    "noDownloadsDesc": "Vous n'avez encore téléchargé aucun fichier.",
+    "downloading": "Téléchargement...",
+    "downloadedSuccess": "Téléchargé avec succès",
+    "deleteSuccess": "Supprimé avec succès"
+  },
   "email": {
+    "downloadSuccess": "Piece jointe téléchargee avec succès.",
     "replyMessage": "Répondre à cet email",
     "cannotReply": "Impossible de répondre",
     "systemNotification": "C'est une notification système et ne peut pas être répondue. Veuillez utiliser le tableau de bord pour contacter le support.",

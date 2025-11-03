@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AppState, AppStateStatus, Platform, InteractionManager, View, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
@@ -44,15 +44,44 @@ function AppContent() {
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const [isAppReady, setIsAppReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const pathname = usePathname();
+
+  // Check route groups - be precise about pathname matching
+  // Note: home page pathname is '/(tabs)' or '/(tabs)/' or '/(tabs)/index', NOT '/'
+  // Only the root index route '/' (which redirects) should be treated as auth route
+  // const isTabsRoute = pathname?.startsWith('/(tabs)');
+  // const isAuthRoute = pathname?.startsWith('/(auth)') || pathname === '/onboarding' || (pathname === '/' && !isTabsRoute);
+
+  // Control tab bar visibility based on route
+  // useEffect(() => {
+  //   if (isAuthRoute) {
+  //     // Hide on auth routes
+  //     hideTabBar();
+  //   } else if (isTabsRoute) {
+  //     // Show on tabs routes (home and other tab screens)
+  //     // This ensures tab bar is visible when navigating to home
+  //     // Use a small delay to ensure it runs after other effects
+  //     const timer = setTimeout(() => {
+  //       showTabBar();
+  //     }, 10); // Minimal delay to ensure it runs after mount
+  //     return () => clearTimeout(timer);
+  //   }
+  //   // Other routes (modals, cards) don't need tab bar, scroll behavior will handle visibility
+  // }, [isAuthRoute, isTabsRoute, showTabBar, hideTabBar]);
 
   // Memoize visibility change handler to prevent re-renders
-  const handleVisibilityChange = useCallback((visible: boolean) => {
-    if (visible) {
-      showTabBar();
-    } else {
-      hideTabBar();
-    }
-  }, [showTabBar, hideTabBar]);
+  // const handleVisibilityChange = useCallback((visible: boolean) => {
+  //   // Don't show tab bar on auth routes
+  //   if (isAuthRoute) {
+  //     hideTabBar();
+  //     return;
+  //   }
+  //   if (visible) {
+  //     showTabBar();
+  //   } else {
+  //     hideTabBar();
+  //   }
+  // }, [showTabBar, hideTabBar, isAuthRoute]);
 
   // Initialize global Alert API
   useEffect(() => {
@@ -343,10 +372,13 @@ function AppContent() {
             ),
           }}
         />
-        <DynamicTabBar 
-          visible={isTabBarVisible} 
-          onVisibilityChange={handleVisibilityChange} 
-        />
+        {/* Hide tab bar on auth routes */}
+        {/* {!isAuthRoute && (
+          <DynamicTabBar
+            visible={isTabBarVisible}
+            onVisibilityChange={handleVisibilityChange}
+          />
+        )} */}
       </PaperProvider>
     </SafeAreaProvider>
   );

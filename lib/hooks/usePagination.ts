@@ -230,19 +230,21 @@ export function usePagination<T>(
  */
 export function useChatPagination<T extends { timestamp: number; id?: string; tempId?: string }>(
   caseId: string,
-  loadInitialMessages: (caseId: string) => Promise<{
+  loadInitialMessages: (caseId: string, clientId?: string, agentId?: string) => Promise<{
     messages: T[];
     hasMore: boolean;
     totalCount: number;
   }>,
-  loadOlderMessages: (caseId: string, beforeTimestamp: number) => Promise<{
+  loadOlderMessages: (caseId: string, beforeTimestamp: number, clientId?: string, agentId?: string) => Promise<{
     messages: T[];
     hasMore: boolean;
-  }>
+  }>,
+  clientId?: string,
+  agentId?: string
 ) {
   return usePagination<T>(
     async () => {
-      const result = await loadInitialMessages(caseId);
+      const result = await loadInitialMessages(caseId, clientId, agentId);
       // logger.info('\n\n loadInitialMessages result', {
       //   result,
       //   messages: result.messages,
@@ -256,7 +258,7 @@ export function useChatPagination<T extends { timestamp: number; id?: string; te
       };
     },
     async (beforeTimestamp) => {
-      const result = await loadOlderMessages(caseId, beforeTimestamp);
+      const result = await loadOlderMessages(caseId, beforeTimestamp, clientId, agentId);
       return {
         data: Array.isArray(result.messages) ? result.messages : [],
         hasMore: !!result.hasMore,

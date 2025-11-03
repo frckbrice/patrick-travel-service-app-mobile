@@ -20,6 +20,7 @@ import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { Alert } from '../../lib/utils/alert';
 import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type ThemeMode = 'light' | 'dark' | 'auto';
 type Language = 'en' | 'fr';
@@ -309,6 +310,7 @@ export default function SettingsScreen() {
   const COLORS = useThemeColors();
   const tabBarPadding = useTabBarPadding();
   const scrollProps = useTabBarScroll();
+  const insets = useSafeAreaInsets();
   const {
     biometricAvailable,
     biometricEnabled,
@@ -423,7 +425,6 @@ export default function SettingsScreen() {
     container: {
       flex: 1,
       backgroundColor: COLORS.background,
-      paddingBottom: SPACING.xxl + SPACING.md,
     },
     scrollContainer: {
       flex: 1,
@@ -549,7 +550,7 @@ export default function SettingsScreen() {
   }), [COLORS]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: insets.bottom + SPACING.lg }]}>
       <ThemeAwareHeader
         variant="gradient"
         gradientColors={[COLORS.primary, COLORS.secondary, COLORS.accent]}
@@ -560,7 +561,7 @@ export default function SettingsScreen() {
         style={styles.scrollContainer}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: SPACING.xl + tabBarPadding }
+          { paddingBottom: SPACING.xl + insets.bottom + SPACING.lg }
         ]}
         showsVerticalScrollIndicator={false}
         onScroll={scrollProps.onScroll}

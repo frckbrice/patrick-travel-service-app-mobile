@@ -34,6 +34,12 @@ import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 import { sendEmail, sendEmailReply } from '../../lib/api/email.api';
 import { toast } from '../../lib/services/toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  downloadAndTrackFile,
+  formatFileSize,
+  getFileIconForMimeType,
+} from '../../lib/utils/fileDownload';
+import * as FileSystem from 'expo-file-system/legacy';
 
 interface EmailReaderProps {
   emailId: string;
@@ -194,31 +200,92 @@ export default function EmailReaderScreen() {
   // Handle attachment download
   const handleAttachmentDownload = useCallback(async (attachment: any) => {
     try {
+      // Validate attachment has required fields
+      if (!attachment.url || !attachment.name) {
+        Alert.alert(
+          t('common.error') || 'Error',
+          t('email.invalidAttachment') || 'Invalid attachment - missing URL or filename'
+        );
+        return;
+      }
+
+      // Show download confirmation dialog
       Alert.alert(
         t('email.downloadAttachment') || 'Download Attachment',
-        `${attachment.name} (${(attachment.size / 1024).toFixed(1)} KB)`,
+        `${attachment.name}\n${formatFileSize(attachment.size)}`,
         [
           { text: t('common.cancel') || 'Cancel', style: 'cancel' },
           {
             text: t('common.download') || 'Download',
-            onPress: () => {
-              // In a real implementation, this would download the file
-              Alert.alert(
-                t('common.success') || 'Success',
-                t('email.downloadStarted') || 'Download started'
-              );
+            onPress: async () => {
+              try {
+                // Show loading indicator
+                toast.info({
+                  title: t('email.downloading') || 'Downloading',
+                  message: `${attachment.name}...`,
+                });
+
+                // Download and track the file (no sharing - user can share from Downloads tab)
+                const result = await downloadAndTrackFile({
+                  url: attachment.url,
+                  filename: attachment.name,
+                  mimeType: attachment.type || 'application/octet-stream',
+                  source: 'email',
+                  sourceId: emailId,
+                });
+
+                if (result.success && result.localUri) {
+                  // Verify file was actually saved
+                  try {
+                    const fileInfo = await FileSystem.getInfoAsync(result.localUri);
+                    if (fileInfo.exists) {
+                      toast.success({
+                        title: t('common.success') || 'Success',
+                        message: t('email.downloadSuccess') || `${attachment.name} downloaded successfully`,
+                      });
+                      logger.info('Email attachment downloaded and saved', {
+                        emailId,
+                        attachmentName: attachment.name,
+                        fileSize: fileInfo.size,
+                        localUri: result.localUri,
+                      });
+
+                      // Redirect to documents page with downloads tab after a short delay
+                      setTimeout(() => {
+                        router.push('/(tabs)/documents?tab=downloads');
+                      }, 1500);
+                    } else {
+                      throw new Error('File was not saved to device');
+                    }
+                  } catch (verifyError: any) {
+                    logger.error('Failed to verify downloaded file', verifyError);
+                    toast.error({
+                      title: t('common.error') || 'Error',
+                      message: t('email.downloadVerificationFailed') || 'File download completed but could not be verified',
+                    });
+                  }
+                } else {
+                  throw new Error(result.error || t('email.downloadFailed') || 'Failed to download attachment');
+                }
+              } catch (error: any) {
+                logger.error('Failed to download attachment', error);
+                toast.error({
+                  title: t('common.error') || 'Error',
+                  message: error.message || t('email.downloadFailed') || 'Failed to download attachment',
+                });
+              }
             },
           },
         ]
       );
-    } catch (error) {
-      logger.error('Failed to download attachment', error);
+    } catch (error: any) {
+      logger.error('Failed to handle attachment download', error);
       Alert.alert(
         t('common.error') || 'Error',
-        t('email.downloadFailed') || 'Failed to download attachment'
+        error.message || t('email.downloadFailed') || 'Failed to download attachment'
       );
     }
-  }, [t]);
+  }, [t, emailId]);
 
   // Handle reply to email
   const handleReply = useCallback(() => {
@@ -433,9 +500,9 @@ export default function EmailReaderScreen() {
                 >
                   <View style={styles.attachmentIcon}>
                     <MaterialCommunityIcons
-                      name="file-pdf-box"
+                      name={getFileIconForMimeType(attachment.type || 'application/octet-stream') as any}
                       size={24}
-                      color={themeColors.error}
+                      color={themeColors.primary}
                     />
                   </View>
                   <View style={styles.attachmentInfo}>
@@ -443,7 +510,7 @@ export default function EmailReaderScreen() {
                       {attachment.name}
                     </Text>
                     <Text style={[styles.attachmentSize, { color: themeColors.textSecondary }]}>
-                      {(attachment.size / 1024).toFixed(1)} KB
+                      {formatFileSize(attachment.size)}
                     </Text>
                   </View>
                   <MaterialCommunityIcons
