@@ -257,8 +257,7 @@
     "bySize": "Par taille",
     "newest": "Plus récent",
     "oldest": "Plus ancien",
-    "type": "Type",
-    "size": "Taille"
+    "type": "Type"
   },
   "messages": {
     "voiceCallComingSoon": "Appel vocal bientôt disponible",
@@ -363,6 +362,11 @@
     "chatMessages": "Messages de chat"
   },
   "email": {
+    "replyMessage": "Répondre à cet email",
+    "cannotReply": "Impossible de répondre",
+    "systemNotification": "C'est une notification système et ne peut pas être répondue. Veuillez utiliser le tableau de bord pour contacter le support.",
+    "send": "Envoyer",
+    "reply": "Répondre",
     "reader": "Email",
     "noInboxEmails": "Aucun email dans la boîte de réception",
     "noInboxEmailsDesc": "Vous n'avez encore reçu aucun email.",
@@ -425,6 +429,7 @@
     "upToDate": "Vous êtes à jour"
   },
   "help": {
+    "help": "Aide",
     "faq": "FAQs",
     "searchFAQ": "Rechercher dans les FAQ",
     "contact": "Contacter le support",

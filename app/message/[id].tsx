@@ -37,7 +37,7 @@ import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
 import { SafeAreaView } from 'react-native-safe-area-context'; // Make sure this import exists
 
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { casesApi } from '@/lib/api/cases.api';
 import { Alert } from '../../lib/utils/alert';
 import { useTabBarContext } from '../../lib/context/TabBarContext';
@@ -1323,7 +1323,7 @@ return (
       keyboardVerticalOffset={0}
     >
     {/* Header consistent with profile page, with WhatsApp-like agent info */}
-    <ModernHeader
+    <ThemeAwareHeader
       title={agentInfo?.name || (t('messages.chat') as string) || 'Chat'}
       subtitle={agentInfo?.isOnline ? (t('messages.online') as string) || 'online' : (t('messages.offline') as string) || 'offline'}
       showBackButton

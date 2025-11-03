@@ -11,6 +11,7 @@ import { ThemeProvider, useTheme } from '../lib/theme/ThemeContext';
 import { TabBarProvider } from '../lib/context/TabBarContext';
 import { DynamicTabBar } from '../components/ui/DynamicTabBar';
 import { useTabBarContext } from '../lib/context/TabBarContext';
+import { NotificationBannerProvider } from '../components/ui/NotificationBannerProvider';
 import {
   setupNotificationListeners,
   getLastNotificationResponse,
@@ -133,10 +134,10 @@ function AppContent() {
       cleanup = setupNotificationListeners();
       
       // Check for cold start notification
-      getLastNotificationResponse().then((data) => {
+      getLastNotificationResponse().then(async (data) => {
         if (data) {
           logger.info('App opened from notification', data);
-          handleNotificationNavigation(data);
+          await handleNotificationNavigation(data);
         }
       });
     });
@@ -356,9 +357,11 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AlertProvider>
-          <TabBarProvider>
-            <AppContent />
-          </TabBarProvider>
+          <NotificationBannerProvider defaultAutoDismissDelay={5000}>
+            <TabBarProvider>
+              <AppContent />
+            </TabBarProvider>
+          </NotificationBannerProvider>
         </AlertProvider>
       </ThemeProvider>
     </QueryClientProvider>

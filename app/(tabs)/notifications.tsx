@@ -12,7 +12,7 @@ import { notificationsApi } from '../../lib/api/notifications.api';
 import { messagesApi } from '../../lib/api/messages.api';
 import { Notification, NotificationType, Message } from '../../lib/types';
 import { EmptyState } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
@@ -58,12 +58,23 @@ export default function NotificationsScreen() {
         
         if (notificationsResponse.success && notificationsResponse.data) {
           console.log("\n\n the notifications info: ", { notificationsResponse });
-          setNotifications(notificationsResponse.data);
+          const backendNotifications = notificationsResponse.data;
+          const unreadCount = backendNotifications.filter((n: any) => !n.isRead).length;
+          console.log(`📬 Loaded ${backendNotifications.length} backend notifications (${unreadCount} unread)`);
+
+          // Log each notification's details to see what types they are
+          backendNotifications.forEach((n: any, idx: number) => {
+            console.log(`📬 Notification ${idx + 1}: type=${n.type}, isRead=${n.isRead}, title="${n.title}"`);
+          });
+
+          setNotifications(backendNotifications);
         }
         
         if (emailsResponse.success && emailsResponse.data) {
-          console.log("\n\n the emails info: ", { emailsResponse });
-          setEmails(emailsResponse.data || []);
+          const emails = emailsResponse.data || [];
+          const unreadEmails = emails.filter((e: any) => !e.isRead);
+          console.log(`📧 Loaded ${emails.length} emails (${unreadEmails.length} unread)`);
+          setEmails(emails);
         }
         
         // Set up real-time listener for conversation updates
@@ -101,10 +112,22 @@ export default function NotificationsScreen() {
           ]);
           if (!isActive) return;
           if (notificationsResponse.success && notificationsResponse.data) {
-            setNotifications(notificationsResponse.data);
+            const backendNotifications = notificationsResponse.data;
+            const unreadCount = backendNotifications.filter((n: any) => !n.isRead).length;
+            console.log(`📬 Refresh loaded ${backendNotifications.length} backend notifications (${unreadCount} unread)`);
+
+            // Log each notification's details to see what types they are
+            backendNotifications.forEach((n: any, idx: number) => {
+              console.log(`📬 Refresh Notification ${idx + 1}: type=${n.type}, isRead=${n.isRead}, title="${n.title}"`);
+            });
+
+            setNotifications(backendNotifications);
           }
           if (emailsResponse.success && emailsResponse.data) {
-            setEmails(emailsResponse.data);
+            const emails = emailsResponse.data;
+            const unreadEmails = emails.filter((e: any) => !e.isRead);
+            console.log(`📧 Refresh loaded ${emails.length} emails (${unreadEmails.length} unread)`);
+            setEmails(emails);
           }
         } catch { }
       };
@@ -418,6 +441,9 @@ export default function NotificationsScreen() {
     // Merge and sort by newest first
     const merged = [...mappedNotifications, ...mappedConversations];
     merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    console.log(`📬 Combined notifications breakdown: ${mappedNotifications.length} backend + ${mappedConversations.length} conversations = ${merged.length} total`);
+
     return merged;
   }, [notifications, conversations, user, t]);
 
@@ -809,7 +835,7 @@ export default function NotificationsScreen() {
     <TouchDetector>
       <View style={styles.container}>
         {/* Modern Gradient Header */}
-        <ModernHeader
+        <ThemeAwareHeader
           variant="gradient"
           gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
           title={t('notifications.title') || 'Notifications'}

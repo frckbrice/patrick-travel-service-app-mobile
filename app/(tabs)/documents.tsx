@@ -24,8 +24,8 @@ import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { templatesApi } from '../../lib/api/templates.api';
 import { casesApi } from '../../lib/api/cases.api';
 import { Document, DocumentType, DocumentTemplate, ServiceType, TemplateCategory } from '../../lib/types';
-import { Card, StatusBadge, EmptyState } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { Card, StatusBadge, EmptyState, PDFViewer, ImageZoomViewer } from '../../components/ui';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { useCaseRequirementGuard } from '../../lib/guards/useCaseRequirementGuard';
 import { SPACING, DOCUMENT_TYPE_LABELS, COLORS } from '../../lib/constants';
@@ -65,6 +65,12 @@ export default function DocumentsScreen() {
   // Templates state
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+
+  // Preview state
+  const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<DocumentTemplate | null>(null);
+  const [showPDFViewer, setShowPDFViewer] = useState(false);
+  const [showImageZoom, setShowImageZoom] = useState(false);
   const [templateSearchQuery, setTemplateSearchQuery] = useState('');
   const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | undefined>();
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | undefined>();
@@ -426,6 +432,57 @@ export default function DocumentsScreen() {
     }
   }, []);
 
+  // Handle document preview
+  const handleDocumentPreview = useCallback((document: Document, event?: any) => {
+    // Stop event propagation to prevent card navigation
+    event?.stopPropagation?.();
+    
+    const isImage = document.mimeType.startsWith('image/');
+    const isPDF = document.mimeType === 'application/pdf';
+    
+    if (isImage || isPDF) {
+      setPreviewDocument(document);
+      if (isImage) {
+        setShowImageZoom(true);
+      } else if (isPDF) {
+        setShowPDFViewer(true);
+      }
+    } else {
+      // For unsupported types, navigate to details page
+      router.push(`/document/${document.id}`);
+    }
+  }, [router]);
+
+  // Handle template preview
+  const handleTemplatePreview = useCallback((template: DocumentTemplate, event?: any) => {
+    event?.stopPropagation?.();
+    
+    if (!template.fileUrl) {
+      toast.info({
+        title: t('common.info') || 'Info',
+        message: t('templates.previewNotAvailable') || 'Preview not available for this template',
+      });
+      return;
+    }
+    
+    const isImage = template.mimeType.startsWith('image/');
+    const isPDF = template.mimeType === 'application/pdf';
+    
+    if (isImage || isPDF) {
+      setPreviewTemplate(template);
+      if (isImage) {
+        setShowImageZoom(true);
+      } else if (isPDF) {
+        setShowPDFViewer(true);
+      }
+    } else {
+      toast.info({
+        title: t('common.info') || 'Info',
+        message: t('templates.previewNotAvailable') || 'Preview not available for this template',
+      });
+    }
+  }, [t]);
+
   // Get template file icon
   const getFileIcon = useCallback((mimeType: string) => {
     if (mimeType.includes('pdf')) return 'file-pdf-box';
@@ -451,27 +508,47 @@ export default function DocumentsScreen() {
 
   // Render document item
   const renderDocumentItem = useCallback(
-    ({ item, index }: { item: Document; index: number }) => (
-      <Animated.View entering={FadeInDown.delay(Math.min(index * 30, 200)).springify()}>
-        <Card
-          onPress={() => router.push(`/document/${item.id}`)}
-          style={{ ...styles.card, backgroundColor: colors.card }}
-        >
-          <View style={styles.cardContent}>
-            <View style={styles.cardHeader}>
-              <View style={styles.documentContainer}>
-                <MaterialCommunityIcons
-                  name={getFileTypeIcon(item.documentType)}
-                  size={20}
-                  color={getFileTypeColor(item.documentType)}
-                  style={styles.icon}
-                />
-                <PaperText style={styles.documentName} numberOfLines={1}>
-                  {item.originalName}
-                </PaperText>
+    ({ item, index }: { item: Document; index: number }) => {
+      const isImage = item.mimeType.startsWith('image/');
+      const isPDF = item.mimeType === 'application/pdf';
+      const canPreview = isImage || isPDF;
+      
+      return (
+        <Animated.View entering={FadeInDown.delay(Math.min(index * 30, 200)).springify()}>
+          <Card
+            onPress={() => router.push(`/document/${item.id}`)}
+            style={{ ...styles.card, backgroundColor: colors.card }}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <View style={styles.documentContainer}>
+                  <MaterialCommunityIcons
+                    name={getFileTypeIcon(item.documentType)}
+                    size={20}
+                    color={getFileTypeColor(item.documentType)}
+                    style={styles.icon}
+                  />
+                  <PaperText style={styles.documentName} numberOfLines={1}>
+                    {item.originalName}
+                  </PaperText>
+                </View>
+                <View style={styles.headerActions}>
+                  {canPreview && (
+                    <TouchableOpacity
+                      onPress={(e) => handleDocumentPreview(item, e)}
+                      style={styles.previewButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <MaterialCommunityIcons
+                        name={isImage ? 'image' : 'file-pdf-box'}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+                  <StatusBadge status={item.status} />
+                </View>
               </View>
-              <StatusBadge status={item.status} />
-            </View>
 
             <View style={styles.metaRow}>
               <View style={[styles.typeBadge, { backgroundColor: getFileTypeColor(item.documentType) + '15' }]}>
@@ -522,42 +599,63 @@ export default function DocumentsScreen() {
           </View>
         </Card>
       </Animated.View>
-    ),
-    [router, getFileTypeColor, getFileTypeIcon, colors]
+    );
+    },
+    [router, getFileTypeColor, getFileTypeIcon, colors, handleDocumentPreview]
   );
 
   // Render template item
   const renderTemplateItem = useCallback(
-    ({ item, index }: { item: DocumentTemplate; index: number }) => (
-      <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
-        <Card style={{ ...styles.card, backgroundColor: colors.card }}>
-          <View style={styles.cardContent}>
-            <View style={styles.cardHeader}>
-              <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
-                <MaterialCommunityIcons
-                  name={getFileIcon(item.mimeType)}
-                  size={32}
-                  color={colors.primary}
-                />
-              </View>
-              <View style={styles.fileDetails}>
-                <Text style={[styles.fileName, { color: colors.text }]} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                {item.description && (
-                  <Text style={[styles.fileDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                )}
-              </View>
-              {item.isRequired && (
-                <View style={[styles.requiredBadge, { backgroundColor: colors.error + '20' }]}>
-                  <Text style={[styles.requiredText, { color: colors.error }]}>
-                    {t('templates.required')}
-                  </Text>
+    ({ item, index }: { item: DocumentTemplate; index: number }) => {
+      const isImage = item.mimeType.startsWith('image/');
+      const isPDF = item.mimeType === 'application/pdf';
+      const canPreview = (isImage || isPDF) && !!item.fileUrl;
+      
+      return (
+        <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
+          <Card style={{ ...styles.card, backgroundColor: colors.card }}>
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
+                  <MaterialCommunityIcons
+                    name={getFileIcon(item.mimeType)}
+                    size={32}
+                    color={colors.primary}
+                  />
                 </View>
-              )}
-            </View>
+                <View style={styles.fileDetails}>
+                  <Text style={[styles.fileName, { color: colors.text }]} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  {item.description && (
+                    <Text style={[styles.fileDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {item.description}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.templateHeaderActions}>
+                  {canPreview && (
+                    <TouchableOpacity
+                      onPress={(e) => handleTemplatePreview(item, e)}
+                      style={styles.previewButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <MaterialCommunityIcons
+                        name={isImage ? 'image' : 'file-pdf-box'}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+                  {item.isRequired && (
+                    <View style={[styles.requiredBadge, { backgroundColor: colors.error + '20' }]}>
+                      <Text style={[styles.requiredText, { color: colors.error }]}>
+                        {t('templates.required')}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
@@ -614,8 +712,9 @@ export default function DocumentsScreen() {
           </View>
         </Card>
       </Animated.View>
-    ),
-    [colors, getFileIcon, getCategoryIcon, t, handleDownload, handleDownloadAndFill]
+    );
+    },
+    [colors, getFileIcon, getCategoryIcon, t, handleDownload, handleDownloadAndFill, handleTemplatePreview]
   );
 
   const keyExtractor = useCallback((item: Document | DocumentTemplate) => item.id, []);
@@ -645,7 +744,7 @@ export default function DocumentsScreen() {
   return (
     // <TouchDetector>
     <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: insets.bottom + SPACING.lg }]}>
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={activeTab === 'documents' ? t('documents.title') || 'Documents' : t('templates.title') || 'Templates'}
@@ -913,7 +1012,7 @@ export default function DocumentsScreen() {
             />
           </View>
         )}
-      </ModernHeader>
+      </ThemeAwareHeader>
 
       {/* Documents List */}
       {activeTab === 'documents' && (
@@ -1211,6 +1310,38 @@ export default function DocumentsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* PDF Viewer Modal */}
+      {showPDFViewer && (
+        <PDFViewer
+          filePath={
+            previewDocument?.filePath || previewTemplate?.fileUrl || ''
+          }
+          fileName={
+            previewDocument?.originalName || previewTemplate?.name || ''
+          }
+          onClose={() => {
+            setShowPDFViewer(false);
+            setPreviewDocument(null);
+            setPreviewTemplate(null);
+          }}
+        />
+      )}
+
+      {/* Image Zoom Viewer Modal */}
+      {showImageZoom && (
+        <ImageZoomViewer
+          imageUri={
+            previewDocument?.filePath || previewTemplate?.fileUrl || ''
+          }
+          visible={showImageZoom}
+          onClose={() => {
+            setShowImageZoom(false);
+            setPreviewDocument(null);
+            setPreviewTemplate(null);
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -1347,6 +1478,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  templateHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  previewButton: {
+    padding: SPACING.xs,
+    borderRadius: 8,
   },
   metaRow: {
     flexDirection: 'row',

@@ -19,7 +19,7 @@ import { useRequireAuth } from '../features/auth/hooks/useAuth';
 import { templatesApi } from '../lib/api/templates.api';
 import { DocumentTemplate, ServiceType, TemplateCategory } from '../lib/types';
 import { Card, EmptyState } from '../components/ui';
-import { ModernHeader } from '../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../components/ui/ThemeAwareHeader';
 import { TouchDetector } from '../components/ui/TouchDetector';
 import { useDebounce } from '../lib/hooks';
 import { SPACING } from '../lib/constants';
@@ -270,7 +270,7 @@ export default function TemplatesScreen() {
   return (
     // <TouchDetector>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={t('templates.title') || 'Templates'}

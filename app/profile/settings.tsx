@@ -16,7 +16,7 @@ import { useAuthStore } from '../../stores/auth/authStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SPACING, STORAGE_KEYS } from '../../lib/constants';
 import { toast } from '../../lib/services/toast';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { Alert } from '../../lib/utils/alert';
 import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
@@ -550,7 +550,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
         gradientColors={[COLORS.primary, COLORS.secondary, COLORS.accent]}
         title={t('profile.settings') || 'Preferences'}

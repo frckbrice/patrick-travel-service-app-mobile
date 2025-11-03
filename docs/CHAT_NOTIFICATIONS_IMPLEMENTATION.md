@@ -565,8 +565,9 @@ Complete notification read functionality with single and batch operations.
    - **Features:** Marks all unread notifications for authenticated user
 
 3. **Get Unread Count**
-   - **Endpoint:** `GET /api/notifications/unread-count`
-   - **Returns:** Total count of unread notifications
+   - **Endpoint:** `GET /api/notifications?page=1&limit=1`
+   - **Returns:** Response includes `unreadCount` field along with notifications list
+   - **Note:** No separate endpoint - unread count is embedded in GET /notifications response
 
 #### Mobile Integration
 

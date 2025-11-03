@@ -33,3 +33,8 @@ export { ThemeSwitcher } from './ThemeSwitcher';
 export { NotFound } from './NotFound';
 export { ModernHeader } from './ModernHeader';
 export type { ModernHeaderProps } from './ModernHeader';
+export { LightModernHeader } from './LightModernHeader';
+export { ThemeAwareHeader } from './ThemeAwareHeader';
+export { NotificationBannerProvider, useNotificationBanner } from './NotificationBannerProvider';
+export { default as NotificationBanner } from '../../docs/NotificationBanner';
+export type { NotificationBannerData } from '../../docs/NotificationBanner';

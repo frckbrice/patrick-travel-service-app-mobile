@@ -164,6 +164,15 @@ export default function LoginScreen() {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Company Logo */}
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
+
         <View style={styles.header}>
           <Text variant="headlineLarge" style={styles.title}>
             {t('auth.welcomeBack')}
@@ -336,6 +345,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: SPACING.lg,
     justifyContent: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+    marginTop: SPACING.md,
+  },
+  logo: {
+    width: 120,
+    height: 120,
   },
   header: {
     marginBottom: SPACING.xl,

@@ -18,6 +18,7 @@ import {
 import { logger } from '../utils/logger';
 import { chatCacheService } from './chatCache';
 import { messagesApi } from '../api/messages.api';
+import { notificationsApi } from '../api/notifications.api';
 
 export interface ChatMessage {
   id: string;
@@ -515,29 +516,11 @@ class ChatService {
       const messagesRef = ref(database, `chats/${caseIdOrRoomId}/messages`);
       logger.info('\n\n Messages ref created', { path: messagesRef.toString() });
       
-      // Try without orderByChild first to see if data exists
-      let messagesQuery;
-      try {
-        messagesQuery = query(
-          messagesRef, 
-          orderByChild('sentAt'),
-          limitToLast(20)
-        );
-      } catch (error: any) {
-        logger.warn('orderByChild failed, trying without ordering', { caseIdOrRoomId, error: error.message });
-        messagesQuery = query(messagesRef, limitToLast(20));
-      }
-
-      let snapshot = await get(messagesQuery);
+      // Load ALL messages first (no limit/query restrictions) to ensure we get both incoming and outgoing
+      // This ensures we capture all messages regardless of whether they use 'sentAt' or 'timestamp'
+      const snapshot = await get(messagesRef);
       logger.info('\n\n Firebase snapshot received', { caseIdOrRoomId, size: snapshot.size, exists: snapshot.exists() });
-      
-      // If no data with query, try without any restrictions
-      if (!snapshot.exists() || snapshot.size === 0) {
-        logger.info('\n\n No data with query, trying without restrictions', { caseIdOrRoomId });
-        snapshot = await get(messagesRef);
-        logger.info('\n\n Direct ref snapshot', { caseIdOrRoomId, size: snapshot.size, exists: snapshot.exists() });
-      }
-      
+
       // Log the actual data structure
       if (snapshot.exists()) {
         logger.info('Snapshot data structure', { 
@@ -546,7 +529,8 @@ class ChatService {
           firstKey: Object.keys(snapshot.val() || {})[0]
         });
       }
-      const messages: ChatMessage[] = [];
+
+      const allMessages: ChatMessage[] = [];
 
       snapshot.forEach((childSnapshot) => {
         const firebaseData = childSnapshot.val();
@@ -572,30 +556,42 @@ class ChatService {
           error: firebaseData.error,
         };
 
-        messages.push(mappedMessage);
+        allMessages.push(mappedMessage);
       });
 
-      // Ensure chronological order (oldest → newest)
-      messages.sort((a, b) => a.timestamp - b.timestamp);
-
-      logger.info('Messages processed from Firebase', { caseIdOrRoomId, count: messages.length });
+      // Sort ALL messages chronologically (oldest → newest)
+      allMessages.sort((a, b) => a.timestamp - b.timestamp);
 
       // Get total count for pagination info
-      const totalSnapshot = await get(messagesRef);
-      const totalCount = totalSnapshot.size;
+      const totalCount = allMessages.length;
 
-      // Cache the messages (use room ID as cache key)
+      // Take the last 50 messages (most recent) for initial display
+      // This ensures we show recent conversation with proper chronological order
+      const initialMessages = allMessages.slice(-50);
+
+      logger.info('Messages processed from Firebase', {
+        caseIdOrRoomId,
+        totalCount: allMessages.length,
+        initialDisplayCount: initialMessages.length
+      });
+
+      // Cache ALL messages (use room ID as cache key) - cache the full set for faster subsequent loads
       await chatCacheService.setCachedMessages(
         caseIdOrRoomId, 
-        messages, 
-        totalCount > 20, // hasMore
+        allMessages, // Cache all messages, not just initial 50
+        totalCount > 50, // hasMore - true if there are more than 50 messages
         totalCount
       );
 
-      logger.info('Initial messages loaded from Firebase', { caseIdOrRoomId, count: messages.length, totalCount });
+      logger.info('Initial messages loaded from Firebase', {
+        caseIdOrRoomId,
+        initialCount: initialMessages.length,
+        totalCount
+      });
+
       return {
-        messages: Array.isArray(messages) ? messages : [],
-        hasMore: totalCount > 20,
+        messages: Array.isArray(initialMessages) ? initialMessages : [],
+        hasMore: totalCount > 50, // More messages available if total > 50
         totalCount: totalCount || 0,
       };
     } catch (error) {
@@ -615,16 +611,25 @@ class ChatService {
   }> {
     try {
       const messagesRef = ref(database, `chats/${caseId}/messages`);
-      const messagesQuery = query(
-        messagesRef,
-        orderByChild('sentAt'),
-        endAt(beforeTimestamp - 1),
-        limitToLast(limit)
-      );
+      let snapshot;
+      let allMessages: ChatMessage[] = [];
 
-      const snapshot = await get(messagesQuery);
-      const messages: ChatMessage[] = [];
+      // Try to use ordered query first (more efficient)
+      try {
+        const messagesQuery = query(
+          messagesRef,
+          orderByChild('sentAt'),
+          endAt(beforeTimestamp - 1),
+          limitToLast(limit * 2) // Get more than needed to account for messages with only 'timestamp'
+        );
+        snapshot = await get(messagesQuery);
+      } catch (queryError: any) {
+        // If ordered query fails, fall back to loading all and filtering in memory
+        logger.warn('Ordered query failed, falling back to full load', { caseId, error: queryError.message });
+        snapshot = await get(messagesRef);
+      }
 
+      // Process all messages from snapshot
       snapshot.forEach((childSnapshot) => {
         const firebaseData = childSnapshot.val();
         
@@ -649,20 +654,29 @@ class ChatService {
           error: firebaseData.error,
         };
 
-        messages.push(mappedMessage);
+        allMessages.push(mappedMessage);
       });
 
       // Filter to strictly older than the boundary and ensure chronological order (oldest → newest)
-      const filtered = messages.filter(m => m.timestamp < beforeTimestamp);
-      filtered.sort((a, b) => a.timestamp - b.timestamp);
+      const filtered = allMessages
+        .filter(m => m.timestamp < beforeTimestamp)
+        .sort((a, b) => a.timestamp - b.timestamp);
+
+      // Take the last 'limit' messages (most recent before boundary)
+      const resultMessages = filtered.slice(-limit);
 
       // Update cache with older messages
-      await chatCacheService.prependMessagesToCache(caseId, filtered);
+      await chatCacheService.prependMessagesToCache(caseId, resultMessages);
 
-      logger.info('Older messages loaded from Firebase', { caseId, count: filtered.length });
+      logger.info('Older messages loaded from Firebase', {
+        caseId,
+        count: resultMessages.length,
+        hasMore: filtered.length > limit
+      });
+
       return {
-        messages: Array.isArray(filtered) ? filtered : [],
-        hasMore: filtered.length === limit, // If we got exactly the limit, there might be more
+        messages: Array.isArray(resultMessages) ? resultMessages : [],
+        hasMore: filtered.length > limit, // More available if we got more than the limit
       };
     } catch (error) {
       logger.error('Error loading older messages', error);
@@ -1395,44 +1409,36 @@ class ChatService {
    */
   async markChatRoomAsRead(caseId: string, userId: string): Promise<boolean> {
     try {
-      // Get all unread messages for this case/user (idempotent check)
-      const messagesRef = ref(database, `chats/${caseId}/messages`);
-      const snapshot = await get(messagesRef);
+      logger.info('Marking chat room as read', { caseId, userId });
       
-      if (!snapshot.exists()) {
-        logger.info('No messages found to mark as read', { caseId, userId });
-        return true; // No messages to mark as read
-      }
+      // Use Firebase-only method since messages are stored in Firebase
+      // This updates the isRead flag directly in Firebase
+      await this.markMessagesAsRead(caseId, userId);
 
-      const messages: ChatMessage[] = [];
-      snapshot.forEach((childSnapshot) => {
-        const message = childSnapshot.val();
-        // Only mark messages as read if they weren't sent by the current user and aren't already read
-        if (message.senderId !== userId && !message.isRead) {
-          messages.push({
-            ...message,
-            id: childSnapshot.key!,
-          });
+      // Auto-mark related NEW_MESSAGE notification as read (best-effort)
+      try {
+        const notifResp = await notificationsApi.getNotifications(1, 50);
+        if (notifResp.success && Array.isArray(notifResp.data)) {
+          const related = notifResp.data.find((n: any) =>
+            n.type === 'NEW_MESSAGE' &&
+            n.caseId === caseId &&
+            !n.isRead
+          );
+          if (related?.id) {
+            await notificationsApi.markAsRead(related.id);
+            logger.info('Auto-marked NEW_MESSAGE notification as read', {
+              notificationId: related.id,
+              caseId
+            });
+          }
         }
-      });
-
-      if (messages.length === 0) {
-        logger.info('No unread messages to mark', { caseId, userId });
-        return true; // No unread messages
+      } catch (notifError) {
+        // Non-critical - don't fail the whole operation
+        logger.warn('Failed to auto-mark NEW_MESSAGE notification as read', notifError);
       }
 
-      // Extract message IDs for API call
-      const messageIds = messages.map(msg => msg.id);
-      
-      logger.info('Marking messages as read', {
-        caseId,
-        userId,
-        messageCount: messageIds.length
-      });
-
-      // Mark as read via API (this will sync to Firebase)
-      // API handles batching and Firebase sync automatically
-      return await this.markMessagesAsReadApi(messageIds, caseId);
+      logger.info('Chat room marked as read successfully', { caseId, userId });
+      return true;
     } catch (error) {
       logger.error('Error marking chat room as read', error);
       return false;

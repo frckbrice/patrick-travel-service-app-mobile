@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { casesApi } from '../../lib/api/cases.api';
 import { Case, StatusHistory } from '../../lib/types';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { LoadingSpinner, Button, Card, StatusBadge } from '../../components/ui';
 import { useTabBarContext } from '../../lib/context/TabBarContext';
 import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
@@ -22,6 +22,7 @@ import {
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format } from 'date-fns';
 import { toast } from '../../lib/services/toast';
+import { useCasesStore } from '../../stores/cases/casesStore';
 
 export default function CaseDetailsScreen() {
   useRequireAuth();
@@ -32,6 +33,7 @@ export default function CaseDetailsScreen() {
   const scrollProps = useTabBarScroll();
   const themeColors = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { updateCaseById } = useCasesStore();
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [history, setHistory] = useState<StatusHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,31 +42,48 @@ export default function CaseDetailsScreen() {
     if (!id) return;
 
     setIsLoading(true);
-    const [caseResponse, historyResponse] = await Promise.all([
-      casesApi.getCaseById(id),
-      casesApi.getCaseHistory(id),
-    ]);
+    try {
+      const [caseResponse, historyResponse] = await Promise.all([
+        casesApi.getCaseById(id),
+        casesApi.getCaseHistory(id),
+      ]);
 
-    if (caseResponse.success && caseResponse.data) {
-      setCaseData(caseResponse.data);
+      if (caseResponse.success && caseResponse.data) {
+        setCaseData(caseResponse.data);
+        // Update the store to keep it in sync
+        updateCaseById(id, caseResponse.data);
+      }
+
+      if (historyResponse.success && historyResponse.data) {
+        // Deduplicate history by ID only
+        const uniqueHistory = Array.from(
+          new Map(historyResponse.data.map(item => [item.id, item])).values()
+        );
+        // Sort by timestamp ascending (oldest first) for timeline display
+        uniqueHistory.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        setHistory(uniqueHistory);
+      }
+    } catch (error) {
+      console.error('Error fetching case details:', error);
+    } finally {
+      setIsLoading(false);
     }
+  }, [id, updateCaseById]);
 
-    if (historyResponse.success && historyResponse.data) {
-      // Deduplicate history by ID only
-      const uniqueHistory = Array.from(
-        new Map(historyResponse.data.map(item => [item.id, item])).values()
-      );
-      // Sort by timestamp ascending (oldest first) for timeline display
-      uniqueHistory.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-      setHistory(uniqueHistory);
-    }
-
-    setIsLoading(false);
-  }, [id]);
-
+  // Fetch on mount
   useEffect(() => {
     fetchCaseDetails();
   }, [fetchCaseDetails]);
+
+  // Refresh when screen comes into focus (e.g., from notification navigation)
+  useFocusEffect(
+    useCallback(() => {
+      // Only refresh if we have an ID and the component is mounted
+      if (id) {
+        fetchCaseDetails();
+      }
+    }, [id, fetchCaseDetails])
+  );
 
 
   if (isLoading) {
@@ -97,7 +116,7 @@ export default function CaseDetailsScreen() {
   return (
       <View style={styles.container}>
         {/* Modern Gradient Header */}
-        <ModernHeader
+        <ThemeAwareHeader
           variant="gradient"
         gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
           title="Case Details"

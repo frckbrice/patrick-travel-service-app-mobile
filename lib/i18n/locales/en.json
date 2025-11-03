@@ -365,6 +365,11 @@
     "chatMessages": "Chat Messages"
   },
   "email": {
+    "send": "Send",
+    "replyMessage": "Reply to this email",
+    "cannotReply": "Cannot Reply",
+    "systemNotification": "This is a system notification and cannot be replied to. Please use the dashboard to contact support.",
+    "Reply": "reply",
     "noInboxEmails": "No Inbox Emails",
     "noInboxEmailsDesc": "You don't have any received emails yet.",
     "noSentEmails": "No Sent Emails",
@@ -427,6 +432,8 @@
     "upToDate": "You are up to date"
   },
   "help": {
+    "help": "Help",
+    "contactInfo": "Contact Information",
     "faq": "FAQs",
     "searchFAQ": "Search FAQs",
     "contact": "Contact Support",

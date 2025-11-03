@@ -19,7 +19,7 @@ import { useCasesStore } from '../../stores/cases/casesStore';
 import { useCaseRequirementGuard } from '../../lib/guards/useCaseRequirementGuard';
 import { DocumentType } from '../../lib/types';
 import { Card } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { SPACING, DOCUMENT_TYPE_LABELS } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
@@ -42,7 +42,7 @@ export default function UploadDocumentScreen() {
   // Redirect to documents page if no active cases (only after cases are loaded)
   useEffect(() => {
     if (!isLoadingCases && !hasActiveCases) {
-      router.back();
+      router.replace('/(tabs)/documents');
     }
   }, [hasActiveCases, isLoadingCases, router]);
 
@@ -166,7 +166,7 @@ export default function UploadDocumentScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={t('documents.uploadDocument') || 'Upload Document'}

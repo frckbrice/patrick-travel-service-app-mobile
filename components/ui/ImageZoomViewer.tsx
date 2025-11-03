@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, StatusBar } from 'react-native';
+import { View, StyleSheet, Dimensions, Modal, TouchableOpacity, StatusBar, Text } from 'react-native';
 import { Image } from 'react-native';
 import { IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';

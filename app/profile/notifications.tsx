@@ -12,11 +12,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { notificationService } from '../../lib/services/notifications';
+import {
+  registerForPushNotifications,
+  areNotificationsEnabled,
+  requestNotificationPermissions,
+} from '../../lib/services/pushNotifications';
 import { secureStorage } from '../../lib/storage/secureStorage';
 import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { toast } from '../../lib/services/toast';
+import { useAuthStore } from '../../stores/auth/authStore';
+import { logger } from '../../lib/utils/logger';
 
 interface NotificationPreferences {
   pushEnabled: boolean;
@@ -32,6 +39,8 @@ export default function NotificationPreferencesScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const colors = useThemeColors();
+  const registerPushToken = useAuthStore((state) => state.registerPushToken);
+  const pushTokenFromStore = useAuthStore((state) => state.pushToken);
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     pushEnabled: false,
     emailEnabled: true,
@@ -41,6 +50,7 @@ export default function NotificationPreferencesScreen() {
     marketing: false,
   });
   const [pushToken, setPushToken] = useState<string | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined' | 'checking'>('checking');
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -164,18 +174,40 @@ export default function NotificationPreferencesScreen() {
 
   useEffect(() => {
     loadPreferences();
-  }, []);
+  }, [pushTokenFromStore]); // Reload when push token becomes available
 
   const loadPreferences = async () => {
+    // Check notification permissions status
+    let hasPermission = false;
+    try {
+      hasPermission = await areNotificationsEnabled();
+      setPermissionStatus(hasPermission ? 'granted' : 'denied');
+    } catch (error) {
+      logger.error('Error checking permissions', error);
+      setPermissionStatus('undetermined');
+    }
+
     const saved = await secureStorage.get<NotificationPreferences>(
       'notificationPreferences'
     );
-    if (saved) {
-      setPreferences(saved);
-    }
 
-    const token = notificationService.getExpoPushToken();
+    // Get token from auth store (this is the token registered with backend)
+    const token = pushTokenFromStore || notificationService.getExpoPushToken();
     setPushToken(token);
+
+    // Merge saved preferences with push token status
+    // If token exists and permissions granted, push is enabled
+    // If no saved preference but token exists and permissions granted, enable it
+    const finalPreferences: NotificationPreferences = {
+      pushEnabled: saved?.pushEnabled ?? (!!token && hasPermission), // Use saved preference, or enable if token exists and permission granted
+      emailEnabled: saved?.emailEnabled ?? true,
+      caseUpdates: saved?.caseUpdates ?? true,
+      documentUpdates: saved?.documentUpdates ?? true,
+      messageNotifications: saved?.messageNotifications ?? true,
+      marketing: saved?.marketing ?? false,
+    };
+
+    setPreferences(finalPreferences);
   };
 
   const savePreferences = async (newPreferences: NotificationPreferences) => {
@@ -185,22 +217,80 @@ export default function NotificationPreferencesScreen() {
 
   const handleTogglePush = async (enabled: boolean) => {
     if (enabled) {
-      const token = await notificationService.registerForPushNotifications();
-      if (token) {
-        setPushToken(token);
-        savePreferences({ ...preferences, pushEnabled: true });
-        toast.success({
-          title: t('common.success'),
-          message: 'Push notifications enabled',
-        });
-      } else {
+      try {
+        // Step 1: Check if permissions are already granted
+        const hasPermission = await areNotificationsEnabled();
+
+        if (!hasPermission) {
+          // Step 2: Request permissions
+          logger.info('Requesting notification permissions...');
+          const permissionGranted = await requestNotificationPermissions();
+
+          if (!permissionGranted) {
+            // Permission was denied - show helpful message
+            setPermissionStatus('denied');
+            toast.error({
+              title: t('common.error'),
+              message: 'Notification permissions are required. Please enable them in your device settings.',
+            });
+            setPreferences(prev => ({ ...prev, pushEnabled: false }));
+            return;
+          }
+
+          logger.info('Notification permissions granted');
+          setPermissionStatus('granted');
+        }
+
+        // Step 3: Register token with backend (this uses registerForPushNotifications internally)
+        await registerPushToken();
+
+        // Step 4: Get updated token from store after registration
+        const updatedToken = useAuthStore.getState().pushToken;
+
+        if (updatedToken) {
+          setPushToken(updatedToken);
+          savePreferences({ ...preferences, pushEnabled: true });
+
+          toast.success({
+            title: t('common.success'),
+            message: 'Push notifications enabled',
+          });
+        } else {
+          // Token might still be registering, check again
+          const tokenData = await registerForPushNotifications();
+          if (tokenData?.token) {
+            setPushToken(tokenData.token);
+            savePreferences({ ...preferences, pushEnabled: true });
+            toast.success({
+              title: t('common.success'),
+              message: 'Push notifications enabled',
+            });
+          } else {
+            throw new Error('Failed to obtain push token. Please check your device settings.');
+          }
+        }
+      } catch (error: any) {
+        logger.error('Failed to enable push notifications', error);
+
+        // Provide specific error messages
+        let errorMessage = 'Failed to enable push notifications.';
+        if (error?.message?.includes('permission') || error?.message?.includes('Permission')) {
+          errorMessage = 'Notification permissions are required. Please enable them in your device settings.';
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
         toast.error({
           title: t('common.error'),
-          message: 'Failed to enable push notifications. Please check your device settings.',
+          message: errorMessage,
         });
+        // Reset switch if failed
+        setPreferences(prev => ({ ...prev, pushEnabled: false }));
       }
     } else {
       savePreferences({ ...preferences, pushEnabled: false });
+      // Note: We don't remove the token from backend here - it will be removed on logout
+      // User can still receive notifications but preferences say they're disabled
     }
   };
 
@@ -217,7 +307,7 @@ export default function NotificationPreferencesScreen() {
 
   return (
     <View style={styles.container}>
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={t('profile.notificationPreferences')}
@@ -246,9 +336,11 @@ export default function NotificationPreferencesScreen() {
                     {t('notifications.pushNotifications')}
                   </Text>
                   <Text style={styles.listItemDescription}>
-                    {pushToken
-                      ? t('notifications.pushEnabled')
-                      : t('notifications.pushDesc')}
+                    {permissionStatus === 'denied'
+                      ? 'Notification permissions are required. Enable in device settings.'
+                      : pushToken
+                        ? t('notifications.pushEnabled')
+                        : t('notifications.pushDesc')}
                   </Text>
                 </View>
               </View>

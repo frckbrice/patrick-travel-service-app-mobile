@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   DeviceEventEmitter,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -17,16 +21,19 @@ import { useAuthStore } from '../../stores/auth/authStore';
 import { Message, MessageType } from '../../lib/types';
 import { messagesApi } from '../../lib/api/messages.api';
 import { notificationsApi } from '../../lib/api/notifications.api';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format, isToday, isYesterday } from 'date-fns';
 import { logger } from '../../lib/utils/logger';
 import { TouchDetector } from '../../components/ui/TouchDetector';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { NotFound } from '../../components/ui/NotFound';
 import { Alert } from '../../lib/utils/alert';
 import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { sendEmail, sendEmailReply } from '../../lib/api/email.api';
+import { toast } from '../../lib/services/toast';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface EmailReaderProps {
   emailId: string;
@@ -39,6 +46,7 @@ export default function EmailReaderScreen() {
   const tabBarPadding = useTabBarPadding();
   const scrollProps = useTabBarScroll();
   const themeColors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const { id: emailId } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
 
@@ -46,6 +54,9 @@ export default function EmailReaderScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMarkingAsRead, setIsMarkingAsRead] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [showReplyModal, setShowReplyModal] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
 
   // Load email message
   useEffect(() => {
@@ -209,6 +220,104 @@ export default function EmailReaderScreen() {
     }
   }, [t]);
 
+  // Handle reply to email
+  const handleReply = useCallback(() => {
+    if (!email || !user) return;
+
+    // Check if this is an inbox email (user is recipient, not sender)
+    const senderUserId = email.senderId || (email as any)?.sender?.id || (email as any)?.fromUserId || (email as any)?.from?.id;
+    if (senderUserId === user.id) {
+      Alert.alert(
+        t('email.cannotReply') || 'Cannot Reply',
+        t('email.cannotReplySent') || 'You cannot reply to your own sent emails.'
+      );
+      return;
+    }
+
+    // Backend provides threadId directly (mapped from emailThreadId)
+    const threadId = email.threadId || email.emailThreadId;
+
+    // Debug logging for troubleshooting
+    if (!threadId) {
+      logger.warn('Cannot reply - missing threadId', {
+        emailId: email.id,
+        hasThreadId: !!email.threadId,
+        hasEmailThreadId: !!email.emailThreadId,
+        subject: email.subject,
+        messageType: email.messageType,
+        senderId: email.senderId,
+        recipientId: email.recipientId,
+      });
+    }
+
+    // Thread ID is required for replying to emails
+    if (!threadId) {
+      Alert.alert(
+        t('email.cannotReply') || 'Cannot Reply',
+        t('email.systemNotification') || 'This is a system notification and cannot be replied to. Please use the dashboard to contact support.'
+      );
+      return;
+    }
+
+    // Show reply modal
+    setReplyText('');
+    setShowReplyModal(true);
+  }, [email, user, t]);
+
+  // Send reply
+  const handleSendReply = useCallback(async () => {
+    if (!email || !user || !replyText.trim()) {
+      toast.error({
+        title: t('common.error') || 'Error',
+        message: t('email.replyEmpty') || 'Reply cannot be empty',
+      });
+      return;
+    }
+
+    setIsSendingReply(true);
+    try {
+      // Backend provides threadId directly (mapped from emailThreadId)
+      const threadId = email.threadId || email.emailThreadId;
+
+      if (!threadId) {
+        throw new Error(t('email.noThreadId') || 'Cannot reply: Missing thread ID');
+      }
+
+      // Clean subject: remove [THREAD:...] prefix if present
+      const cleanSubject = email.subject?.replace(/\[THREAD:[^\]]+\]\s*/, '') || t('email.noSubject') || 'No Subject';
+
+      // Use incoming endpoint for replying to messages (requires thread ID)
+      const result = await sendEmailReply({
+        threadId,
+        senderId: user.id,
+        content: replyText.trim(),
+        subject: `Re: ${cleanSubject}`,
+      });
+
+      if (result && result.success) {
+        toast.success({
+          title: t('common.success') || 'Success',
+          message: t('email.replySent') || 'Reply sent successfully',
+        });
+        // Refresh email list
+        DeviceEventEmitter.emit('email:sent', {});
+        // Close modal
+        setShowReplyModal(false);
+        setReplyText('');
+      } else {
+        throw new Error(result?.error || t('email.replyFailed') || 'Failed to send reply');
+      }
+    } catch (error: any) {
+      logger.error('Failed to send reply', error);
+      toast.error({
+        title: t('common.error') || 'Error',
+        message: error.message || t('email.replyFailed') || 'Failed to send reply. Please try again.',
+      });
+    } finally {
+      setIsSendingReply(false);
+    }
+  }, [email, user, replyText, t]);
+
   // Auto-mark as read when email loads
   useEffect(() => {
     if (email && !email.isRead) {
@@ -218,9 +327,9 @@ export default function EmailReaderScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>
+      <View style={[styles.loadingContainer, { backgroundColor: themeColors.background }]}>
+        <ActivityIndicator size="large" color={themeColors.primary} />
+        <Text style={[styles.loadingText, { color: themeColors.textSecondary }]}>
           {t('email.loading') || 'Loading email...'}
         </Text>
       </View>
@@ -238,8 +347,9 @@ export default function EmailReaderScreen() {
   }
 
   return (
-      <View style={styles.container}>
-        <ModernHeader
+    <TouchDetector>
+      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+        <ThemeAwareHeader
           variant="gradient"
         gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
           title={t('email.reader') || 'Email'}
@@ -248,16 +358,10 @@ export default function EmailReaderScreen() {
           rightActions={
             <TouchableOpacity
               style={styles.headerAction}
-              onPress={() => {
-                // Future: Add more actions like reply, forward, etc.
-                Alert.alert(
-                  t('email.actions') || 'Email Actions',
-                  t('email.actionsDesc') || 'Reply, forward, and other actions will be available soon.'
-                );
-              }}
+              onPress={handleReply}
             >
               <MaterialCommunityIcons
-                name="dots-vertical"
+                name="reply"
                 size={24}
                 color="#FFF"
               />
@@ -273,27 +377,27 @@ export default function EmailReaderScreen() {
         scrollEventThrottle={scrollProps.scrollEventThrottle}
       >
           {/* Email Header */}
-          <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.emailHeader}>
+          <Animated.View entering={FadeInDown.delay(100).springify()} style={[styles.emailHeader, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
             <View style={styles.senderInfo}>
-              <View style={styles.senderAvatar}>
+              <View style={[styles.senderAvatar, { backgroundColor: themeColors.primary }]}>
                 <Text style={styles.senderInitials}>
                   {senderName.split(' ').map(n => n[0]).join('').toUpperCase()}
                 </Text>
               </View>
               <View style={styles.senderDetails}>
-                <Text style={styles.senderName}>{senderName}</Text>
-                <Text style={styles.senderEmail}>
+                <Text style={[styles.senderName, { color: themeColors.text }]}>{senderName}</Text>
+                <Text style={[styles.senderEmail, { color: themeColors.textSecondary }]}>
                   {senderEmail}
                 </Text>
               </View>
             </View>
             
             <View style={styles.emailMeta}>
-              <Text style={styles.emailDate}>
+              <Text style={[styles.emailDate, { color: themeColors.textSecondary }]}>
                 {formatEmailDate(email.sentAt)}
               </Text>
               {!email.isRead && (
-                <View style={styles.unreadBadge}>
+                <View style={[styles.unreadBadge, { backgroundColor: themeColors.primary }]}>
                   <Text style={styles.unreadText}>
                     {t('email.unread') || 'Unread'}
                   </Text>
@@ -304,26 +408,26 @@ export default function EmailReaderScreen() {
 
           {/* Email Subject */}
           {email.subject && (
-            <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.subjectContainer}>
-              <Text style={styles.subjectText}>{email.subject}</Text>
+            <Animated.View entering={FadeInDown.delay(200).springify()} style={[styles.subjectContainer, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
+              <Text style={[styles.subjectText, { color: themeColors.text }]}>{email.subject}</Text>
             </Animated.View>
           )}
 
           {/* Email Content */}
-          <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.contentContainer}>
-            <Text style={styles.contentText}>{email.content}</Text>
+          <Animated.View entering={FadeInDown.delay(300).springify()} style={[styles.contentContainer, { backgroundColor: themeColors.surface }]}>
+            <Text style={[styles.contentText, { color: themeColors.text }]}>{email.content}</Text>
           </Animated.View>
 
           {/* Attachments */}
           {email.attachments && email.attachments.length > 0 ? (
-            <Animated.View entering={FadeInUp.delay(400).springify()} style={styles.attachmentsContainer}>
-              <Text style={styles.attachmentsTitle}>
+            <Animated.View entering={FadeInUp.delay(400).springify()} style={[styles.attachmentsContainer, { backgroundColor: themeColors.surface, borderTopColor: themeColors.border }]}>
+              <Text style={[styles.attachmentsTitle, { color: themeColors.text }]}>
                 {t('email.attachments') || 'Attachments'} ({email.attachments.length})
               </Text>
               {email.attachments.map((attachment, index) => (
                 <TouchableOpacity
                   key={(attachment.id as string) || `${attachment.name || 'attachment'}-${index}`}
-                  style={styles.attachmentItem}
+                  style={[styles.attachmentItem, { borderBottomColor: themeColors.border }]}
                   onPress={() => handleAttachmentDownload(attachment)}
                   activeOpacity={0.7}
                 >
@@ -331,30 +435,30 @@ export default function EmailReaderScreen() {
                     <MaterialCommunityIcons
                       name="file-pdf-box"
                       size={24}
-                      color="#DC2626"
+                      color={themeColors.error}
                     />
                   </View>
                   <View style={styles.attachmentInfo}>
-                    <Text style={styles.attachmentName} numberOfLines={1}>
+                    <Text style={[styles.attachmentName, { color: themeColors.text }]} numberOfLines={1}>
                       {attachment.name}
                     </Text>
-                    <Text style={styles.attachmentSize}>
+                    <Text style={[styles.attachmentSize, { color: themeColors.textSecondary }]}>
                       {(attachment.size / 1024).toFixed(1)} KB
                     </Text>
                   </View>
                   <MaterialCommunityIcons
                     name="download"
                     size={20}
-                    color={COLORS.textSecondary}
+                    color={themeColors.textSecondary}
                   />
                 </TouchableOpacity>
               ))}
             </Animated.View>
           ) : (
-            <Animated.View entering={FadeInUp.delay(400).springify()} style={styles.attachmentsContainer}>
+              <Animated.View entering={FadeInUp.delay(400).springify()} style={[styles.attachmentsContainer, { backgroundColor: themeColors.surface, borderTopColor: themeColors.border }]}>
               <View style={{ alignItems: 'center', paddingVertical: SPACING.md }}>
-                <MaterialCommunityIcons name="attachment" size={32} color={COLORS.textSecondary} />
-                <Text style={{ marginTop: 8, color: COLORS.textSecondary }}>
+                  <MaterialCommunityIcons name="attachment" size={32} color={themeColors.textSecondary} />
+                  <Text style={{ marginTop: 8, color: themeColors.textSecondary }}>
                   {t('email.noAttachments') || 'No attachments for this email'}
                 </Text>
               </View>
@@ -363,23 +467,23 @@ export default function EmailReaderScreen() {
 
           {/* Case Reference */}
           {email.caseId && (
-            <Animated.View entering={FadeInUp.delay(500).springify()} style={styles.caseReferenceContainer}>
+            <Animated.View entering={FadeInUp.delay(500).springify()} style={[styles.caseReferenceContainer, { backgroundColor: themeColors.surface, borderTopColor: themeColors.border }]}>
               <View style={styles.caseReferenceHeader}>
                 <MaterialCommunityIcons
                   name="file-document-outline"
                   size={20}
-                  color={COLORS.primary}
+                  color={themeColors.primary}
                 />
-                <Text style={styles.caseReferenceTitle}>
+                <Text style={[styles.caseReferenceTitle, { color: themeColors.text }]}>
                   {t('email.relatedCase') || 'Related Case'}
                 </Text>
               </View>
               <TouchableOpacity
-                style={styles.caseReferenceButton}
+                style={[styles.caseReferenceButton, { backgroundColor: themeColors.primary + '10' }]}
                 onPress={() => router.push(`/case/${email.caseId}`)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.caseReferenceText}>
+                <Text style={[styles.caseReferenceText, { color: themeColors.primary }]}>
                   {(() => {
                     type EmailWithCase = Message & { case?: { referenceNumber?: string } };
                     const e = email as EmailWithCase;
@@ -390,7 +494,7 @@ export default function EmailReaderScreen() {
                 <MaterialCommunityIcons
                   name="chevron-right"
                   size={20}
-                  color={COLORS.primary}
+                  color={themeColors.primary}
                 />
               </TouchableOpacity>
             </Animated.View>
@@ -399,25 +503,109 @@ export default function EmailReaderScreen() {
           {/* Bottom spacing */}
           <View style={styles.bottomSpacing} />
         </ScrollView>
-    </View>
+
+        {/* Reply Modal */}
+        <Modal
+          visible={showReplyModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowReplyModal(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContainer}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <View style={[
+              styles.modalContent,
+              {
+                backgroundColor: themeColors.surface,
+                paddingBottom: Math.max(insets.bottom + SPACING.lg, Platform.OS === 'ios' ? insets.bottom + SPACING.xl + 10 : SPACING.xl)
+              }
+            ]}>
+              <View style={[styles.modalHeader, { borderBottomColor: themeColors.border }]}>
+                <Text style={[styles.modalTitle, { color: themeColors.text }]}>
+                  {t('email.reply') || 'Reply'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setShowReplyModal(false)}
+                  disabled={isSendingReply}
+                >
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={24}
+                    color={themeColors.text}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalBody}>
+                <Text style={[styles.modalSubject, { color: themeColors.text, backgroundColor: themeColors.background }]}>
+                  {`Re: ${email?.subject || t('email.noSubject') || 'No Subject'}`}
+                </Text>
+
+                <TextInput
+                  style={[styles.modalInput, { color: themeColors.text, backgroundColor: themeColors.background, borderColor: themeColors.border }]}
+                  placeholder={t('email.replyMessage') || 'Enter your reply...'}
+                  placeholderTextColor={themeColors.textSecondary}
+                  value={replyText}
+                  onChangeText={setReplyText}
+                  multiline
+                  numberOfLines={6}
+                  maxLength={1000}
+                  editable={!isSendingReply}
+                />
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: themeColors.background, borderColor: themeColors.border }, isSendingReply && styles.modalButtonDisabled]}
+                    onPress={() => setShowReplyModal(false)}
+                    disabled={isSendingReply}
+                  >
+                    <Text style={[styles.modalButtonTextCancel, { color: themeColors.text }]}>
+                      {t('common.cancel') || 'Cancel'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.modalButton,
+                      { backgroundColor: themeColors.primary },
+                      (!replyText.trim() || isSendingReply) && styles.modalButtonDisabled,
+                    ]}
+                    onPress={handleSendReply}
+                    disabled={!replyText.trim() || isSendingReply}
+                  >
+                    {isSendingReply ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Text style={styles.modalButtonTextSend}>
+                        {t('email.send') || 'Send'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </View>
+    </TouchDetector>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
   },
   loadingText: {
     marginTop: SPACING.md,
     fontSize: 16,
-    color: COLORS.textSecondary,
   },
   headerAction: {
     width: 40,
@@ -431,11 +619,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   emailHeader: {
-    backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   senderInfo: {
     flexDirection: 'row',
@@ -446,7 +632,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
@@ -462,12 +647,10 @@ const styles = StyleSheet.create({
   senderName: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.text,
     marginBottom: 2,
   },
   senderEmail: {
     fontSize: 14,
-    color: COLORS.textSecondary,
   },
   emailMeta: {
     flexDirection: 'row',
@@ -476,10 +659,8 @@ const styles = StyleSheet.create({
   },
   emailDate: {
     fontSize: 14,
-    color: COLORS.textSecondary,
   },
   unreadBadge: {
-    backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: 12,
@@ -490,39 +671,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   subjectContainer: {
-    backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   subjectText: {
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.text,
     lineHeight: 24,
   },
   contentContainer: {
-    backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.lg,
   },
   contentText: {
     fontSize: 16,
-    color: COLORS.text,
     lineHeight: 24,
   },
   attachmentsContainer: {
-    backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
   },
   attachmentsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.text,
     marginBottom: SPACING.md,
   },
   attachmentItem: {
@@ -530,7 +703,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   attachmentIcon: {
     marginRight: SPACING.md,
@@ -541,19 +713,15 @@ const styles = StyleSheet.create({
   attachmentName: {
     fontSize: 16,
     fontWeight: '500',
-    color: COLORS.text,
     marginBottom: 2,
   },
   attachmentSize: {
     fontSize: 14,
-    color: COLORS.textSecondary,
   },
   caseReferenceContainer: {
-    backgroundColor: COLORS.surface,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
   },
   caseReferenceHeader: {
     flexDirection: 'row',
@@ -563,14 +731,12 @@ const styles = StyleSheet.create({
   caseReferenceTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.text,
     marginLeft: SPACING.sm,
   },
   caseReferenceButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.primary + '10',
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 8,
@@ -578,9 +744,77 @@ const styles = StyleSheet.create({
   caseReferenceText: {
     fontSize: 14,
     fontWeight: '500',
-    color: COLORS.primary,
   },
   bottomSpacing: {
     height: SPACING.xl,
+  },
+  // Reply Modal Styles
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  modalBody: {
+    paddingTop: SPACING.sm,
+  },
+  modalSubject: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: SPACING.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 8,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: SPACING.md,
+    fontSize: 16,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    marginBottom: SPACING.lg,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  modalButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonTextSend: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

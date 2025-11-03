@@ -42,7 +42,14 @@ export const messagesApi = {
       }
       const response = await apiClient.get<ApiResponse<{ email: Message }>>(`/emails/${id}`);
       if (response.data.success && response.data.data?.email) {
-        this._setCachedEmail(id, response.data.data.email);
+        // Backend already maps emailThreadId to threadId (see /api/emails/[id]/route.ts)
+        const email = response.data.data.email;
+        this._setCachedEmail(id, email);
+        return {
+          success: response.data.success,
+          data: email,
+          error: response.data.error,
+        };
       }
       return {
         success: response.data.success,
@@ -71,9 +78,10 @@ export const messagesApi = {
   async markEmailAsRead(id: string): Promise<ApiResponse<void>> {
     try {
       const safeId = encodeURIComponent(id);
-      // Spec: Single Email — PUT /api/emails/{emailId}
+      // Correct endpoint: PUT /api/emails/{emailId}
+      // The route.ts file handles both GET and PUT at /api/emails/[id]
       const response = await apiClient.put<ApiResponse<void>>(`/emails/${safeId}`);
-      console.log("\n\n the mark email as read info: ", { response });
+      // console.log("\n\n the mark email as read info: ", { response });
       return response.data;
     } catch (error: any) {
       logger.error('Failed to mark email as read', error);
@@ -102,11 +110,24 @@ export const messagesApi = {
       if (filters?.caseId) params.append('caseId', filters.caseId);
       if (filters?.isRead !== undefined) params.append('isRead', filters.isRead.toString());
 
-      const response = await apiClient.get<ApiResponse<{ emails: Message[] }>>(`/emails?${params}`);
+      const url = `/emails?${params}`;
+      logger.info(`📧 Fetching emails with filters:`, {
+        isRead: filters?.isRead,
+        caseId: filters?.caseId,
+        url
+      });
+
+      const response = await apiClient.get<ApiResponse<{ emails: Message[] }>>(url);
+
+      const emails = response.data.data?.emails || [];
+      logger.info(`📧 Received ${emails.length} emails from API`);
+      if (emails.length > 0) {
+        logger.info(`📧 Email read statuses:`, emails.map((e: any) => ({ id: e.id, isRead: e.isRead })));
+      }
 
       return {
         success: response.data.success,
-        data: response.data.data?.emails || [],
+        data: emails,
         error: response.data.error,
       };
     } catch (error: any) {
@@ -196,6 +217,7 @@ export const messagesApi = {
       // Get unread emails with a minimal page size just to get the count
       const response = await this.getEmails(1, 1, { isRead: false });
       if (!response.success || !response.data) {
+        logger.info('📧 Unread emails count: 0 (no data)');
         return 0;
       }
       
@@ -203,7 +225,9 @@ export const messagesApi = {
       // Otherwise, fetch a larger batch to count
       const fullResponse = await this.getEmails(1, 100, { isRead: false });
       if (fullResponse.success && fullResponse.data) {
-        return fullResponse.data.length;
+        const count = fullResponse.data.length;
+        logger.info(`📧 Unread emails count: ${count}`);
+        return count;
       }
       
       return 0;

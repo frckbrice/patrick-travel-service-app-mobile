@@ -518,11 +518,12 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { ModernHeader } from '../../components/ui/ModernHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { userApi } from '../../lib/api/user.api';
 import { messagesApi } from '../../lib/api/messages.api';
 import { casesApi } from '../../lib/api/cases.api';
+import { notificationsApi } from '../../lib/api/notifications.api';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { DashboardStats } from '../../lib/types';
 import { SPACING, COLORS as STATIC_COLORS } from '../../lib/constants';
@@ -581,17 +582,23 @@ export default function HomeScreen() {
   }, []);
 
   const fetchAllUnreadCounts = useCallback(async () => {
-    if (!user?.id || isFetchingUnreadCountsRef.current) return; // Prevent concurrent calls
+    if (!user?.id || isFetchingUnreadCountsRef.current) {
+      console.log('⏸️ Skipping fetchAllUnreadCounts: no user or already fetching');
+      return; // Prevent concurrent calls
+    }
 
     isFetchingUnreadCountsRef.current = true;
+    console.log('🔄 Fetching all unread counts...');
     try {
-      // Fetch only unread emails and chat messages (exclude system notifications)
+      // Fetch unread counts for emails, chat messages, AND backend notifications
       // Reduced limit from 100 to 50 to prevent rate limiting
-      const [emailsCount, casesResponse] = await Promise.all([
+      const [emailsCount, casesResponse, backendNotificationsCount] = await Promise.all([
         // Unread emails count
         messagesApi.getUnreadEmailsCount(),
         // Get user's cases to check chat messages - reduced limit to prevent rate limiting
         casesApi.getCases(undefined, 1, 50),
+        // Unread backend notifications count
+        notificationsApi.getUnreadCount(),
       ]);
 
       // Get case IDs for chat message counting
@@ -604,8 +611,15 @@ export default function HomeScreen() {
         ? await chatService.getTotalUnreadCount(user.id, caseIds)
         : 0;
 
-      // Only count unread emails + unread chat messages (exclude system notifications)
-      const total = emailsCount + chatMessagesCount;
+      // Count unread emails + unread chat messages + backend notifications
+      const total = emailsCount + chatMessagesCount + backendNotificationsCount;
+
+      console.log('📊 Unread counts:', {
+        emails: emailsCount,
+        chat: chatMessagesCount,
+        backendNotifications: backendNotificationsCount,
+        total
+      });
       
       setTotalUnreadCount(total);
     } catch (error) {
@@ -647,9 +661,11 @@ export default function HomeScreen() {
   // Subscribe to notification/email read events to update counts instantly
   useEffect(() => {
     const scheduleRefresh = () => {
+      console.log('📬 Event received: Schedule refresh for unread counts');
       if (refreshTimerRef.current) return; // debounce bursts
       refreshTimerRef.current = setTimeout(() => {
         refreshTimerRef.current = null;
+        console.log('📬 Executing scheduled refresh for unread counts');
         fetchAllUnreadCounts();
       }, 250);
     };
@@ -725,7 +741,7 @@ export default function HomeScreen() {
     <TouchDetector>
       <View style={[dynamicStyles.container, { backgroundColor: COLORS.background, paddingBottom: SPACING.lg }]}>
         {/* Gradient Header like Profile Page */}
-        <ModernHeader
+        <ThemeAwareHeader
           variant="gradient"
           gradientColors={[COLORS.primary, COLORS.secondary, COLORS.accent]}
           title={getGreeting()}

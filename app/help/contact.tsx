@@ -17,7 +17,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useRequireAuth, useAuth } from '../../features/auth/hooks/useAuth';
 import { emailService, ContactFormData } from '../../lib/services/email';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { SPACING, BUSINESS_INFO, formatFullContact } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { toast } from '../../lib/services/toast';
@@ -142,7 +142,7 @@ export default function ContactSupportScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Modern Gradient Header */}
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
               gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title="Contact Support"

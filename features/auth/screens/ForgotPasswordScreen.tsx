@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { TextInput, Text, ActivityIndicator } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -59,6 +59,14 @@ export default function ForgotPasswordScreen() {
   if (success) {
     return (
       <View style={styles.container}>
+        {/* Company Logo */}
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
         <View style={styles.successContainer}>
           <Text variant="headlineMedium" style={styles.successTitle}>
             {t('auth.checkEmail') || 'Check Your Email'}
@@ -81,6 +89,15 @@ export default function ForgotPasswordScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* Company Logo */}
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('../../../assets/icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </View>
+
       <View style={styles.header}>
         <Text variant="headlineLarge" style={styles.title}>
           {t('auth.forgotPassword')}
@@ -163,6 +180,15 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     justifyContent: 'center',
     backgroundColor: COLORS.background,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+    marginTop: SPACING.md,
+  },
+  logo: {
+    width: 120,
+    height: 120,
   },
   header: {
     marginBottom: SPACING.xl,

@@ -13,7 +13,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   splash: {
     image: './assets/splash-icon.png',
     resizeMode: 'contain',
-    backgroundColor: '#0066CC',
+    backgroundColor: '#FFFFFF', // Modern clean white background for maximum logo visibility
   },
   assetBundlePatterns: ['**/*'],
   ios: {
@@ -27,7 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#0066CC',
+      backgroundColor: '#FFFFFF', // Match splash screen for consistency
     },
     googleServicesFile: './google-services.json',
     package: 'com.unidov.patricktravel',
@@ -57,6 +57,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         icon: './assets/icon.png',
         color: '#0066CC',
+        sound: true,
+        defaultChannel: 'default',
       },
     ],
   ],

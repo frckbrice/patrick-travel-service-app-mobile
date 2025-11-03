@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Button, ModernHeader } from '../../components/ui';
+import { Button, ThemeAwareHeader } from '../../components/ui';
 import { SPACING, FONT_SIZES } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 
@@ -17,7 +17,7 @@ export default function TermsAndConditionsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: insets.bottom }]}>
-      <ModernHeader
+      <ThemeAwareHeader
         title={t('legal.terms.title')}
         showBackButton
         variant="default"

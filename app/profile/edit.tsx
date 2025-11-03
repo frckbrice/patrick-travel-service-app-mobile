@@ -14,7 +14,7 @@ import { useRequireAuth, useAuth } from '../../features/auth/hooks/useAuth';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { userApi, UpdateProfileRequest } from '../../lib/api/user.api';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
@@ -86,7 +86,7 @@ export default function EditProfileScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Modern Gradient Header */}
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={t('profile.editProfile')}

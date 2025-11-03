@@ -23,7 +23,7 @@ import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { useCasesStore } from '../../stores/cases/casesStore';
 import { useCaseRequirementGuard } from '../../lib/guards/useCaseRequirementGuard';
 import { DocumentTemplate } from '../../lib/types';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { DocumentFiller } from '../../components/ui/DocumentFiller';
 import {
@@ -415,7 +415,7 @@ export default function TemplateDownloadUploadScreen() {
   return (
     // <TouchDetector>
       <View style={styles.container}>
-        <ModernHeader
+        <ThemeAwareHeader
         variant="gradient"
         gradientColors={[themeColors.primary, themeColors.secondary, themeColors.accent]}
           title={template.name}

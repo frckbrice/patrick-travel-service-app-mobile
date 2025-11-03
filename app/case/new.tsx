@@ -18,7 +18,7 @@ import { casesApi } from '../../lib/api/cases.api';
 import { destinationsApi, Destination } from '../../lib/api/destinations.api';
 import { ServiceType, CaseStatus, Priority } from '../../lib/types';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { CalendarDatePicker } from '../../components/ui/CalendarDatePicker';
 import { SPACING, SERVICE_TYPE_LABELS, COLORS } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
@@ -257,7 +257,7 @@ export default function NewCaseScreen() {
 
   return (
         <>
-        <ModernHeader
+        <ThemeAwareHeader
           variant="gradient"
               gradientColors={[colors.primary, colors.secondary, colors.accent]}
           title={t('dashboard.submitNewCase')}

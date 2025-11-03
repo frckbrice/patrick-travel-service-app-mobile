@@ -964,7 +964,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { Card, Button } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
 import { TouchDetector } from '../../components/ui/TouchDetector';
 import { SPACING } from '../../lib/constants';
 import { toast } from '../../lib/services/toast';

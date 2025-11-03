@@ -26,7 +26,7 @@ export async function sendEmail(input: SendEmailInput): Promise<EmailResponse | 
       hasAttachments: !!input.attachments?.length,
     });
 
-    const response = await apiClient.post<EmailResponse>('/api/emails/send', {
+    const response = await apiClient.post<EmailResponse>('/emails/send', {
       caseId: input.caseId,
       subject: input.subject,
       content: input.content,
@@ -96,6 +96,80 @@ export async function sendContactForm(data: {
       response: error.response?.data,
     });
     return false;
+  }
+}
+
+
+
+/**
+ * Send message reply to agent/admin via the incoming messages endpoint
+ * This is used when a client replies to a message sent by an agent/admin through the app
+ * 
+ * Endpoint: POST /api/emails/incoming
+ * 
+ * @param input - Message reply input with threadId, senderId, content, and optional subject
+ * @returns Response with success status and messageId
+ */
+export interface EmailReplyInput {
+  threadId: string;
+  senderId: string;
+  content: string;
+  subject?: string;
+}
+
+export interface EmailReplyResponse {
+  success: boolean;
+  processed: boolean;
+  messageId?: string;
+  threadId?: string;
+  error?: string;
+}
+
+export async function sendEmailReply(input: EmailReplyInput): Promise<EmailReplyResponse> {
+  try {
+    logger.info('Sending email reply via incoming endpoint', {
+      threadId: input.threadId,
+      senderId: input.senderId,
+      hasSubject: !!input.subject,
+    });
+
+    const response = await apiClient.post<EmailReplyResponse>('/emails/incoming', {
+      threadId: input.threadId,
+      senderId: input.senderId,
+      content: input.content.trim(),
+      ...(input.subject && { subject: input.subject }),
+    });
+
+    if (response.data.success) {
+      logger.info('Email reply sent successfully', {
+        messageId: response.data.messageId,
+        threadId: response.data.threadId,
+      });
+    }
+
+    return response.data;
+  } catch (error: any) {
+    logger.error('Failed to send email reply', {
+      error: error.message,
+      status: error.response?.status,
+      response: error.response?.data,
+    });
+
+    // Handle specific error cases
+    if (error.response?.status === 400) {
+      const errorMessage = error.response.data?.error || 'Invalid request';
+      throw new Error(errorMessage);
+    } else if (error.response?.status === 401) {
+      throw new Error('Unauthorized - please login again');
+    } else if (error.response?.status === 403) {
+      throw new Error('You can only reply to emails sent to you');
+    } else if (error.response?.status === 404) {
+      throw new Error('Message thread not found');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error - email service is temporarily unavailable');
+    }
+
+    throw new Error(error.response?.data?.error || 'Failed to send email reply');
   }
 }
 

@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { userApi, ChangePasswordRequest } from '../../lib/api/user.api';
 import { KeyboardAvoidingScrollView } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { toast } from '../../lib/services/toast';
@@ -168,7 +168,7 @@ export default function ChangePasswordScreen() {
 
   return (
     <View style={styles.container}>
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title={t('profile.changePassword')}

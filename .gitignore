@@ -100,3 +100,5 @@ expo-env.d.ts
 *.apk
 
 https://expo.dev/accounts/ubuntu-dev-group/projects/patrick-travel-services/builds/9e888c06-500e-40ab-971c-5199774b891a
+
+scripts/

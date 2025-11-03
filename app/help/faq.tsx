@@ -16,7 +16,7 @@ import { faqApi } from '../../lib/api/faq.api';
 import { FAQ } from '../../lib/types';
 import { useDebounce } from '../../lib/hooks';
 import { EmptyState, Card } from '../../components/ui';
-import { ModernHeader } from '../../components/ui/ModernHeader';
+import { ThemeAwareHeader } from '../../components/ui/ThemeAwareHeader';
 import { SPACING } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { useTabBarPadding } from '../../lib/hooks/useTabBarPadding';
@@ -115,7 +115,7 @@ export default function FAQScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Modern Gradient Header */}
-      <ModernHeader
+      <ThemeAwareHeader
         variant="gradient"
         gradientColors={[colors.primary, colors.secondary, colors.accent]}
         title="FAQ"
