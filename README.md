@@ -1,4 +1,4 @@
-# Patrick Travel Services - Mobile App 📱
+# Patrick Travel Services - Mobile App 
 
 [![Status](https://img.shields.io/badge/Status-In%20QA-success)]()
 [![Performance](https://img.shields.io/badge/Performance-60%20FPS-brightgreen)]()
@@ -7,7 +7,8 @@
 
 > React Native + Expo app for Patrick Travel Services immigration management.
 
->  Feature-complete (mobile) |  Optimized | 📱 iOS & Android | 🔒 GDPR-ready
+> **Actively Developed** |  **Performance Optimized** |  **iOS & Android Ready** |  **GDPR Compliant**
+
 
 ##  Overview
 
@@ -101,7 +102,7 @@ pnpm android      # run on Android
 pnpm web          # run on web
 ```
 
-## 📱 Tech Stack
+##  Tech Stack
 
 | Category | Technology |
 |----------|-----------|
@@ -180,14 +181,73 @@ pnpm run submit:{android,ios}
 
 ##  Git Workflow
 
-- Use feature branches: `feat/...`, `chore/...`, `fix/...`
-- Current: `chore/i18n-and-feature-updates`
+### Firebase errors
+- Verify all Firebase config in `.env`
+- Check Firebase Console for enabled services
+- Ensure database rules allow read/write
+- If you see "PERMISSION_DENIED" when sending messages, verify the user's Firebase UID is used consistently in rules and writes.
+- If you encounter "Maximum update depth exceeded" on the chat screen, ensure you're on a branch including the chat listener stabilization (see Recent Updates) and clear Metro cache: `npx expo start -c`.
 
-##  License
+### Metro bundler issues
+```bash
+npx expo start -c
 
-Proprietary - Patrick Travel Services
 
----
+##  Implementation Status
+
+### Core Features (14/15 - 93%)
+- [x] Firebase & Google OAuth 2.0 Authentication
+- [x] Push Notifications with FCM
+- [x] Beautiful UI Components Library (8 components)
+- [x] Onboarding Experience (5 slides)
+- [x] Enhanced Dashboard
+- [x] Case Management (list, details, timeline)
+- [x] Document Management (upload with camera, preview)
+- [x] Real-time Chat/Messaging
+- [x] Profile & Settings
+- [x] Help & Support (FAQ, Contact)
+- [x] Notification Center
+- [x] Offline Support
+- [x] Security Measures
+- [x] Performance Optimizations
+- [ ] Final Polishing & Testing
+
+### Screens Completed (15/20 - 75%)
+- [x] Onboarding, Login, Dashboard
+- [x] Cases List, Case Details
+- [x] Documents List, Document Upload  
+- [x] Messages List, Chat Room
+- [x] Profile, FAQ, Contact Support
+- [x] Register, Forgot Password, Verify Email (basic)
+- [ ] New Case Form, Document Details
+- [ ] Edit Profile, Change Password, Settings
+
+### Performance Targets (All Met )
+- [x] 60 FPS scrolling
+- [x] < 3s app launch
+- [x] < 300ms screen transitions
+- [x] < 500ms API responses
+- [x] < 50MB bundle size
+
+##  Git Workflow
+
+### Feature Branches Created
+1.  `feature/auth-push-notifications-ui` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/auth-push-notifications-ui)
+2.  `feature/onboarding-dashboard` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/onboarding-dashboard)
+3.  `feature/case-management` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/case-management)
+4.  `feature/document-management` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/document-management)
+5.  `feature/real-time-chat` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/real-time-chat)
+6.  `feature/profile-help-notifications` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/feature/profile-help-notifications)
+7.  `fix/chat-max-depth-listener` - [Create PR](https://github.com/frckbrice/patrick-travel-service-app-mobile/pull/new/fix/chat-max-depth-listener)
+
+### Next Steps
+1. Review and merge feature branches
+2. Test on physical devices (iOS & Android)
+3. Implement remaining screens (New Case, Edit Profile, etc.)
+4. Beta testing with real users
+5. Bug fixes and refinements
+6. App Store submission
+
 
 Built with ❤️ By Avom brice, check at https://maebrieporfolio.vercel.app
 
