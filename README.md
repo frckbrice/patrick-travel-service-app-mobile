@@ -1,4 +1,4 @@
-# Patrick Travel Services - Mobile App 
+# immigration Travel Services platform- Mobile App 
 
 [![Status](https://img.shields.io/badge/Status-In%20QA-success)]()
 [![Performance](https://img.shields.io/badge/Performance-60%20FPS-brightgreen)]()
