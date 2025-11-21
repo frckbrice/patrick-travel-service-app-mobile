@@ -482,7 +482,8 @@
     "title": "Votre voyage commence ici",
     "description": "Découvrez des services d'immigration et juridiques sans faille avec notre plateforme complète. Connectez-vous avec des conseillers experts, suivez vos dossiers et gérez tous vos documents en un seul endroit.",
     "button": "Commencer",
-    "signIn": "Vous avez déjà un compte ? Se connecter"
+    "alreadyHaveAccount": "Vous avez déjà un compte ? ",
+    "signIn": "Se connecter"
   },
   "onboarding": {
     "skip": "Passer",
@@ -721,5 +722,6 @@
       },
       "disclaimer": "En utilisant Patrick Travel Services, vous reconnaissez avoir lu, compris et accepté d'être lié par ces Conditions Générales et notre Politique de Confidentialité."
     }
+  }
   }
 }

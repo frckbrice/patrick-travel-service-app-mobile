@@ -485,7 +485,8 @@
     "title": "Your Journey Starts Here",
     "description": "Experience seamless immigration and legal services with our comprehensive platform. Connect with expert advisors, track your cases, and manage all your documents in one place.",
     "button": "Get Started",
-    "signIn": "Already have an account? Sign In"
+    "alreadyHaveAccount": "Already have an account? ",
+    "signIn": "Sign In"
   },
   "onboarding": {
     "skip": "Skip",

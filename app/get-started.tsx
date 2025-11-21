@@ -96,7 +96,10 @@ export default function GetStartedScreen() {
                             activeOpacity={0.8}
                         >
                             <LinearGradient
-                                colors={[colors.primary, colors.secondary]}
+                                colors={[
+                                    colors.primary + 'E6', // 90% opacity (hex alpha)
+                                    colors.secondary + 'E6' // 90% opacity (hex alpha)
+                                ]}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={styles.buttonGradient}
@@ -113,16 +116,20 @@ export default function GetStartedScreen() {
                             </LinearGradient>
                         </TouchableOpacity>
 
-                        {/* Sign In Button */}
-                        <TouchableOpacity
-                            style={styles.signInButton}
-                            onPress={handleSignIn}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={styles.signInText}>
-                                {t('getStarted.signIn') || 'Already have an account? Sign In'}
+                        {/* Sign In Link */}
+                        <View style={styles.signInContainer}>
+                            <Text style={styles.signInPrefix}>
+                                {t('getStarted.alreadyHaveAccount') || 'Already have an account? '}
                             </Text>
-                        </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handleSignIn}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={[styles.signInLink, { color: colors.primary }]}>
+                                    {t('getStarted.signIn') || 'Sign In'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </ImageBackground>
@@ -200,7 +207,7 @@ const styles = StyleSheet.create({
         maxWidth: SCREEN_WIDTH * 0.9,
     },
     getStartedButton: {
-        borderRadius: 16,
+        borderRadius: 12,
         overflow: 'hidden',
         marginBottom: SPACING.md,
         width: '100%',
@@ -208,11 +215,11 @@ const styles = StyleSheet.create({
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 8,
+            height: 4,
         },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-        elevation: 12,
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
     },
     buttonGradient: {
         flexDirection: 'row',
@@ -226,26 +233,34 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#FFFFFF',
         marginRight: SPACING.sm,
-        letterSpacing: 0.8,
+        letterSpacing: 0.5,
         textAlign: 'center',
     },
     buttonIcon: {
         marginLeft: 4,
     },
-    signInButton: {
+    signInContainer: {
+        flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         paddingVertical: SPACING.md,
-        marginTop: SPACING.xs,
+        marginTop: SPACING.sm,
     },
-    signInText: {
+    signInPrefix: {
         fontSize: FONT_SIZES.md,
-        color: '#FFFFFF',
         fontWeight: '500',
-        opacity: 0.95,
+        color: '#FFFFFF',
         textAlign: 'center',
+        letterSpacing: 0.2,
         textShadowColor: 'rgba(0, 0, 0, 0.4)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 3,
-        letterSpacing: 0.3,
+    },
+    signInLink: {
+        fontSize: FONT_SIZES.md,
+        fontWeight: '600',
+        textAlign: 'center',
+        letterSpacing: 0.2,
+        textDecorationLine: 'underline',
     },
 });
