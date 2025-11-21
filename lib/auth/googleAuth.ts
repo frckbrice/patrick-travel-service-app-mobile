@@ -5,6 +5,7 @@
 
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { logger } from '../utils/logger';
@@ -43,30 +44,79 @@ const getGoogleAuthConfig = (): GoogleAuthConfig => {
 
 /**
  * Get client ID based on platform
+ * CRITICAL: On mobile (iOS/Android), we MUST use platform-specific client IDs
+ * Web client IDs cannot be used with custom redirect schemes on mobile
  */
 const getClientId = (): string => {
   const config = getGoogleAuthConfig();
 
   switch (Platform.OS) {
     case 'ios':
+      if (!config.iosClientId) {
+        logger.error('iOS client ID is missing - Google OAuth will fail');
+        throw new Error('iOS Google OAuth client ID is not configured');
+      }
       return config.iosClientId;
     case 'android':
+      if (!config.androidClientId) {
+        logger.error('Android client ID is missing - Google OAuth will fail');
+        throw new Error('Android Google OAuth client ID is not configured');
+      }
       return config.androidClientId;
     default:
+      // Web platform - use web client ID
       return config.webClientId;
   }
 };
 
 /**
  * Initialize Google Auth using Expo AuthSession
+ * CRITICAL: On mobile, we must use platform-specific client IDs (iOS/Android)
+ * Web client IDs cannot be used with custom redirect schemes (patrick-travel://)
+ * 
+ * According to Expo docs: https://docs.expo.dev/guides/authentication/
+ * For development builds with custom schemes, use makeRedirectUri() to generate the correct URI
  */
 export const useGoogleAuth = () => {
+  const config = getGoogleAuthConfig();
+
+  // Validate configuration before initializing
+  if (Platform.OS === 'ios' && !config.iosClientId) {
+    logger.error('iOS Google OAuth client ID is missing');
+  }
+  if (Platform.OS === 'android' && !config.androidClientId) {
+    logger.error('Android Google OAuth client ID is missing');
+  }
+  if (Platform.OS === 'web' && !config.webClientId) {
+    logger.error('Web Google OAuth client ID is missing');
+  }
+
+  // Generate redirect URI using Expo's makeRedirectUri
+  // This ensures the correct format for custom schemes
+  // For custom scheme 'patrick-travel', this will generate: patrick-travel://redirect
+  // NOTE: scheme should NOT include '://' - makeRedirectUri adds it automatically
+  const redirectUriResult: string | string[] = AuthSession.makeRedirectUri({
+    scheme: (Constants.expoConfig?.scheme || 'patrick-travel') as string,
+    path: 'redirect', // Optional: adds /redirect path
+  });
+
+  // makeRedirectUri returns string | string[], convert to string
+  const redirectUri: string = Array.isArray(redirectUriResult) ? redirectUriResult[0] : redirectUriResult;
+
+  logger.info('Google OAuth redirect URI', { redirectUri, platform: Platform.OS });
+
   const [request, response, promptAsync] = Google.useAuthRequest({
+    // For mobile: use platform-specific client ID (NOT webClientId)
+    // For web: use webClientId
     clientId: getClientId(),
-    iosClientId: getGoogleAuthConfig().iosClientId,
-    androidClientId: getGoogleAuthConfig().androidClientId,
-    webClientId: getGoogleAuthConfig().webClientId,
+    // Provide all client IDs - expo-auth-session will use the correct one
+    iosClientId: config.iosClientId,
+    androidClientId: config.androidClientId,
+    webClientId: config.webClientId,
     scopes: ['profile', 'email'],
+    // Explicitly set redirectUri to ensure correct format
+    // makeRedirectUri returns string | string[], but useAuthRequest expects string
+    redirectUri: typeof redirectUri === 'string' ? redirectUri : redirectUri[0],
   });
 
   return { request, response, promptAsync };

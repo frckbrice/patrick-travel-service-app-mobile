@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { AppState, AppStateStatus, Platform, InteractionManager, View, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { Stack, usePathname } from 'expo-router';
+import { AppState, AppStateStatus, Platform, InteractionManager, View, ActivityIndicator, Text, StyleSheet, Linking } from 'react-native';
+import { Stack, usePathname, useRouter } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
@@ -45,43 +45,49 @@ function AppContent() {
   const [isAppReady, setIsAppReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
 
   // Check route groups - be precise about pathname matching
   // Note: home page pathname is '/(tabs)' or '/(tabs)/' or '/(tabs)/index', NOT '/'
-  // Only the root index route '/' (which redirects) should be treated as auth route
-  // const isTabsRoute = pathname?.startsWith('/(tabs)');
-  // const isAuthRoute = pathname?.startsWith('/(auth)') || pathname === '/onboarding' || (pathname === '/' && !isTabsRoute);
+  // Tab bar should ONLY appear on (tabs) routes, never on auth/onboarding/get-started
+  const isTabsRoute = pathname?.startsWith('/(tabs)');
+  const isAuthRoute = pathname?.startsWith('/(auth)') ||
+    pathname === '/onboarding' ||
+    pathname === '/get-started' ||
+    (pathname === '/' && !isTabsRoute);
 
   // Control tab bar visibility based on route
-  // useEffect(() => {
-  //   if (isAuthRoute) {
-  //     // Hide on auth routes
-  //     hideTabBar();
-  //   } else if (isTabsRoute) {
-  //     // Show on tabs routes (home and other tab screens)
-  //     // This ensures tab bar is visible when navigating to home
-  //     // Use a small delay to ensure it runs after other effects
-  //     const timer = setTimeout(() => {
-  //       showTabBar();
-  //     }, 10); // Minimal delay to ensure it runs after mount
-  //     return () => clearTimeout(timer);
-  //   }
-  //   // Other routes (modals, cards) don't need tab bar, scroll behavior will handle visibility
-  // }, [isAuthRoute, isTabsRoute, showTabBar, hideTabBar]);
+  // CRITICAL: Tab bar should ONLY show on (tabs) routes, hide everywhere else
+  useEffect(() => {
+    if (isTabsRoute) {
+      // ONLY show tab bar on tabs routes (home and other tab screens)
+      // Use a small delay to ensure it runs after other effects
+      const timer = setTimeout(() => {
+        showTabBar();
+      }, 10); // Minimal delay to ensure it runs after mount
+      return () => clearTimeout(timer);
+    } else {
+      // Hide tab bar on ALL other routes (auth, onboarding, get-started, modals, etc.)
+      // This ensures tab bar never appears on non-tab routes
+      hideTabBar();
+    }
+  }, [isTabsRoute, showTabBar, hideTabBar]);
 
   // Memoize visibility change handler to prevent re-renders
-  // const handleVisibilityChange = useCallback((visible: boolean) => {
-  //   // Don't show tab bar on auth routes
-  //   if (isAuthRoute) {
-  //     hideTabBar();
-  //     return;
-  //   }
-  //   if (visible) {
-  //     showTabBar();
-  //   } else {
-  //     hideTabBar();
-  //   }
-  // }, [showTabBar, hideTabBar, isAuthRoute]);
+  const handleVisibilityChange = useCallback((visible: boolean) => {
+    // CRITICAL: Only allow tab bar visibility changes on tabs routes
+    // Never show tab bar on auth, onboarding, get-started, or any non-tab routes
+    if (!isTabsRoute) {
+      hideTabBar();
+      return;
+    }
+    // Only handle visibility changes on tabs routes
+    if (visible) {
+      showTabBar();
+    } else {
+      hideTabBar();
+    }
+  }, [showTabBar, hideTabBar, isTabsRoute]);
 
   // Initialize global Alert API
   useEffect(() => {
@@ -97,6 +103,45 @@ function AppContent() {
     const initializeApp = async () => {
       try {
         console.log('🚀 App initialization started');
+
+        // Handle initial URL (cold start) for password reset deep links
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl && isMounted) {
+          try {
+            const url = new URL(initialUrl);
+            const oobCode = url.searchParams.get('oobCode');
+            const mode = url.searchParams.get('mode');
+            if (oobCode && mode === 'resetPassword') {
+              logger.info('Password reset deep link detected on cold start', {
+                oobCode: oobCode.substring(0, 10) + '...',
+              });
+              router.replace({
+                pathname: '/(auth)/reset-password' as any,
+                params: { oobCode, mode },
+              });
+            }
+          } catch (e) {
+            // URL parsing failed, try alternative format (deep link without protocol)
+            try {
+              const match = initialUrl.match(/[?&]oobCode=([^&]+)/);
+              const modeMatch = initialUrl.match(/[?&]mode=([^&]+)/);
+              if (match && modeMatch && modeMatch[1] === 'resetPassword') {
+                // Decode URL-encoded oobCode (safe even if not encoded)
+                const decodedOobCode = decodeURIComponent(match[1]);
+                logger.info('Password reset deep link detected on cold start (fallback)', {
+                  oobCode: decodedOobCode.substring(0, 10) + '...',
+                });
+                router.replace({
+                  pathname: '/(auth)/reset-password' as any,
+                  params: { oobCode: decodedOobCode, mode: modeMatch[1] },
+                });
+              }
+            } catch (fallbackError) {
+              // Not a valid URL or not a reset password link, continue normally
+              logger.debug('Initial URL is not a password reset link', e);
+            }
+          }
+        }
 
         // Set app ready immediately to prevent blank page
         if (isMounted) {
@@ -125,7 +170,51 @@ function AppContent() {
     return () => {
       isMounted = false;
     };
-  }, [refreshAuth]);
+  }, [refreshAuth, router]);
+
+  // Handle deep links when app is already open (runtime)
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', (event) => {
+      try {
+        const url = new URL(event.url);
+        const oobCode = url.searchParams.get('oobCode');
+        const mode = url.searchParams.get('mode');
+        if (oobCode && mode === 'resetPassword') {
+          logger.info('Password reset deep link detected (app open)', {
+            oobCode: oobCode.substring(0, 10) + '...',
+          });
+          router.replace({
+            pathname: '/(auth)/reset-password' as any,
+            params: { oobCode, mode },
+          });
+        }
+      } catch (e) {
+        // URL parsing failed, try alternative format (deep link without protocol)
+        try {
+          const match = event.url.match(/[?&]oobCode=([^&]+)/);
+          const modeMatch = event.url.match(/[?&]mode=([^&]+)/);
+          if (match && modeMatch && modeMatch[1] === 'resetPassword') {
+            // Decode URL-encoded oobCode (safe even if not encoded)
+            const decodedOobCode = decodeURIComponent(match[1]);
+            logger.info('Password reset deep link detected (app open, fallback)', {
+              oobCode: decodedOobCode.substring(0, 10) + '...',
+            });
+            router.replace({
+              pathname: '/(auth)/reset-password' as any,
+              params: { oobCode: decodedOobCode, mode: modeMatch[1] },
+            });
+          }
+        } catch (fallbackError) {
+          // Not a valid URL or not a reset password link
+          logger.debug('Deep link is not a password reset link', e);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [router]);
 
   useEffect(() => {
     // Defer notification listeners setup to avoid blocking UI thread at launch
@@ -250,6 +339,7 @@ function AppContent() {
           }}
         >
           <Stack.Screen name="index" />
+          <Stack.Screen name="get-started" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
@@ -339,6 +429,9 @@ function AppContent() {
           />
         </Stack>
         <Toast
+          position="bottom"
+          topOffset={60}
+          bottomOffset={100}
           config={{
             success: ({ text1, text2 }) => (
               <BaseToast
@@ -372,13 +465,13 @@ function AppContent() {
             ),
           }}
         />
-        {/* Hide tab bar on auth routes */}
-        {/* {!isAuthRoute && (
+        {/* CRITICAL: Only render tab bar on tabs routes - never on auth, onboarding, get-started, or any other routes */}
+        {isTabsRoute && (
           <DynamicTabBar
             visible={isTabBarVisible}
             onVisibilityChange={handleVisibilityChange}
           />
-        )} */}
+        )}
       </PaperProvider>
     </SafeAreaProvider>
   );
@@ -417,68 +510,75 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
   },
   // Toast Styles - Modern Mobile Standards (2025 Mobile Market Standards)
+  // Enhanced visual appeal with better spacing, shadows, and modern design
   successToast: {
-    height: 72,
-    borderLeftWidth: 5,
+    minHeight: 80,
+    borderLeftWidth: 4,
     borderLeftColor: '#10B981',
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingVertical: 18,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 10,
     backgroundColor: '#FFFFFF',
     minWidth: '90%',
     maxWidth: '95%',
+    marginHorizontal: SPACING.md,
   },
   errorToast: {
-    height: 72,
-    borderLeftWidth: 5,
+    minHeight: 80,
+    borderLeftWidth: 4,
     borderLeftColor: '#EF4444',
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingVertical: 18,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 10,
     backgroundColor: '#FFFFFF',
     minWidth: '90%',
     maxWidth: '95%',
+    marginHorizontal: SPACING.md,
   },
   infoToast: {
-    height: 72,
-    borderLeftWidth: 5,
+    minHeight: 80,
+    borderLeftWidth: 4,
     borderLeftColor: '#3B82F6',
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    paddingVertical: 18,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 10,
     backgroundColor: '#FFFFFF',
     minWidth: '90%',
     maxWidth: '95%',
+    marginHorizontal: SPACING.md,
   },
   toastContent: {
     paddingHorizontal: 0,
     paddingVertical: 0,
+    flex: 1,
   },
   toastTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 4,
+    letterSpacing: 0.2,
   },
   toastMessage: {
-    fontSize: 16,
-    fontWeight: '400',
-    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#4B5563',
     lineHeight: 20,
+    letterSpacing: 0.1,
   },
 });

@@ -12,7 +12,7 @@ import {
 import { Text as PaperText, Button, Card } from 'react-native-paper';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -35,6 +35,7 @@ import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
 import { toast } from '../../lib/services/toast';
 import { Alert } from '../../lib/utils/alert';
+import { downloadsService } from '../../lib/services/downloadsService';
 
 export default function TemplateDownloadUploadScreen() {
   useRequireAuth();
@@ -87,12 +88,8 @@ export default function TemplateDownloadUploadScreen() {
     return !!initialCaseId && !!selectedCaseId;
   }, [initialCaseId, selectedCaseId]);
 
-  // Guard: Only show if no case preselected and no active cases
-  useEffect(() => {
-    if (!initialCaseId) {
-      requiresActiveCase('download and upload templates');
-    }
-  }, [initialCaseId]);
+  // Case selection is no longer required for downloading templates
+  // Removed case requirement guard - users can download templates without a case
 
   // Apply preselected case from params, or auto-select first case when cases are loaded
   useEffect(() => {
@@ -144,11 +141,76 @@ export default function TemplateDownloadUploadScreen() {
 
     setIsDownloading(true);
     try {
-      logger.info('Downloading template', { templateId: template.id });
+      logger.info('Starting template download from detail page', {
+        templateId: template.id,
+        templateName: template.name,
+        fileUrl: template.fileUrl,
+        fileName: template.fileName,
+        mimeType: template.mimeType,
+      });
       
       const localUri = await templatesApi.downloadTemplate(template.id);
+      logger.info('Template download completed', {
+        templateId: template.id,
+        localUri,
+      });
+
       setDownloadedTemplateUri(localUri);
       
+      // Track the download so it appears in downloads segment
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(localUri);
+        const fileSize = (fileInfo.exists && 'size' in fileInfo) ? fileInfo.size : template.fileSize || 0;
+
+        logger.info('File info retrieved', {
+          templateId: template.id,
+          localUri,
+          exists: fileInfo.exists,
+          size: fileSize,
+        });
+
+        if (fileInfo.exists) {
+          const originalUrl = template.fileUrl || '';
+          logger.info('Tracking download in downloads service', {
+            templateId: template.id,
+            name: template.fileName || template.name,
+            localUri,
+            originalUrl,
+            mimeType: template.mimeType,
+            size: fileSize,
+          });
+
+          const trackedFile = await downloadsService.addDownloadedFile({
+            name: template.fileName || template.name,
+            localUri,
+            originalUrl,
+            mimeType: template.mimeType,
+            size: fileSize,
+            source: 'template',
+            sourceId: template.id,
+          });
+
+          logger.info('Template download tracked successfully', {
+            templateId: template.id,
+            downloadId: trackedFile.id,
+            originalUrl: trackedFile.originalUrl,
+          });
+        } else {
+          logger.error('Downloaded file not found', {
+            templateId: template.id,
+            localUri,
+          });
+        }
+      } catch (trackError) {
+        // Don't fail download if tracking fails
+        logger.warn('Failed to track template download', {
+          error: trackError,
+          templateId: template.id,
+          localUri,
+          originalUrl: template.fileUrl,
+        });
+      }
+
       toast.success({
         title: t('common.success'),
         message: t('templates.downloadSuccess') || 'Template downloaded successfully',
@@ -157,7 +219,12 @@ export default function TemplateDownloadUploadScreen() {
       // Show bottom modal with instructions
       setShowDownloadModal(true);
     } catch (error) {
-      logger.error('Error downloading template', error);
+      logger.error('Error downloading template', {
+        error,
+        templateId: template?.id,
+        templateName: template?.name,
+        fileUrl: template?.fileUrl,
+      });
       toast.error({
         title: t('common.error'),
         message: t('templates.downloadError') || 'Failed to download template',
@@ -473,32 +540,7 @@ export default function TemplateDownloadUploadScreen() {
           <Animated.View entering={FadeInDown.delay(100).duration(400)}>
             <Text style={styles.sectionTitle}>
                 {t('templates.completeTemplate') || 'Complete template'}
-            </Text>
-            
-            {/* In-App Fill Option */}
-            <Card style={styles.actionCard}>
-              <View style={styles.actionContent}>
-                <MaterialCommunityIcons
-                  name="file-edit"
-                  size={24}
-                  color={COLORS.success}
-                />
-                <View style={styles.actionText}>
-                  <Text style={styles.actionTitle}>
-                      {t('templates.fillNow') || 'Fill now'}
-                  </Text>
-                  <Text style={styles.actionDescription}>
-                      {t('templates.fillNowDesc') || 'Complete the form directly in the app'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: COLORS.success }]}
-                  onPress={handleInAppFill}
-                >
-                  <MaterialCommunityIcons name="file-edit" size={20} color="white" />
-                </TouchableOpacity>
-              </View>
-            </Card>
+              </Text>
 
             {/* External Download Option */}
             <Card style={styles.actionCard}>
@@ -510,7 +552,7 @@ export default function TemplateDownloadUploadScreen() {
                 />
                 <View style={styles.actionText}>
                   <Text style={styles.actionTitle}>
-                      {t('templates.downloadBlank') || 'Download blank'}
+                      {t('templates.download') || 'Download'}
                   </Text>
                   <Text style={styles.actionDescription}>
                       {t('templates.downloadBlankDesc') || 'Save a blank copy to fill later'}
@@ -531,214 +573,181 @@ export default function TemplateDownloadUploadScreen() {
             </Card>
           </Animated.View>
 
-          {/* Upload Section */}
-          <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            <Text style={styles.sectionTitle}>
-                {t('templates.submitCompleted') || 'Submit completed file'}
-              </Text>
+            {/* Upload Section - Only show if user has cases available or a preselected case */}
+            {(hasPreselectedCase || caseOptions.length > 0) && (
+              <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+                <Text style={styles.sectionTitle}>
+                  {t('templates.submitCompleted') || 'Submit completed file'}
+                </Text>
 
-              {hasPreselectedCase && (!hasValidCase || caseOptions.length === 0) ? (
-                /* Case preselected but not yet found in cases list - show ready state */
-                <>
-                  <Card style={styles.readyCard}>
-                    <View style={styles.readyCardContent}>
-                      <View style={[styles.readyIcon, { backgroundColor: COLORS.success + '15' }]}>
-                        <MaterialCommunityIcons
-                          name="check-circle"
-                          size={32}
-                          color={COLORS.success}
-                        />
-                      </View>
-                      <View style={styles.readyText}>
-                        <Text style={styles.readyTitle}>
-                          {t('templates.caseReady') || 'Case Ready'}
-                        </Text>
-                        <Text style={styles.readyDescription}>
-                          {selectedCase
-                            ? t('templates.caseReadyDesc', { caseNumber: selectedCase.referenceNumber }) || `Case ${selectedCase.referenceNumber} is ready for document upload.`
-                            : t('templates.casePreselected') || 'Your case is preselected. You can now upload your filled template.'}
-                        </Text>
-                      </View>
-                    </View>
-                  </Card>
-
-                  {/* File Selection */}
-                  <Card style={styles.selectionCard}>
-                    <Text style={styles.selectionTitle}>
-                      {t('templates.selectFilledFile') || 'Choose file'}
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.filePicker}
-                      onPress={handlePickFilledTemplate}
-                    >
-                      <MaterialCommunityIcons
-                        name="file-upload"
-                        size={24}
-                        color={COLORS.primary}
-                      />
-                      <Text style={styles.filePickerText}>
-                        {filledFileName || (t('templates.selectFile') || 'Select File')}
-                      </Text>
-                    </TouchableOpacity>
-                  </Card>
-
-                  {/* Upload Button */}
-                  <TouchableOpacity
-                    style={[
-                      styles.uploadButton,
-                      (!filledFileName || !selectedCaseId || isUploading) && styles.uploadButtonDisabled,
-                    ]}
-                    onPress={handleUploadFilledTemplate}
-                    disabled={!filledFileName || !selectedCaseId || isUploading}
-                  >
-                    {isUploading ? (
-                      <View style={styles.buttonContent}>
-                        <ActivityIndicator color="white" size="small" />
-                        <Text style={styles.buttonText}>
-                          {t('templates.uploading') || 'Uploading...'}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={styles.buttonContent}>
-                        <MaterialCommunityIcons name="upload" size={20} color="white" />
-                        <Text style={styles.buttonText}>
-                          {t('templates.uploadFilled') || 'Upload Filled Template'}
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                </>
-              ) : !hasPreselectedCase && !hasValidCase && caseOptions.length === 0 ? (
-              /* No cases available and no preselected case - show rich empty state */
-              <Card style={styles.noCasesCard}>
-                <View style={styles.noCasesContent}>
-                      <View style={[styles.noCasesIconWrap, { backgroundColor: COLORS.primary + '12' }]}>
-                        <MaterialCommunityIcons
-                          name="briefcase-off"
-                          size={36}
-                          color={COLORS.primary}
-                        />
-                      </View>
-                      <Text style={styles.noCasesTitle}>
-                        {t('templates.createCaseFirst') || 'Create a case first'}
-                      </Text>
-                  <Text style={styles.noCasesText}>
-                    {t('templates.noCasesAvailable') || 'No cases available. Please create a case first.'}
-                  </Text>
-                      <View style={styles.ctaRow}>
-                        <TouchableOpacity
-                          style={[styles.primaryCta, { backgroundColor: COLORS.primary }]}
-                          onPress={() => router.push('/case/new')}
-                        >
-                          <MaterialCommunityIcons name="plus-circle" size={18} color="white" />
-                          <Text style={styles.primaryCtaText}>{t('cases.createCase') || 'Create Case'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.secondaryCta, { borderColor: COLORS.primary }]}
-                          onPress={handleDownloadTemplate}
-                        >
-                          <MaterialCommunityIcons name="download" size={18} color={COLORS.primary} />
-                          <Text style={[styles.secondaryCtaText, { color: COLORS.primary }]}>
-                            {t('templates.downloadWithoutCase') || 'Download without case'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                </View>
-              </Card>
-            ) : (
-              <>
-                {/* Case Selection */}
-                <Card style={styles.selectionCard}>
-                  <Text style={styles.selectionTitle}>
-                    {t('templates.selectCase') || 'Select Case'}
-                  </Text>
-                  <View style={styles.caseOptions}>
-                    {caseOptions.map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                          styles.caseOption,
-                          selectedCaseId === option.value && styles.caseOptionSelected,
-                        ]}
-                        onPress={() => setSelectedCaseId(option.value)}
-                      >
-                        <MaterialCommunityIcons
-                          name="briefcase"
-                          size={20}
-                          color={
-                            selectedCaseId === option.value
-                              ? COLORS.primary
-                              : COLORS.textSecondary
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.caseOptionText,
-                            selectedCaseId === option.value && styles.caseOptionTextSelected,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                        {selectedCaseId === option.value && (
+                {hasPreselectedCase && (!hasValidCase || caseOptions.length === 0) ? (
+                  /* Case preselected but not yet found in cases list - show ready state */
+                  <>
+                    <Card style={styles.readyCard}>
+                      <View style={styles.readyCardContent}>
+                        <View style={[styles.readyIcon, { backgroundColor: COLORS.success + '15' }]}>
                           <MaterialCommunityIcons
                             name="check-circle"
-                            size={20}
+                            size={32}
+                            color={COLORS.success}
+                          />
+                        </View>
+                        <View style={styles.readyText}>
+                          <Text style={styles.readyTitle}>
+                            {t('templates.caseReady') || 'Case Ready'}
+                          </Text>
+                          <Text style={styles.readyDescription}>
+                            {selectedCase
+                              ? t('templates.caseReadyDesc', { caseNumber: selectedCase.referenceNumber }) || `Case ${selectedCase.referenceNumber} is ready for document upload.`
+                              : t('templates.casePreselected') || 'Your case is preselected. You can now upload your filled template.'}
+                          </Text>
+                        </View>
+                      </View>
+                    </Card>
+
+                    {/* File Selection */}
+                    <Card style={styles.selectionCard}>
+                      <Text style={styles.selectionTitle}>
+                        {t('templates.selectFilledFile') || 'Choose file'}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.filePicker}
+                        onPress={handlePickFilledTemplate}
+                      >
+                        <MaterialCommunityIcons
+                          name="file-upload"
+                          size={24}
+                          color={COLORS.primary}
+                        />
+                        <Text style={styles.filePickerText}>
+                          {filledFileName || (t('templates.selectFile') || 'Select File')}
+                        </Text>
+                      </TouchableOpacity>
+                    </Card>
+
+                    {/* Upload Button */}
+                    <TouchableOpacity
+                      style={[
+                        styles.uploadButton,
+                        (!filledFileName || !selectedCaseId || isUploading) && styles.uploadButtonDisabled,
+                      ]}
+                      onPress={handleUploadFilledTemplate}
+                      disabled={!filledFileName || !selectedCaseId || isUploading}
+                    >
+                      {isUploading ? (
+                        <View style={styles.buttonContent}>
+                          <ActivityIndicator color="white" size="small" />
+                          <Text style={styles.buttonText}>
+                            {t('templates.uploading') || 'Uploading...'}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.buttonContent}>
+                          <MaterialCommunityIcons name="upload" size={20} color="white" />
+                          <Text style={styles.buttonText}>
+                            {t('templates.uploadFilled') || 'Upload Filled Template'}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                      {/* Case Selection - Only show if multiple cases available */}
+                      {caseOptions.length > 1 && (
+                        <Card style={styles.selectionCard}>
+                          <Text style={styles.selectionTitle}>
+                            {t('templates.selectCase') || 'Select Case'}
+                          </Text>
+                          <View style={styles.caseOptions}>
+                            {caseOptions.map((option) => (
+                              <TouchableOpacity
+                                key={option.value}
+                                style={[
+                                  styles.caseOption,
+                                  selectedCaseId === option.value && styles.caseOptionSelected,
+                                ]}
+                                onPress={() => setSelectedCaseId(option.value)}
+                              >
+                                <MaterialCommunityIcons
+                                  name="briefcase"
+                                  size={20}
+                                  color={
+                                    selectedCaseId === option.value
+                                      ? COLORS.primary
+                                      : COLORS.textSecondary
+                                  }
+                                />
+                                <Text
+                                  style={[
+                                    styles.caseOptionText,
+                                    selectedCaseId === option.value && styles.caseOptionTextSelected,
+                                  ]}
+                                >
+                                  {option.label}
+                                </Text>
+                                {selectedCaseId === option.value && (
+                                  <MaterialCommunityIcons
+                                    name="check-circle"
+                                    size={20}
+                                    color={COLORS.primary}
+                                  />
+                                )}
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </Card>
+                      )}
+
+                      {/* File Selection */}
+                      <Card style={styles.selectionCard}>
+                        <Text style={styles.selectionTitle}>
+                          {t('templates.selectFilledFile') || 'Choose file'}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.filePicker}
+                          onPress={handlePickFilledTemplate}
+                        >
+                          <MaterialCommunityIcons
+                            name="file-upload"
+                            size={24}
                             color={COLORS.primary}
                           />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </Card>
+                          <Text style={styles.filePickerText}>
+                            {filledFileName || (t('templates.selectFile') || 'Select File')}
+                          </Text>
+                        </TouchableOpacity>
+                      </Card>
 
-                {/* File Selection */}
-                <Card style={styles.selectionCard}>
-                  <Text style={styles.selectionTitle}>
-                          {t('templates.selectFilledFile') || 'Choose file'}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.filePicker}
-                    onPress={handlePickFilledTemplate}
-                  >
-                    <MaterialCommunityIcons
-                      name="file-upload"
-                      size={24}
-                      color={COLORS.primary}
-                    />
-                    <Text style={styles.filePickerText}>
-                      {filledFileName || (t('templates.selectFile') || 'Select File')}
-                    </Text>
-                  </TouchableOpacity>
-                </Card>
-
-                {/* Upload Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.uploadButton,
-                    (!filledFileName || !selectedCaseId || isUploading) && styles.uploadButtonDisabled,
-                  ]}
-                  onPress={handleUploadFilledTemplate}
-                  disabled={!filledFileName || !selectedCaseId || isUploading}
-                >
-                  {isUploading ? (
-                    <View style={styles.buttonContent}>
-                      <ActivityIndicator color="white" size="small" />
-                      <Text style={styles.buttonText}>
-                        {t('templates.uploading') || 'Uploading...'}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.buttonContent}>
-                      <MaterialCommunityIcons name="upload" size={20} color="white" />
-                      <Text style={styles.buttonText}>
-                        {t('templates.uploadFilled') || 'Upload Filled Template'}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </>
+                    {/* Upload Button */}
+                    <TouchableOpacity
+                      style={[
+                        styles.uploadButton,
+                        (!filledFileName || !selectedCaseId || isUploading) && styles.uploadButtonDisabled,
+                      ]}
+                      onPress={handleUploadFilledTemplate}
+                      disabled={!filledFileName || !selectedCaseId || isUploading}
+                    >
+                      {isUploading ? (
+                        <View style={styles.buttonContent}>
+                          <ActivityIndicator color="white" size="small" />
+                          <Text style={styles.buttonText}>
+                            {t('templates.uploading') || 'Uploading...'}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.buttonContent}>
+                          <MaterialCommunityIcons name="upload" size={20} color="white" />
+                          <Text style={styles.buttonText}>
+                            {t('templates.uploadFilled') || 'Upload Filled Template'}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
+              </Animated.View>
             )}
-          </Animated.View>
             {/* Footer safe-area spacer to ensure last card is fully visible */}
             <View style={{ height: insets.bottom + 32 }} />
         </ScrollView>
@@ -750,9 +759,10 @@ export default function TemplateDownloadUploadScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => setShowDownloadModal(false)}
+        statusBarTranslucent
       >
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: COLORS.surface }]}>
+          <View style={[styles.modalCard, { backgroundColor: COLORS.surface, paddingBottom: insets.bottom + SPACING.lg }]}>
             <View style={styles.modalHeader}>
               <View style={[styles.modalIconContainer, { backgroundColor: COLORS.success + '15' }]}>
                 <MaterialCommunityIcons
@@ -779,7 +789,11 @@ export default function TemplateDownloadUploadScreen() {
 
             <TouchableOpacity
               style={[styles.modalButton, { backgroundColor: COLORS.primary }]}
-              onPress={() => setShowDownloadModal(false)}
+              onPress={() => {
+                setShowDownloadModal(false);
+                // Navigate to downloads segment for better UX
+                router.push('/(tabs)/documents?tab=downloads');
+              }}
             >
               <Text style={styles.modalButtonText}>
                 {t('common.ok') || 'OK'}

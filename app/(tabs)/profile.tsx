@@ -27,9 +27,11 @@ import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { userApi } from '../../lib/api/user.api';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { BottomTabBar } from '../../components/ui/BottomTabBar';
 import { logger } from '../../lib/utils/logger';
 import { Alert } from '../../lib/utils/alert';
 import { DashboardStats } from '../../lib/types';
+import { resetOnboarding } from '../../lib/utils/onboarding';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -118,8 +120,24 @@ export default function ProfileScreen() {
 
   const handleLogout = useCallback(async () => {
     setLogoutDialogVisible(false);
-    await logout();
-    router.replace('/(auth)/login');
+    try {
+      await logout();
+
+      // Verify logout state is updated (Zustand updates are synchronous)
+      // Navigate directly to login - more performant and reliable than going through index.tsx
+      // This avoids race conditions with onboarding checks and ensures immediate redirect
+      const authState = useAuthStore.getState();
+      if (!authState.isAuthenticated && !authState.isLoading) {
+        router.replace('/(auth)/login' as any);
+      } else {
+        // Fallback: if state check fails, still navigate to login
+        router.replace('/(auth)/login' as any);
+      }
+    } catch (error: any) {
+      logger.error('Logout failed in profile screen', error);
+      // Even if logout fails, navigate to login to ensure user is logged out
+      router.replace('/(auth)/login' as any);
+    }
   }, [logout, router]);
 
   const handleDeleteAccount = useCallback(() => {
@@ -649,6 +667,23 @@ export default function ProfileScreen() {
             </Animated.View>
           </View>
 
+          {/* Developer: View Get Started Page */}
+          {__DEV__ && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+                Developer
+              </Text>
+              <Animated.View entering={FadeInDown.delay(600).duration(400)}>
+                <MenuCard
+                  icon="rocket-launch"
+                  title="View Get Started Page"
+                  description="Navigate to the get-started screen"
+                  onPress={() => router.push('/get-started')}
+                />
+              </Animated.View>
+            </View>
+          )}
+
           <Animated.View entering={FadeInDown.delay(600).duration(400)} style={styles.footer}>
             <Button
               title={t('profile.logout')}
@@ -709,6 +744,7 @@ export default function ProfileScreen() {
             </Dialog.Actions>
           </Dialog>
         </Portal>
+        <BottomTabBar />
       </View>
     </TouchDetector>
   );

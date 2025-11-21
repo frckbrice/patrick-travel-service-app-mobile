@@ -19,6 +19,7 @@ import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { getInitials, getConversationTitle, getNotificationBadgeColor, getNotificationIcon, getNotificationPriority, formatTime, formatEmailDate } from '../../lib/utils/notifications';
 import { logger } from '../../lib/utils/logger';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { BottomTabBar } from '../../components/ui/BottomTabBar';
 
 type TabType = 'notifications' | 'messages' | 'inbox' | 'sent';
 
@@ -1089,6 +1090,7 @@ export default function NotificationsScreen() {
             </>
           )}
         </ScrollView>
+        <BottomTabBar />
       </View>
     </TouchDetector>
   );

@@ -123,6 +123,8 @@ export const useTabBarScroll = (options: UseTabBarScrollOptions = {}) => {
       const viewportHeight = event.nativeEvent.layoutMeasurement.height;
       const distanceFromBottom = scrollHeight - (currentScrollY + viewportHeight);
 
+      // Check if at/near top (always show tab bar at top for easy access)
+      const isNearTop = currentScrollY <= 50; // Show tab bar when within 50px of top
       // Check if at/near bottom (always show tab bar at bottom for easy access)
       const isNearBottom = distanceFromBottom <= bottomThreshold;
 
@@ -136,16 +138,16 @@ export const useTabBarScroll = (options: UseTabBarScrollOptions = {}) => {
       
       scrollAccumulator.current += scrollDelta;
 
-      // Priority 1: If at/near bottom, always show tab bar (Facebook behavior)
-      if (isNearBottom) {
+      // Priority 1: If at/near top OR bottom, always show tab bar
+      if (isNearTop || isNearBottom) {
         if (!isTabBarVisibleRef.current) {
           executeVisibilityChange('show');
         }
-        // Reset direction tracking when at bottom
+        // Reset direction tracking when at top/bottom
         lastScrollDirection.current = null;
         scrollAccumulator.current = 0;
       }
-      // Priority 2: Handle scroll direction when not at bottom (Facebook-like)
+        // Priority 2: Handle scroll direction when not at top/bottom (Facebook-like)
       else {
         // Only change direction when accumulated scroll exceeds threshold
         // This prevents rapid toggling/flickering

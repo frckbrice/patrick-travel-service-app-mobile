@@ -5,13 +5,15 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
+  Text,
 } from 'react-native';
 import { Text as PaperText } from 'react-native-paper';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { documentsApi } from '../../lib/api/documents.api';
@@ -24,6 +26,7 @@ import { SPACING, DOCUMENT_TYPE_LABELS } from '../../lib/constants';
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { logger } from '../../lib/utils/logger';
 import { toast } from '../../lib/services/toast';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function UploadDocumentScreen() {
   useRequireAuth();
@@ -38,6 +41,9 @@ export default function UploadDocumentScreen() {
     DocumentType.PASSPORT
   );
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFileName, setUploadFileName] = useState('');
+  const insets = useSafeAreaInsets();
 
   // Redirect to documents page if no active cases (only after cases are loaded)
   useEffect(() => {
@@ -113,38 +119,68 @@ export default function UploadDocumentScreen() {
       }
 
       setIsUploading(true);
+      setUploadProgress(0);
+      setUploadFileName(file.name || 'document');
 
-      // Upload file to API
-      const uploadResult = await uploadFileToAPI(
-        file.uri,
-        file.name || 'document',
-        file.mimeType || 'application/octet-stream'
-      );
-
-      if (!uploadResult.success || !uploadResult.url) {
-        throw new Error(uploadResult.error || t('errors.uploadFailed'));
-      }
-
-      // Save document metadata to database
-      const documentData = {
-        caseId: selectedCaseId,
-        documentType,
-        fileName: file.name || 'document',
-        filePath: uploadResult.url,
-        fileSize: file.size || 0,
-        mimeType: file.mimeType || 'application/octet-stream',
-      };
-
-      const response = await documentsApi.uploadDocument(documentData);
-
-      if (response.success) {
-        toast.success({
-          title: t('documents.uploadSuccess'),
-          message: t('documents.uploadSuccessMessage'),
+      // Simulate progress updates (fetch API doesn't support real upload progress)
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          // Gradually increase progress, but cap at 90% until upload completes
+          if (prev < 90) {
+            return Math.min(prev + Math.random() * 15, 90);
+          }
+          return prev;
         });
-        router.back();
-      } else {
-        throw new Error(response.error || t('errors.uploadFailed'));
+      }, 300);
+
+      try {
+        // Upload file to API
+        const uploadResult = await uploadFileToAPI(
+          file.uri,
+          file.name || 'document',
+          file.mimeType || 'application/octet-stream'
+        );
+
+        clearInterval(progressInterval);
+        setUploadProgress(95); // Show 95% when upload completes, then 100% after metadata save
+
+        if (!uploadResult.success || !uploadResult.url) {
+          throw new Error(uploadResult.error || t('errors.uploadFailed'));
+        }
+
+        // Save document metadata to database
+        const documentData = {
+          caseId: selectedCaseId,
+          documentType,
+          fileName: file.name || 'document',
+          filePath: uploadResult.url,
+          fileSize: file.size || 0,
+          mimeType: file.mimeType || 'application/octet-stream',
+        };
+
+        const response = await documentsApi.uploadDocument(documentData);
+
+        if (response.success) {
+          setUploadProgress(100);
+
+          // Small delay to show 100% completion
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          setIsUploading(false);
+
+          toast.success({
+            title: t('documents.uploadSuccess'),
+            message: t('documents.uploadSuccessMessage'),
+          });
+
+          // Redirect to documents page with documents segment
+          router.replace('/(tabs)/documents?tab=documents');
+        } else {
+          throw new Error(response.error || t('errors.uploadFailed'));
+        }
+      } catch (uploadError: any) {
+        clearInterval(progressInterval);
+        throw uploadError;
       }
     } catch (error: any) {
       logger.error('Failed to upload document', error);
@@ -154,6 +190,8 @@ export default function UploadDocumentScreen() {
       });
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
+      setUploadFileName('');
     }
   }, [
     selectedCaseId,
@@ -350,6 +388,62 @@ export default function UploadDocumentScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Upload Progress Modal - More visible loader */}
+      <Modal
+        visible={isUploading}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]}>
+          <Animated.View
+            entering={FadeIn.duration(300)}
+            style={[styles.uploadModalContent, { backgroundColor: colors.surface }]}
+          >
+            <View style={[styles.uploadIconContainer, { backgroundColor: colors.primary + '15' }]}>
+              <MaterialCommunityIcons
+                name="cloud-upload"
+                size={48}
+                color={colors.primary}
+              />
+            </View>
+
+            <Text style={[styles.uploadModalTitle, { color: colors.text }]}>
+              {t('documents.uploading') || 'Uploading Document'}
+            </Text>
+
+            {uploadFileName && (
+              <Text style={[styles.uploadFileName, { color: colors.textSecondary }]} numberOfLines={1}>
+                {uploadFileName}
+              </Text>
+            )}
+
+            {/* Progress Bar */}
+            <View style={[styles.progressBarContainer, { backgroundColor: colors.border }]}>
+              <Animated.View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: `${Math.max(0, Math.min(100, uploadProgress))}%`,
+                    backgroundColor: colors.primary,
+                  },
+                ]}
+              />
+            </View>
+
+            <Text style={[styles.progressText, { color: colors.textSecondary }]}>
+              {Math.round(uploadProgress)}%
+            </Text>
+
+            <ActivityIndicator
+              size="large"
+              color={colors.primary}
+              style={styles.uploadActivityIndicator}
+            />
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -435,5 +529,63 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     borderRadius: 16,
     padding: SPACING.md,
+  },
+  // Upload Modal Styles
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  uploadModalContent: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 20,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  uploadIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  uploadModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  uploadFileName: {
+    fontSize: 14,
+    marginBottom: SPACING.lg,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.md,
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: SPACING.sm,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: SPACING.md,
+  },
+  uploadActivityIndicator: {
+    marginTop: SPACING.sm,
   },
 });

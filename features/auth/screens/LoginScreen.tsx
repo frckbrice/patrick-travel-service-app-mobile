@@ -9,7 +9,7 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { TextInput, Text, Divider } from 'react-native-paper';
+import { TextInput, Text } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useRouter } from 'expo-router';
@@ -19,10 +19,6 @@ import { useAuth, useGuestOnly } from '../hooks/useAuth';
 import { loginSchema, LoginFormData } from '../schemas/authSchemas';
 import { COLORS, SPACING } from '../../../lib/constants';
 import { secureStorage } from '../../../lib/storage/secureStorage';
-import {
-  useGoogleAuth,
-  handleGoogleAuthResponse,
-} from '../../../lib/auth/googleAuth';
 import { useAuthStore } from '../../../stores/auth/authStore';
 import { logger } from '../../../lib/utils/logger';
 import i18n from 'i18next';
@@ -33,7 +29,6 @@ export default function LoginScreen() {
   useGuestOnly();
   const { t } = useTranslation();
   const { login, isLoading, error } = useAuth();
-  const loginWithGoogle = useAuthStore((state) => state.loginWithGoogle);
   const loginWithBiometric = useAuthStore((state) => state.loginWithBiometric);
   const biometricEnabled = useAuthStore((state) => state.biometricEnabled);
   const biometricAvailable = useAuthStore((state) => state.biometricAvailable);
@@ -43,11 +38,7 @@ export default function LoginScreen() {
   const enableBiometric = useAuthStore((state) => state.enableBiometric);
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
-
-  // Google OAuth
-  const { request, response, promptAsync } = useGoogleAuth();
 
   const {
     control,
@@ -61,47 +52,6 @@ export default function LoginScreen() {
   useEffect(() => {
     checkBiometricStatus();
   }, []);
-
-  // Handle Google OAuth response
-  useEffect(() => {
-    if (response) {
-      handleGoogleSignIn();
-    }
-  }, [response]);
-
-  const handleGoogleSignIn = async () => {
-    if (!response) return;
-
-    setIsGoogleLoading(true);
-    try {
-      const result = await handleGoogleAuthResponse(response);
-
-      if (result.success && result.idToken) {
-        const success = await loginWithGoogle(
-          result.idToken,
-          result.accessToken
-        );
-
-        if (success) {
-          router.replace('/(tabs)');
-        }
-      }
-    } catch (error) {
-      logger.error('Google sign-in error', error);
-    } finally {
-      setIsGoogleLoading(false);
-    }
-  };
-
-  const onGoogleSignIn = async () => {
-    try {
-      setIsGoogleLoading(true);
-      await promptAsync();
-    } catch (error) {
-      logger.error('Error initiating Google sign-in', error);
-      setIsGoogleLoading(false);
-    }
-  };
 
   const onSubmit = async (data: LoginFormData) => {
     const success = await login(data);
@@ -265,7 +215,7 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             onPress={() => {
-              if (isLoading || isGoogleLoading || isBiometricLoading) return;
+              if (isLoading || isBiometricLoading) return;
               handleSubmit(onSubmit)();
             }}
             style={styles.button}
@@ -286,7 +236,7 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={styles.biometricButton}
               onPress={handleBiometricLogin}
-              disabled={isLoading || isGoogleLoading || isBiometricLoading}
+              disabled={isLoading || isBiometricLoading}
             >
               <MaterialCommunityIcons
                 name={
@@ -304,23 +254,6 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
           )}
-
-          <View style={styles.dividerContainer}>
-            <Divider style={styles.divider} />
-            <Text style={styles.dividerText}>{t('auth.or')}</Text>
-            <Divider style={styles.divider} />
-          </View>
-
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={onGoogleSignIn}
-            disabled={!request || isLoading || isGoogleLoading}
-          >
-            <MaterialCommunityIcons name="google" size={24} color="#DB4437" />
-            <Text style={styles.googleButtonText}>
-              {isGoogleLoading ? t('auth.signingIn') : t('auth.continueWithGoogle')}
-            </Text>
-          </TouchableOpacity>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>{t('auth.dontHaveAccount')} </Text>
@@ -445,44 +378,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.primary,
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: SPACING.lg,
-  },
-  divider: {
-    flex: 1,
-    backgroundColor: COLORS.border,
-  },
-  dividerText: {
-    marginHorizontal: SPACING.md,
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  googleButtonText: {
-    marginLeft: 12,
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
   },
   footer: {
     flexDirection: 'row',

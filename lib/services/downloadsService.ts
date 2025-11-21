@@ -1,11 +1,13 @@
 /**
  * Downloads Service
  * Tracks and manages downloaded files (email attachments, templates, etc.)
+ * Downloads are stored per-user to prevent data leakage between users
  */
 
 import { secureStorage } from '../storage/secureStorage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { logger } from '../utils/logger';
+import { User } from '../types';
 
 export interface DownloadedFile {
   id: string;
@@ -19,15 +21,80 @@ export interface DownloadedFile {
   sourceId?: string; // emailId, templateId, etc.
 }
 
-const DOWNLOADS_STORAGE_KEY = 'user_downloads';
+/**
+ * Get the storage key for downloads based on current user ID
+ * Returns null if no user is logged in
+ */
+const getDownloadsStorageKey = (userId?: string | null): string | null => {
+  if (!userId) {
+    logger.warn('Cannot get downloads storage key: no user ID');
+    return null;
+  }
+  return `user_downloads_${userId}`;
+};
 
 class DownloadsService {
+  /**
+   * Get current user ID from secure storage (avoids require cycle with authStore)
+   */
+  private async getCurrentUserId(): Promise<string | null> {
+    try {
+      const user = await secureStorage.getUserData<User>();
+      return user?.id || null;
+    } catch (error) {
+      logger.error('Failed to get current user ID', error);
+      return null;
+    }
+  }
+
   /**
    * Add a downloaded file to the tracking list
    */
   async addDownloadedFile(file: Omit<DownloadedFile, 'id' | 'downloadedAt'>): Promise<DownloadedFile> {
     try {
-      const downloads = await this.getDownloads();
+      const userId = await this.getCurrentUserId();
+      const storageKey = getDownloadsStorageKey(userId);
+      
+      if (!storageKey) {
+        throw new Error('Cannot track download: user not logged in');
+      }
+
+      // Get downloads directly to avoid recursion
+      const downloads = await secureStorage.get<DownloadedFile[]>(storageKey) || [];
+      
+      // Check for duplicates: same localUri or same sourceId (for templates/documents)
+      const isDuplicate = downloads.some(
+        (existing) =>
+          existing.localUri === file.localUri ||
+          (file.sourceId && existing.sourceId === file.sourceId && existing.source === file.source)
+      );
+
+      if (isDuplicate) {
+        // Update the existing entry's downloadedAt timestamp instead of creating duplicate
+        const existingIndex = downloads.findIndex(
+          (existing) =>
+            existing.localUri === file.localUri ||
+            (file.sourceId && existing.sourceId === file.sourceId && existing.source === file.source)
+        );
+        
+        if (existingIndex !== -1) {
+          // Update timestamp and move to top (most recent first)
+          const existing = downloads[existingIndex];
+          existing.downloadedAt = Date.now();
+          downloads.splice(existingIndex, 1);
+          downloads.unshift(existing);
+          
+          logger.info('Download already exists, updated timestamp', {
+            id: existing.id,
+            name: existing.name,
+            localUri: existing.localUri,
+            userId,
+          });
+          
+          await secureStorage.set(storageKey, downloads);
+          return existing;
+        }
+      }
       
       const downloadedFile: DownloadedFile = {
         ...file,
@@ -54,12 +121,13 @@ class DownloadsService {
         }
       }
 
-      await secureStorage.set(DOWNLOADS_STORAGE_KEY, downloads);
+      await secureStorage.set(storageKey, downloads);
       
       logger.info('Downloaded file tracked', {
         id: downloadedFile.id,
         name: downloadedFile.name,
         source: downloadedFile.source,
+        userId,
       });
 
       return downloadedFile;
@@ -70,11 +138,19 @@ class DownloadsService {
   }
 
   /**
-   * Get all downloaded files
+   * Get all downloaded files for the current user
    */
   async getDownloads(): Promise<DownloadedFile[]> {
     try {
-      const downloads = await secureStorage.get<DownloadedFile[]>(DOWNLOADS_STORAGE_KEY);
+      const userId = await this.getCurrentUserId();
+      const storageKey = getDownloadsStorageKey(userId);
+      
+      if (!storageKey) {
+        logger.warn('Cannot get downloads: user not logged in');
+        return [];
+      }
+
+      const downloads = await secureStorage.get<DownloadedFile[]>(storageKey);
       if (!downloads || !Array.isArray(downloads)) {
         return [];
       }
@@ -99,7 +175,7 @@ class DownloadsService {
 
       // Update storage if files were removed
       if (validDownloads.length !== downloads.length) {
-        await secureStorage.set(DOWNLOADS_STORAGE_KEY, validDownloads);
+        await secureStorage.set(storageKey, validDownloads);
       }
 
       return validDownloads;
@@ -114,6 +190,14 @@ class DownloadsService {
    */
   async deleteDownload(id: string): Promise<boolean> {
     try {
+      const userId = await this.getCurrentUserId();
+      const storageKey = getDownloadsStorageKey(userId);
+      
+      if (!storageKey) {
+        logger.warn('Cannot delete download: user not logged in');
+        return false;
+      }
+
       const downloads = await this.getDownloads();
       const fileIndex = downloads.findIndex((f) => f.id === id);
       
@@ -135,9 +219,9 @@ class DownloadsService {
 
       // Remove from list
       downloads.splice(fileIndex, 1);
-      await secureStorage.set(DOWNLOADS_STORAGE_KEY, downloads);
+      await secureStorage.set(storageKey, downloads);
 
-      logger.info('Downloaded file deleted', { id, name: file.name });
+      logger.info('Downloaded file deleted', { id, name: file.name, userId });
       return true;
     } catch (error) {
       logger.error('Failed to delete download', error);
@@ -146,10 +230,18 @@ class DownloadsService {
   }
 
   /**
-   * Clear all downloads
+   * Clear all downloads for the current user
    */
   async clearAllDownloads(): Promise<void> {
     try {
+      const userId = await this.getCurrentUserId();
+      const storageKey = getDownloadsStorageKey(userId);
+      
+      if (!storageKey) {
+        logger.warn('Cannot clear downloads: user not logged in');
+        return;
+      }
+
       const downloads = await this.getDownloads();
       
       // Delete all files
@@ -164,11 +256,48 @@ class DownloadsService {
         }
       }
 
-      await secureStorage.set(DOWNLOADS_STORAGE_KEY, []);
-      logger.info('All downloads cleared');
+      await secureStorage.set(storageKey, []);
+      logger.info('All downloads cleared', { userId });
     } catch (error) {
       logger.error('Failed to clear downloads', error);
       throw error;
+    }
+  }
+
+  /**
+   * Clear downloads for a specific user (used during logout)
+   */
+  async clearDownloadsForUser(userId: string): Promise<void> {
+    try {
+      const storageKey = getDownloadsStorageKey(userId);
+      if (!storageKey) {
+        return;
+      }
+
+      // Get downloads for this user
+      const downloads = await secureStorage.get<DownloadedFile[]>(storageKey);
+      if (!downloads || !Array.isArray(downloads)) {
+        return;
+      }
+
+      // Delete all files
+      for (const file of downloads) {
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(file.localUri);
+          if (fileInfo.exists) {
+            await FileSystem.deleteAsync(file.localUri, { idempotent: true });
+          }
+        } catch (error) {
+          logger.warn('Failed to delete file during user logout clear', { error, file: file.name });
+        }
+      }
+
+      // Clear the storage key
+      await secureStorage.remove(storageKey);
+      logger.info('Downloads cleared for user', { userId });
+    } catch (error) {
+      logger.error('Failed to clear downloads for user', error);
+      // Don't throw - this is cleanup during logout
     }
   }
 
