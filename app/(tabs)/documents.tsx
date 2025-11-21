@@ -37,6 +37,7 @@ import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { toast } from '../../lib/services/toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { BottomTabBar } from '../../components/ui/BottomTabBar';
 import { downloadsService, DownloadedFile } from '../../lib/services/downloadsService';
 import {
   downloadAndShareFile,
@@ -1931,6 +1932,7 @@ export default function DocumentsScreen() {
         />
       )}
 
+      <BottomTabBar />
     </View>
   );
 }

@@ -31,6 +31,7 @@ import { useRequireAuth } from '../../features/auth/hooks/useAuth';
 import { chatService } from '../../lib/services/chat';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
 import { useTabBarContext } from '../../lib/context/TabBarContext';
+import { BottomTabBar } from '../../components/ui/BottomTabBar';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - SPACING.lg * 3) / 2;
@@ -592,6 +593,7 @@ export default function HomeScreen() {
             </Animated.View>
           </View>
         </ScrollView>
+        <BottomTabBar />
       </View>
     </TouchDetector>
   );

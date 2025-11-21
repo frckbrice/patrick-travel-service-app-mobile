@@ -34,6 +34,7 @@ import {
 import { useThemeColors } from '../../lib/theme/ThemeContext';
 import { format } from 'date-fns';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { BottomTabBar } from '../../components/ui/BottomTabBar';
 import { logger } from '../../lib/utils/logger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -513,6 +514,7 @@ export default function CasesScreen() {
           index,
         })}
       />
+      <BottomTabBar />
     </View>
     </TouchDetector>
   );

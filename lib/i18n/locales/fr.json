@@ -477,6 +477,14 @@
     "responseTime": "2-4 heures"
   },
   "onboarding": {
+  "getStarted": {
+    "welcome": "Bienvenue chez MPE Digital",
+    "title": "Votre voyage commence ici",
+    "description": "Découvrez des services d'immigration et juridiques sans faille avec notre plateforme complète. Connectez-vous avec des conseillers experts, suivez vos dossiers et gérez tous vos documents en un seul endroit.",
+    "button": "Commencer",
+    "signIn": "Vous avez déjà un compte ? Se connecter"
+  },
+  "onboarding": {
     "skip": "Passer",
     "next": "Suivant",
     "getStarted": "Commencer",

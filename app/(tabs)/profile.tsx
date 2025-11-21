@@ -27,9 +27,11 @@ import { uploadFileToAPI } from '../../lib/services/fileUpload';
 import { userApi } from '../../lib/api/user.api';
 import { useAuthStore } from '../../stores/auth/authStore';
 import { useTabBarScroll } from '../../lib/hooks/useTabBarScroll';
+import { BottomTabBar } from '../../components/ui/BottomTabBar';
 import { logger } from '../../lib/utils/logger';
 import { Alert } from '../../lib/utils/alert';
 import { DashboardStats } from '../../lib/types';
+import { resetOnboarding } from '../../lib/utils/onboarding';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -665,6 +667,23 @@ export default function ProfileScreen() {
             </Animated.View>
           </View>
 
+          {/* Developer: View Get Started Page */}
+          {__DEV__ && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+                Developer
+              </Text>
+              <Animated.View entering={FadeInDown.delay(600).duration(400)}>
+                <MenuCard
+                  icon="rocket-launch"
+                  title="View Get Started Page"
+                  description="Navigate to the get-started screen"
+                  onPress={() => router.push('/get-started')}
+                />
+              </Animated.View>
+            </View>
+          )}
+
           <Animated.View entering={FadeInDown.delay(600).duration(400)} style={styles.footer}>
             <Button
               title={t('profile.logout')}
@@ -725,6 +744,7 @@ export default function ProfileScreen() {
             </Dialog.Actions>
           </Dialog>
         </Portal>
+        <BottomTabBar />
       </View>
     </TouchDetector>
   );

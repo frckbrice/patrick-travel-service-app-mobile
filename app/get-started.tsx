@@ -1,6 +1,6 @@
 /**
  * Get Started Screen
- * Beautiful welcome screen with hero image
+ * Modern full-screen welcome screen with hero image
  * First screen users see before onboarding
  */
 
@@ -14,13 +14,17 @@ import {
     Dimensions,
     StatusBar,
     Platform,
+    ImageBackground,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { COLORS, SPACING } from '../lib/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useThemeColors } from '../lib/theme/ThemeContext';
+import { SPACING, FONT_SIZES } from '../lib/constants';
 import '../lib/i18n';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -30,76 +34,98 @@ export default function GetStartedScreen() {
     const { t } = useTranslation();
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
+    const insets = useSafeAreaInsets();
+    const colors = useThemeColors();
 
     const handleGetStarted = () => {
         router.push('/onboarding');
     };
 
-    // Determine status bar style based on system settings
-    const statusBarStyle = isDark ? 'light' : 'dark';
+    const handleSignIn = () => {
+        router.push('/(auth)/login');
+    };
+
+    // Determine status bar style - use light content for better visibility on image
+    const statusBarStyle = 'light';
 
     return (
         <View style={styles.container}>
             <ExpoStatusBar style={statusBarStyle} />
             {Platform.OS === 'android' && (
                 <StatusBar
-                    barStyle={isDark ? 'light-content' : 'dark-content'}
+                    barStyle="light-content"
                     backgroundColor="transparent"
                     translucent
                 />
             )}
 
-            {/* Hero Image */}
-            <View style={styles.imageContainer}>
-                <Image
-                    source={require('../assets/images/pts_home_image.jpeg')}
-                    style={styles.heroImage}
-                    resizeMode="cover"
-                />
+            {/* Full Screen Hero Image */}
+            <ImageBackground
+                source={require('../assets/images/mpe_hero_2.jpeg')}
+                style={styles.heroImage}
+                resizeMode="cover"
+            >
                 {/* Gradient Overlay for better text readability */}
-                <View style={styles.gradientOverlay} />
-            </View>
+                <LinearGradient
+                    colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
+                    style={styles.gradientOverlay}
+                />
 
-            {/* Content Section */}
-            <View style={styles.contentContainer}>
-                <View style={styles.textContainer}>
-                    <Text style={styles.title}>
-                        {t('getStarted.welcome') || 'Welcome to MPE Digital'}
-                    </Text>
-                    <Text style={styles.subtitle}>
-                        {t('getStarted.description') ||
-                            'Your trusted partner for immigration and legal services. Get started on your journey today.'}
-                    </Text>
+                {/* Content Overlay */}
+                <View style={[styles.contentOverlay, { paddingTop: insets.top }]}>
+                    {/* Welcome Text Section - Centered */}
+                    <View style={styles.textSection}>
+                        <Text style={styles.welcomeText}>
+                            {t('getStarted.welcome') || 'Welcome to MPE Digital'}
+                        </Text>
+                        <Text style={styles.title}>
+                            {t('getStarted.title') || 'Your Journey Starts Here'}
+                        </Text>
+                        <Text style={styles.description}>
+                            {t('getStarted.description') ||
+                                'Experience seamless immigration and legal services with our comprehensive platform. Connect with expert advisors, track your cases, and manage all your documents in one place.'}
+                        </Text>
+                    </View>
+
+                    {/* Action Buttons Section - Centered */}
+                    <View style={[styles.actionsSection, { paddingBottom: insets.bottom + SPACING.xl }]}>
+                        {/* Get Started Button */}
+                        <TouchableOpacity
+                            style={styles.getStartedButton}
+                            onPress={handleGetStarted}
+                            activeOpacity={0.8}
+                        >
+                            <LinearGradient
+                                colors={[colors.primary, colors.secondary]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.buttonGradient}
+                            >
+                                <Text style={styles.getStartedButtonText}>
+                                    {t('getStarted.button') || 'Get Started'}
+                                </Text>
+                                <MaterialCommunityIcons
+                                    name="arrow-right"
+                                    size={24}
+                                    color="#FFFFFF"
+                                    style={styles.buttonIcon}
+                                />
+                            </LinearGradient>
+                        </TouchableOpacity>
+
+                        {/* Sign In Button */}
+                        <TouchableOpacity
+                            style={styles.signInButton}
+                            onPress={handleSignIn}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.signInText}>
+                                {t('getStarted.signIn') || 'Already have an account? Sign In'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
-
-                {/* Get Started Button */}
-                <TouchableOpacity
-                    style={styles.getStartedButton}
-                    onPress={handleGetStarted}
-                    activeOpacity={0.8}
-                >
-                    <Text style={styles.getStartedButtonText}>
-                        {t('getStarted.button') || 'Get Started'}
-                    </Text>
-                    <MaterialCommunityIcons
-                        name="arrow-right"
-                        size={24}
-                        color="#FFFFFF"
-                        style={styles.buttonIcon}
-                    />
-                </TouchableOpacity>
-
-                {/* Skip to Login (Optional) */}
-                <TouchableOpacity
-                    style={styles.skipButton}
-                    onPress={() => router.push('/(auth)/login')}
-                    activeOpacity={0.7}
-                >
-                    <Text style={styles.skipText}>
-                        {t('getStarted.skip') || 'Already have an account? Sign In'}
-                    </Text>
-                </TouchableOpacity>
-            </View>
+            </ImageBackground>
         </View>
     );
 }
@@ -107,93 +133,119 @@ export default function GetStartedScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
-    },
-    imageContainer: {
-        width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT * 0.6,
-        position: 'relative',
+        backgroundColor: '#000',
     },
     heroImage: {
-        width: '100%',
-        height: '100%',
+        width: SCREEN_WIDTH,
+        height: SCREEN_HEIGHT + 100,
+        justifyContent: 'flex-end',
     },
     gradientOverlay: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 150,
-        backgroundColor: 'rgba(0,0,0,0.2)',
+        ...StyleSheet.absoluteFillObject,
     },
-    contentContainer: {
+    contentOverlay: {
         flex: 1,
+        justifyContent: 'flex-end',
+        alignItems: 'center',
         paddingHorizontal: SPACING.xl,
-        paddingTop: SPACING.xl,
         paddingBottom: SPACING.xxl,
-        backgroundColor: COLORS.surface,
-        borderTopLeftRadius: 32,
-        borderTopRightRadius: 32,
-        marginTop: -32,
+    },
+    textSection: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: SPACING.xxl,
+        maxWidth: SCREEN_WIDTH * 0.9,
+    },
+    welcomeText: {
+        fontSize: FONT_SIZES.lg,
+        fontWeight: '600',
+        color: '#FFFFFF',
+        marginBottom: SPACING.md,
+        letterSpacing: 1,
+        opacity: 0.95,
+        textAlign: 'center',
+        textTransform: 'uppercase',
+        textShadowColor: 'rgba(0, 0, 0, 0.4)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+    },
+    title: {
+        fontSize: FONT_SIZES.xxxl + 8, // 40px for modern large title
+        fontWeight: '700',
+        color: '#FFFFFF',
+        marginBottom: SPACING.lg,
+        lineHeight: 48,
+        letterSpacing: -0.8,
+        textAlign: 'center',
+        textShadowColor: 'rgba(0, 0, 0, 0.5)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 6,
+    },
+    description: {
+        fontSize: FONT_SIZES.md + 1, // 17px
+        color: '#FFFFFF',
+        lineHeight: 26,
+        opacity: 0.95,
+        marginTop: SPACING.sm,
+        textAlign: 'center',
+        paddingHorizontal: SPACING.md,
+        textShadowColor: 'rgba(0, 0, 0, 0.3)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+        letterSpacing: 0.2,
+    },
+    actionsSection: {
+        width: '100%',
+        alignItems: 'center',
+        maxWidth: SCREEN_WIDTH * 0.9,
+    },
+    getStartedButton: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginBottom: SPACING.md,
+        width: '100%',
+        maxWidth: 320,
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: -4,
+            height: 8,
         },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 12,
-        elevation: 8,
+        elevation: 12,
     },
-    textContainer: {
-        marginBottom: SPACING.xl,
-    },
-    title: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: COLORS.text,
-        marginBottom: SPACING.md,
-        lineHeight: 40,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: COLORS.textSecondary,
-        lineHeight: 24,
-    },
-    getStartedButton: {
+    buttonGradient: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: COLORS.primary,
-        paddingVertical: 18,
-        borderRadius: 16,
-        marginTop: SPACING.lg,
-        shadowColor: COLORS.primary,
-        shadowOffset: {
-            width: 0,
-            height: 4,
-        },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
+        paddingVertical: SPACING.lg,
+        paddingHorizontal: SPACING.xl,
     },
     getStartedButtonText: {
-        fontSize: 18,
-        fontWeight: '600',
+        fontSize: FONT_SIZES.lg,
+        fontWeight: '700',
         color: '#FFFFFF',
         marginRight: SPACING.sm,
+        letterSpacing: 0.8,
+        textAlign: 'center',
     },
     buttonIcon: {
         marginLeft: 4,
     },
-    skipButton: {
-        marginTop: SPACING.lg,
+    signInButton: {
         alignItems: 'center',
         paddingVertical: SPACING.md,
+        marginTop: SPACING.xs,
     },
-    skipText: {
-        fontSize: 16,
-        color: COLORS.textSecondary,
+    signInText: {
+        fontSize: FONT_SIZES.md,
+        color: '#FFFFFF',
         fontWeight: '500',
+        opacity: 0.95,
+        textAlign: 'center',
+        textShadowColor: 'rgba(0, 0, 0, 0.4)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+        letterSpacing: 0.3,
     },
 });
-
