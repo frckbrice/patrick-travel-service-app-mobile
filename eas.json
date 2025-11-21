@@ -8,6 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
+      "resourceClass": "medium",
       "env": {
         "APP_ENV": "development"
       },
@@ -23,6 +24,7 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "resourceClass": "medium",
       "env": {
         "APP_ENV": "staging"
       },

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
     View,
     StyleSheet,
@@ -6,10 +6,15 @@ import {
     Modal,
     ScrollView,
     Dimensions,
+    Platform,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeOut, SlideInDown } from 'react-native-reanimated';
+import Animated, {
+    FadeIn,
+    FadeOut,
+    SlideInDown,
+} from 'react-native-reanimated';
 import { COLORS, SPACING } from '../../lib/constants';
 
 const { width } = Dimensions.get('window');
@@ -50,6 +55,8 @@ export const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
         value ? new Date(value.getFullYear(), value.getMonth(), 1) : new Date()
     );
 
+    // No complex animation state - use simple entering/exiting animations
+
     // Generate calendar days for current month
     const calendarDays = useMemo(() => {
         const year = currentMonth.getFullYear();
@@ -84,12 +91,20 @@ export const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
         });
     };
 
-    const isDateDisabled = (date: Date | null): boolean => {
+    const isDateDisabled = useCallback((date: Date | null): boolean => {
         if (!date) return true;
-        if (minimumDate && date < minimumDate) return true;
-        if (maximumDate && date > maximumDate) return true;
+        // Normalize dates to compare only date part (ignore time)
+        const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        if (minimumDate) {
+            const minDateOnly = new Date(minimumDate.getFullYear(), minimumDate.getMonth(), minimumDate.getDate());
+            if (dateOnly < minDateOnly) return true;
+        }
+        if (maximumDate) {
+            const maxDateOnly = new Date(maximumDate.getFullYear(), maximumDate.getMonth(), maximumDate.getDate());
+            if (dateOnly > maxDateOnly) return true;
+        }
         return false;
-    };
+    }, [minimumDate, maximumDate]);
 
     const isToday = (date: Date | null): boolean => {
         if (!date) return false;
@@ -110,30 +125,41 @@ export const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
         );
     };
 
-    const handlePrevMonth = () => {
+    // Optimized handlers with useCallback
+    const handlePrevMonth = useCallback(() => {
         setCurrentMonth(
             new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
         );
-    };
+    }, [currentMonth]);
 
-    const handleNextMonth = () => {
+    const handleNextMonth = useCallback(() => {
         setCurrentMonth(
             new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
         );
-    };
+    }, [currentMonth]);
 
-    const handleSelectDate = (date: Date) => {
-        if (!isDateDisabled(date)) {
-            onChange(date);
-            setVisible(false);
-        }
-    };
+    const handleSelectDate = useCallback((date: Date) => {
+        if (!date || isDateDisabled(date)) return;
+
+        // Create a new date object to avoid reference issues
+        const selectedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        onChange(selectedDate);
+        setVisible(false);
+    }, [onChange, isDateDisabled]);
+
+    const handleOpen = useCallback(() => {
+        setVisible(true);
+    }, []);
+
+    const handleClose = useCallback(() => {
+        setVisible(false);
+    }, []);
 
     return (
         <>
             {/* Trigger Button */}
             <TouchableOpacity
-                onPress={() => setVisible(true)}
+                onPress={handleOpen}
                 style={styles.triggerButton}
                 activeOpacity={0.7}
             >
@@ -156,12 +182,14 @@ export const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
                 </View>
             </TouchableOpacity>
 
-            {/* Calendar Modal */}
+            {/* Calendar Modal - Optimized for smooth appearance */}
             <Modal
                 visible={visible}
                 transparent
                 animationType="none"
-                onRequestClose={() => setVisible(false)}
+                onRequestClose={handleClose}
+                statusBarTranslucent
+                hardwareAccelerated
             >
                 <Animated.View
                     entering={FadeIn.duration(200)}
@@ -171,11 +199,12 @@ export const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
                     <TouchableOpacity
                         style={styles.backdrop}
                         activeOpacity={1}
-                        onPress={() => setVisible(false)}
+                        onPress={handleClose}
                     />
 
                     <Animated.View
-                        entering={SlideInDown.springify().damping(20)}
+                        entering={SlideInDown.duration(250).springify().damping(25).stiffness(400)}
+                        exiting={FadeOut.duration(150)}
                         style={styles.calendarContainer}
                     >
                         {/* Header */}
@@ -228,19 +257,23 @@ export const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
                         >
                             <View style={styles.calendarGrid}>
                                 {calendarDays.map((date, index) => {
-                                    const disabled = isDateDisabled(date);
-                                    const selected = isSelected(date);
-                                    const today = isToday(date);
+                                    const disabled = date ? isDateDisabled(date) : true;
+                                    const selected = date ? isSelected(date) : false;
+                                    const today = date ? isToday(date) : false;
 
                                     return (
                                         <TouchableOpacity
-                                            key={index}
+                                            key={`day-${index}-${date ? date.getTime() : 'null'}`}
                                             style={[
                                                 styles.dayCell,
                                                 selected && styles.dayCellSelected,
                                                 today && !selected && styles.dayCellToday,
                                             ]}
-                                            onPress={() => date && handleSelectDate(date)}
+                                            onPress={() => {
+                                                if (date && !disabled) {
+                                                    handleSelectDate(date);
+                                                }
+                                            }}
                                             disabled={disabled || !date}
                                             activeOpacity={0.7}
                                         >
@@ -270,20 +303,18 @@ export const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
                         {/* Action Buttons */}
                         <View style={styles.actionButtons}>
                             <TouchableOpacity
-                                onPress={() => setVisible(false)}
+                                onPress={handleClose}
                                 style={[styles.actionButton, styles.cancelButton]}
+                                activeOpacity={0.7}
                             >
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                onPress={() => {
-                                    if (value) {
-                                        setVisible(false);
-                                    }
-                                }}
+                                onPress={handleClose}
                                 style={[styles.actionButton, styles.confirmButton]}
                                 disabled={!value}
+                                activeOpacity={0.8}
                             >
                                 <MaterialCommunityIcons
                                     name="check"
@@ -357,6 +388,10 @@ const styles = StyleSheet.create({
         shadowRadius: 20,
         elevation: 15,
         overflow: 'hidden',
+        // Optimize for smooth rendering
+        ...(Platform.OS === 'android' && {
+            renderToHardwareTextureAndroid: true,
+        }),
     },
 
     // Calendar Header

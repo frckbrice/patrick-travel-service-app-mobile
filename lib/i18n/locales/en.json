@@ -519,6 +519,8 @@
     "noCachedData": "No cached data available and offline"
   },
   "templates": {
+    "createCaseFirst": "Create a case first",
+    "selectCase": "Select Case",
     "uploadFilled": "Upload file",
     "selectFile": "Select File",
     "templates": "Document Templates",

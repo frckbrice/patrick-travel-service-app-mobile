@@ -118,8 +118,24 @@ export default function ProfileScreen() {
 
   const handleLogout = useCallback(async () => {
     setLogoutDialogVisible(false);
-    await logout();
-    router.replace('/(auth)/login');
+    try {
+      await logout();
+
+      // Verify logout state is updated (Zustand updates are synchronous)
+      // Navigate directly to login - more performant and reliable than going through index.tsx
+      // This avoids race conditions with onboarding checks and ensures immediate redirect
+      const authState = useAuthStore.getState();
+      if (!authState.isAuthenticated && !authState.isLoading) {
+        router.replace('/(auth)/login' as any);
+      } else {
+        // Fallback: if state check fails, still navigate to login
+        router.replace('/(auth)/login' as any);
+      }
+    } catch (error: any) {
+      logger.error('Logout failed in profile screen', error);
+      // Even if logout fails, navigate to login to ensure user is logged out
+      router.replace('/(auth)/login' as any);
+    }
   }, [logout, router]);
 
   const handleDeleteAccount = useCallback(() => {

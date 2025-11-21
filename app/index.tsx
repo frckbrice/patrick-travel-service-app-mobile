@@ -30,7 +30,7 @@ export default function Index() {
   }
 
   if (!hasSeenOnboarding) {
-    return <Redirect href="/onboarding" />;
+    return <Redirect href={"/get-started" as any} />;
   }
 
   if (isAuthenticated) {

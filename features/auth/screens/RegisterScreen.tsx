@@ -61,7 +61,7 @@ export default function RegisterScreen() {
     const success = await register(registrationData as any);
 
     if (success) {
-      router.push('/(auth)/verify-email');
+      router.push('/(auth)/login');
     }
   };
 

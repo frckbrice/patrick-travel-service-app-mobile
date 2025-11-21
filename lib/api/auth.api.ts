@@ -50,6 +50,7 @@ export const authApi = {
         hasAuthUser,
         userId: auth.currentUser?.uid,
         email: auth.currentUser?.email,
+        note: 'Backend will auto-provision user in DB if Firebase user exists but DB record is missing',
       });
       
       // Verify we have a Firebase user before making the request
@@ -66,6 +67,9 @@ export const authApi = {
       logger.info('Login API response successful', {
         success: response.data.success,
         hasUser: !!response.data.data?.user,
+        userId: response.data.data?.user?.id,
+        email: response.data.data?.user?.email,
+        note: 'User record exists in DB (may have been auto-provisioned by backend)',
       });
       
       return response.data;
@@ -215,15 +219,15 @@ export const authApi = {
   },
 
   async resetPassword(
-    token: string,
+    oobCode: string,
     password: string
-  ): Promise<ApiResponse<void>> {
+  ): Promise<ApiResponse<{ email?: string }>> {
     try {
       logger.info('Resetting password');
-      const response = await apiClient.post<ApiResponse<void>>(
+      const response = await apiClient.post<ApiResponse<{ email?: string }>>(
         '/auth/reset-password',
         {
-          token,
+          oobCode,
           password,
         }
       );

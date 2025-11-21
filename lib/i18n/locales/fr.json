@@ -52,7 +52,7 @@
     "alreadyHaveAccount": "Vous avez déjà un compte?",
     "signIn": "Se connecter",
     "signUp": "S'inscrire",
-    "welcomeBack": "Bon retour",
+    "welcomeBack": "Bienvenue",
     "createAccount": "Créer un compte",
     "signInToContinue": "Connectez-vous pour continuer vers Patrick Travel Services",
     "signUpToGetStarted": "Inscrivez-vous pour commencer avec Patrick Travel Services",
@@ -375,7 +375,7 @@
     "deleteSuccess": "Supprimé avec succès"
   },
   "email": {
-    "downloadSuccess": "Piece jointe téléchargee avec succès.",
+    "downloading": "Piece jointe téléchargee avec succès.",
     "replyMessage": "Répondre à cet email",
     "cannotReply": "Impossible de répondre",
     "systemNotification": "C'est une notification système et ne peut pas être répondue. Veuillez utiliser le tableau de bord pour contacter le support.",
@@ -515,6 +515,8 @@
     "noCachedData": "Aucune donnée en cache disponible et hors ligne"
   },
   "templates": {
+    "createCaseFirst": "Créer un cas d'abord",
+    "selectCase": "Sélectionner un cas",
     "upaloadFilled": "Envoyez",
     "selectFile": "Sélectionner un fichier",
     "templates": "Modèles de documents",

@@ -3,7 +3,7 @@ import { View, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { Text, Button, IconButton } from 'react-native-paper';
 import { WebView } from 'react-native-webview';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { COLORS, SPACING } from '../../lib/constants';
 import { Alert } from '../../lib/utils/alert';
@@ -14,19 +14,41 @@ interface PDFViewerProps {
     filePath: string;
     fileName: string;
     onClose?: () => void;
+    isLocalFile?: boolean; // Indicates if filePath is a local file URI
 }
 
 export const PDFViewer: React.FC<PDFViewerProps> = ({
     filePath,
     fileName,
-    onClose
+    onClose,
+    isLocalFile = false
 }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isDownloading, setIsDownloading] = useState(false);
+    const [isSharing, setIsSharing] = useState(false);
+
+    const handleShare = async () => {
+        setIsSharing(true);
+        try {
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(filePath, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: `Share ${fileName}`,
+                    UTI: 'application/pdf',
+                });
+            } else {
+                Alert.alert('Sharing Not Available', 'Sharing is not available on this device');
+            }
+        } catch (error: any) {
+            Alert.alert('Share Error', error.message || 'Failed to share file');
+        } finally {
+            setIsSharing(false);
+        }
+    };
 
     const handleDownload = async () => {
-        setIsDownloading(true);
+        setIsSharing(true);
         try {
             const fileUri = FileSystem.documentDirectory + fileName;
             const downloadResult = await FileSystem.downloadAsync(filePath, fileUri);
@@ -44,7 +66,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         } catch (error: any) {
             Alert.alert('Download Error', error.message);
         } finally {
-            setIsDownloading(false);
+            setIsSharing(false);
         }
     };
 
@@ -70,12 +92,12 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                 </Text>
                 <Button
                     mode="contained"
-                    onPress={handleDownload}
-                    loading={isDownloading}
-                    disabled={isDownloading}
+                    onPress={isLocalFile ? handleShare : handleDownload}
+                    loading={isSharing}
+                    disabled={isSharing}
                     style={styles.downloadButton}
                 >
-                    Download PDF
+                    {isLocalFile ? 'Share PDF' : 'Download PDF'}
                 </Button>
             </View>
         );
@@ -97,11 +119,11 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                 </View>
                 <View style={styles.headerRight}>
                     <IconButton
-                        icon="download"
+                        icon={isLocalFile ? "share-variant" : "download"}
                         size={20}
                         iconColor={COLORS.primary}
-                        onPress={handleDownload}
-                        disabled={isDownloading}
+                        onPress={isLocalFile ? handleShare : handleDownload}
+                        disabled={isSharing}
                     />
                     {onClose && (
                         <IconButton
@@ -125,21 +147,38 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
                     </View>
                 )}
 
-                <WebView
-                    source={{
-                        uri: `https://docs.google.com/viewer?url=${encodeURIComponent(filePath)}&embedded=true`,
-                    }}
-                    style={styles.webView}
-                    onError={handleError}
-                    onLoadEnd={handleLoadEnd}
-                    onHttpError={handleError}
-                    javaScriptEnabled={true}
-                    domStorageEnabled={true}
-                    startInLoadingState={true}
-                    scalesPageToFit={true}
-                    allowsInlineMediaPlayback={true}
-                    mediaPlaybackRequiresUserAction={false}
-                />
+                {isLocalFile ? (
+                    // For local files, try to view directly using file:// URI
+                    <WebView
+                        source={{ uri: filePath }}
+                        style={styles.webView}
+                        onError={handleError}
+                        onLoadEnd={handleLoadEnd}
+                        onHttpError={handleError}
+                        javaScriptEnabled={true}
+                        domStorageEnabled={true}
+                        startInLoadingState={true}
+                        scalesPageToFit={true}
+                        allowsInlineMediaPlayback={true}
+                        mediaPlaybackRequiresUserAction={false}
+                    />
+                ) : (
+                        <WebView
+                            source={{
+                                uri: `https://docs.google.com/viewer?url=${encodeURIComponent(filePath)}&embedded=true`,
+                            }}
+                            style={styles.webView}
+                            onError={handleError}
+                            onLoadEnd={handleLoadEnd}
+                            onHttpError={handleError}
+                            javaScriptEnabled={true}
+                            domStorageEnabled={true}
+                            startInLoadingState={true}
+                            scalesPageToFit={true}
+                            allowsInlineMediaPlayback={true}
+                            mediaPlaybackRequiresUserAction={false}
+                        />
+                )}
             </View>
         </View>
     );
@@ -211,6 +250,28 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     downloadButton: {
+        marginTop: SPACING.md,
+    },
+    localFileContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: SPACING.xl,
+        backgroundColor: COLORS.background,
+    },
+    localFileText: {
+        marginTop: SPACING.md,
+        color: COLORS.text,
+        textAlign: 'center',
+    },
+    localFileSubtext: {
+        marginTop: SPACING.sm,
+        marginBottom: SPACING.lg,
+        color: COLORS.textSecondary,
+        textAlign: 'center',
+        paddingHorizontal: SPACING.lg,
+    },
+    shareButton: {
         marginTop: SPACING.md,
     },
 });

@@ -123,14 +123,16 @@ export default function HomeScreen() {
     }
   }, [user?.id]);
 
+  // Show tab bar when screen comes into focus (like documents page)
+  useFocusEffect(
+    useCallback(() => {
+      // Show tab bar immediately when home page is focused
+      showTabBar();
+    }, [showTabBar])
+  );
+
   useEffect(() => {
     fetchDashboardStats();
-    // Show tab bar when home page loads (like documents page)
-    // Use a small delay to ensure it runs after layout effects
-    const timer = setTimeout(() => {
-      showTabBar();
-    }, 20);
-    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
@@ -190,9 +192,9 @@ export default function HomeScreen() {
     return t('dashboard.greetings.evening') || 'Good Evening';
   };
 
-  // Handle upload navigation - navigate directly without case requirement check
+  // Handle upload navigation - navigate to documents page which has quick upload modal
   const handleUploadPress = useCallback(() => {
-    router.push('/document/upload');
+    router.push('/(tabs)/documents?tab=documents');
   }, [router]);
 
   // Dynamic theme-aware styles

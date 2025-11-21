@@ -1,4 +1,4 @@
 # google-services.json will be created from EAS secret during build
 !google-services.json
 # Service account keys should not be committed
-!patrick-travel-agency-firebase-adminsdk-*.json
+!patrick-travel-agency-firebase-adminsdk-fbsvc-1e2b9eb30c.json

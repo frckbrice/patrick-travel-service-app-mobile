@@ -3,21 +3,21 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-nat
 import { TextInput, Text, ActivityIndicator } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   forgotPasswordSchema,
   ForgotPasswordFormData,
 } from '../schemas/authSchemas';
-import { auth } from '../../../lib/firebase/config';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { authApi } from '../../../lib/api/auth.api';
 import { COLORS, SPACING } from '../../../lib/constants';
 import { logger } from '../../../lib/utils/logger';
+import { Alert } from '../../../lib/utils/alert';
 
 export default function ForgotPasswordScreen() {
   const { t } = useTranslation();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -29,63 +29,61 @@ export default function ForgotPasswordScreen() {
   });
 
   const onSubmit = async (data: ForgotPasswordFormData) => {
-    console.log('🔥 Forgot Password - Form submitted with email:', data.email);
     setIsLoading(true);
     setError(null);
 
     try {
-      logger.info('Sending password reset email via Firebase', {
+      logger.info('Requesting password reset via backend API', {
         email: data.email,
       });
-      console.log('🔥 Calling sendPasswordResetEmail...');
 
-      await sendPasswordResetEmail(auth, data.email);
+      const response = await authApi.forgotPassword(data.email.trim());
 
-      console.log('✅ Password reset email sent successfully');
-      logger.info('Password reset email sent successfully');
-      setSuccess(true);
+      if (response.success) {
+        // Generic success message to prevent user enumeration
+        Alert.alert(
+          t('auth.checkEmail') || 'Check Your Email',
+          t('auth.resetEmailSent') ||
+          "If an account exists with this email, a password reset link has been sent. Please check your inbox and spam folder.",
+          [
+            {
+              text: t('common.ok') || 'OK',
+              onPress: () => router.replace('/(auth)/login'),
+            },
+          ]
+        );
+      } else {
+        // Still show generic message for security
+        Alert.alert(
+          t('auth.checkEmail') || 'Check Your Email',
+          t('auth.resetEmailSent') ||
+          "If an account exists with this email, a password reset link has been sent. Please check your inbox and spam folder.",
+          [
+            {
+              text: t('common.ok') || 'OK',
+              onPress: () => router.replace('/(auth)/login'),
+            },
+          ]
+        );
+      }
     } catch (e: any) {
-      console.error('❌ Failed to send password reset email:', e);
-      logger.error('Failed to send password reset email', e);
-      const errorMessage = e?.code
-        ? `Firebase error: ${e.code} - ${e.message}`
-        : e?.message || 'Failed to send reset email';
-      setError(errorMessage);
+      logger.error('Failed to request password reset', e);
+      // Show generic message even on error to prevent user enumeration
+      Alert.alert(
+        t('auth.checkEmail') || 'Check Your Email',
+        t('auth.resetEmailSent') ||
+        "If an account exists with this email, a password reset link has been sent. Please check your inbox and spam folder.",
+        [
+          {
+            text: t('common.ok') || 'OK',
+            onPress: () => router.replace('/(auth)/login'),
+          },
+        ]
+      );
     } finally {
       setIsLoading(false);
     }
   };
-
-  if (success) {
-    return (
-      <View style={styles.container}>
-        {/* Company Logo */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../../../assets/icon.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
-        <View style={styles.successContainer}>
-          <Text variant="headlineMedium" style={styles.successTitle}>
-            {t('auth.checkEmail') || 'Check Your Email'}
-          </Text>
-          <Text variant="bodyLarge" style={styles.successText}>
-            {t('auth.resetEmailSent') ||
-              "We've sent you instructions to reset your password. Please check your inbox and spam folder."}
-          </Text>
-          <Link href="/(auth)/login" asChild>
-            <TouchableOpacity style={styles.button} activeOpacity={0.8}>
-              <Text style={styles.buttonLabel}>
-                {t('auth.backToLogin') || 'Back to Login'}
-              </Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -266,19 +264,5 @@ const styles = StyleSheet.create({
   footerText: {
     color: COLORS.textSecondary,
     fontSize: 14,
-  },
-  successContainer: {
-    alignItems: 'center',
-    padding: SPACING.xl,
-  },
-  successTitle: {
-    fontWeight: 'bold',
-    marginBottom: SPACING.md,
-    color: COLORS.success,
-  },
-  successText: {
-    textAlign: 'center',
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xl,
   },
 });

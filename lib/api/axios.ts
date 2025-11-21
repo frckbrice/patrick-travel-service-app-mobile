@@ -22,20 +22,39 @@ const envSelectedApi = isProduction
 const API_BASE_URL =
   Constants.expoConfig?.extra?.apiUrl || 'http://localhost:3000/api';
 
-console.log('API_BASE_URL', API_BASE_URL);
+
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+    //   baseURL: API_BASE_URL,
+    baseURL: 'http://172.20.10.10:3000/api',
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+    // Don't set default Content-Type here - let it be set per request
+    // FormData requests need to set Content-Type automatically with boundary
 });
-
+console.log('API_BASE_URL', API_BASE_URL);
 // Request interceptor - Add Firebase auth token
 apiClient.interceptors.request.use(
   async (config) => {
     try {
+        // Check if this is a FormData request - critical for file uploads
+        const isFormData = config.data instanceof FormData;
+
+        // For FormData, we MUST NOT set Content-Type - React Native/axios will set it automatically
+        // with the correct boundary. Setting it manually will break the upload.
+        if (isFormData) {
+            // Explicitly delete Content-Type if it was set - let axios/RN handle it
+            delete config.headers['Content-Type'];
+            delete config.headers['content-type'];
+            logger.debug('FormData detected - Content-Type will be set automatically', {
+                url: config.url,
+            });
+        } else {
+            // Only set default Content-Type for non-FormData requests
+            if (!config.headers['Content-Type'] && !config.headers['content-type']) {
+                config.headers['Content-Type'] = 'application/json';
+            }
+        }
+
       // Try Firebase user first (most up-to-date)
       const user = auth.currentUser;
       if (user) {
@@ -123,20 +142,27 @@ apiClient.interceptors.response.use(
       // If we already retried multiple times, log out (unless it's an auth endpoint)
       const retryCount = originalRequest._retryCount || 0;
       if (retryCount >= 2 && !isAuthEndpoint) {
+          const authStoreState = getAuthStore().getState();
+
+          // Skip if already logging out
+          if (authStoreState.isLoggingOut) {
+              logger.info('Skipping logout - already in progress');
+              return Promise.reject(error);
+          }
+
         logger.warn('401 received after multiple retries - checking if user should be logged out');
         // Before logging out, check if we have stored credentials that might be restored
-        const authStore = getAuthStore().getState();
-        const hasStoredUser = authStore.user !== null;
+          const hasStoredUser = authStoreState.user !== null;
         
         if (!hasStoredUser) {
           logger.warn('No stored user found after multiple 401s - logging out user');
-          const logout = authStore.logout;
+            const logout = authStoreState.logout;
           await logout();
         } else {
           logger.info('User has stored credentials - attempting refreshAuth before logout');
           // Try one more time with refreshAuth
           try {
-            await authStore.refreshAuth();
+              await authStoreState.refreshAuth();
             // If refreshAuth succeeded, retry the request one more time
             const refreshedUser = auth.currentUser;
             if (refreshedUser) {
@@ -147,7 +173,7 @@ apiClient.interceptors.response.use(
             }
           } catch (refreshError) {
             logger.warn('refreshAuth failed after multiple 401s - logging out user', refreshError);
-            const logout = authStore.logout;
+              const logout = authStoreState.logout;
             await logout();
           }
         }
@@ -158,6 +184,20 @@ apiClient.interceptors.response.use(
       }
 
       originalRequest._retryCount = (retryCount || 0) + 1;
+
+        // Check if we're in the middle of logout - skip all refresh attempts
+        const authStore = getAuthStore().getState();
+        if (authStore.isLoggingOut) {
+            logger.info('Skipping refreshAuth - logout in progress');
+            return Promise.reject(error);
+        }
+
+        // Skip refreshAuth for push-token endpoints - they're non-critical and may fail during logout
+        const isPushTokenEndpoint = url.includes('/users/push-token');
+        if (isPushTokenEndpoint) {
+            logger.info('Skipping refreshAuth for push-token endpoint (non-critical)');
+            return Promise.reject(error);
+        }
 
       try {
         // Try to refresh token from Firebase first
@@ -172,11 +212,16 @@ apiClient.interceptors.response.use(
               return await apiClient(originalRequest);
             } catch (retryError: any) {
               // If retry also returns 401, try refreshAuth before giving up
+                // But skip if we're logging out
               if (retryError?.response?.status === 401 && !isAuthEndpoint) {
-                logger.warn('401 persisted after token refresh - trying refreshAuth');
-                const authStore = getAuthStore().getState();
+                  const authStoreState = getAuthStore().getState();
+                  if (authStoreState.isLoggingOut) {
+                      logger.info('Skipping refreshAuth - logout in progress');
+                      return Promise.reject(error);
+                  }
+                  logger.warn('401 persisted after token refresh - trying refreshAuth');
                 try {
-                  await authStore.refreshAuth();
+                    await authStoreState.refreshAuth();
                   // Try one more time with refreshed auth
                   const refreshedUser = auth.currentUser;
                   if (refreshedUser) {
@@ -220,12 +265,17 @@ apiClient.interceptors.response.use(
           }
         } else {
           // No Firebase user - try refreshAuth to restore from storage
-          logger.info('401 received with no Firebase user - attempting refreshAuth');
-          const authStore = getAuthStore().getState();
-          
+            // But skip if we're logging out
+            const authStoreState = getAuthStore().getState();
+            if (authStoreState.isLoggingOut) {
+                logger.info('Skipping refreshAuth - logout in progress (no Firebase user)');
+                return Promise.reject(error);
+            }
+
+            logger.info('401 received with no Firebase user - attempting refreshAuth');
           try {
             // Try to restore auth from storage
-            await authStore.refreshAuth();
+              await authStoreState.refreshAuth();
             const refreshedUser = auth.currentUser;
             
             if (refreshedUser) {
@@ -425,3 +475,4 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+

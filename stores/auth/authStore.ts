@@ -16,6 +16,7 @@ import {
 import { signInWithGoogle, signOutFromGoogle } from '../../lib/auth/googleAuth';
 import { registerForPushNotifications } from '../../lib/services/pushNotifications';
 import { biometricAuthService } from '../../lib/services/biometricAuth';
+import { downloadsService } from '../../lib/services/downloadsService';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 
@@ -25,6 +26,7 @@ interface AuthState {
   pushToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isLoggingOut: boolean; // Flag to prevent refreshAuth during logout
   error: string | null;
   biometricAvailable: boolean;
   biometricEnabled: boolean;
@@ -60,6 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   pushToken: null,
   isLoading: false,
   isAuthenticated: false,
+  isLoggingOut: false,
   error: null,
   biometricAvailable: false,
   biometricEnabled: false,
@@ -84,6 +87,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const firebaseToken = await googleResult.user.getIdToken();
 
       // Sync with backend API
+      // NOTE: Backend may create/update user record in DB during Google login
+      logger.info('Calling backend Google login API...', {
+        firebaseUid: googleResult.user.uid,
+        email: googleResult.user.email,
+        note: 'Backend will sync/create user in DB',
+      });
       const response = await authApi.loginWithGoogle({
         idToken,
         firebaseToken,
@@ -100,12 +109,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
 
-      const { user } = response.data;
+      let { user } = response.data;
 
       // Validate response data
+      // Backend should have created/updated user record in DB
       if (!user) {
         logger.error(
-          'Invalid Google login response from server - missing user'
+          'Invalid Google login response from server - missing user',
+          {
+            firebaseUid: googleResult.user.uid,
+            email: googleResult.user.email,
+            note: 'Backend should have created/updated user in DB',
+          }
         );
         set({
           error: 'Invalid server response. Please contact support.',
@@ -122,6 +137,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await secureStorage.setRefreshToken(firebaseRefreshToken);
       await secureStorage.setUserData(user);
 
+      // OPTIMIZATION: Pre-fetch full profile immediately after login
+      // This ensures profile is ready before navigation, eliminating the need for
+      // retry logic or delays in profile screen. Profile fetched at the right time
+      // (right after backend login) instead of using delays and retries.
+      logger.info('Pre-fetching profile after Google login...', { userId: user.id });
+      try {
+        const profileResponse = await userApi.getProfile();
+        if (profileResponse.success && profileResponse.data) {
+          // Update user with complete profile data
+          const completeUser = profileResponse.data;
+          await secureStorage.setUserData(completeUser);
+          user = completeUser;
+          logger.info('Profile pre-fetched successfully after Google login', {
+            userId: completeUser.id,
+            hasProfilePicture: !!completeUser.profilePicture,
+          });
+        } else {
+          logger.warn('Profile pre-fetch failed after Google login, using login response user data', {
+            error: profileResponse.error,
+          });
+        }
+      } catch (profileError: any) {
+        // Non-blocking: if profile fetch fails, continue with login response user
+        logger.warn('Profile pre-fetch error after Google login (non-blocking)', profileError);
+      }
+
       set({
         user,
         token: firebaseToken,
@@ -133,7 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Register push token
       await get().registerPushToken();
 
-      logger.info('User logged in with Google successfully', {
+      logger.info('User logged in with Google successfully with profile ready', {
         userId: user.id,
       });
       return true;
@@ -211,7 +252,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // With Firebase user signed in, axios interceptor will attach ID token
       // Backend verifies token, syncs user in DB, and sets custom claims
-      logger.info('Calling backend login API...');
+      // NOTE: Backend auto-provisions user in DB if they exist in Firebase but not in database
+      // This handles cases where user was created in Firebase but DB record is missing
+      logger.info('Calling backend login API...', {
+        firebaseUid: auth.currentUser!.uid,
+        email: auth.currentUser!.email,
+        note: 'Backend will auto-provision user in DB if missing',
+      });
       const response = await authApi.login({});
 
       if (!response.success || !response.data) {
@@ -219,11 +266,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
 
-      const { user } = response.data;
+      let { user } = response.data;
 
       // Validate response data
+      // Backend may have auto-provisioned this user if they existed in Firebase but not in DB
       if (!user) {
-        logger.error('Invalid login response from server - missing user');
+        logger.error('Invalid login response from server - missing user', {
+          firebaseUid: auth.currentUser!.uid,
+          email: auth.currentUser!.email,
+          note: 'Backend should have auto-provisioned user if missing',
+        });
         set({
           error: 'Invalid server response. Please contact support.',
           isLoading: false,
@@ -231,10 +283,47 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return false;
       }
 
+      // Log if user was likely auto-provisioned (has default firstName 'User')
+      // This is a heuristic - backend sets firstName: 'User' for auto-provisioned users
+      if (user.firstName === 'User' && !user.lastName) {
+        logger.info('User may have been auto-provisioned by backend', {
+          userId: user.id,
+          email: user.email,
+          firebaseUid: auth.currentUser!.uid,
+          note: 'User has default firstName, likely auto-provisioned',
+        });
+      }
+
       // Store Firebase tokens (not custom backend tokens)
       await secureStorage.setAuthToken(firebaseToken);
       await secureStorage.setRefreshToken(firebaseRefreshToken);
       await secureStorage.setUserData(user);
+
+      // OPTIMIZATION: Pre-fetch full profile immediately after login
+      // This ensures profile is ready before navigation, eliminating the need for
+      // retry logic or delays in profile screen. Profile fetched at the right time
+      // (right after backend login) instead of using delays and retries.
+      logger.info('Pre-fetching profile after login...', { userId: user.id });
+      try {
+        const profileResponse = await userApi.getProfile();
+        if (profileResponse.success && profileResponse.data) {
+          // Update user with complete profile data
+          const completeUser = profileResponse.data;
+          await secureStorage.setUserData(completeUser);
+          user = completeUser;
+          logger.info('Profile pre-fetched successfully', {
+            userId: completeUser.id,
+            hasProfilePicture: !!completeUser.profilePicture,
+          });
+        } else {
+          logger.warn('Profile pre-fetch failed, using login response user data', {
+            error: profileResponse.error,
+          });
+        }
+      } catch (profileError: any) {
+        // Non-blocking: if profile fetch fails, continue with login response user
+        logger.warn('Profile pre-fetch error (non-blocking)', profileError);
+      }
 
       set({
         user,
@@ -247,7 +336,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Register push token
       await get().registerPushToken();
 
-      logger.info('User logged in successfully', { userId: user.id });
+      logger.info('User logged in successfully with profile ready', { userId: user.id });
       return true;
     } catch (error: any) {
       logger.error('Login error', error);
@@ -296,23 +385,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try {
-      set({ isLoading: true });
+      // Set logout flag immediately to prevent refreshAuth during logout
+      set({ isLoading: true, isLoggingOut: true });
 
-      // Remove push token from backend (non-blocking)
-      // Only attempt if we have an auth token to avoid 401 loops
-      const currentToken = get().token;
-      if (currentToken || auth.currentUser) {
-        try {
-          await userApi.removePushToken();
-        } catch (error) {
-          logger.warn('Failed to remove push token', error);
-          // Continue with logout even if push token removal fails
-        }
-      } else {
-        logger.info('Skipping push token removal - no auth token available');
-      }
-
-      // Logout from API - this revokes refresh tokens on server side
+      // STEP 1: Logout from API first (while we still have valid auth)
+      // This revokes refresh tokens on server side
       // This is important for security and aligns with web API behavior
       try {
         await authApi.logout();
@@ -322,7 +399,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         logger.warn('API logout failed, continuing with local logout', error);
       }
 
-      // Logout from Firebase (always execute, even if API logout failed)
+      // STEP 2: Logout from Firebase (clear Firebase auth state)
+      // Do this before push token removal to prevent 401 from triggering refreshAuth
       try {
         await firebaseSignOut(auth);
         await signOutFromGoogle();
@@ -332,15 +410,49 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Continue with clearing local data even if Firebase signout fails
       }
 
-      // Clear stored data (always execute)
+      // STEP 3: Remove push token (non-blocking, may fail since we're logged out)
+      // Try to remove push token, but don't let failures block logout
+      // Since Firebase is signed out and isLoggingOut flag is set, 401 won't trigger refreshAuth
+      const currentToken = get().token;
+      if (currentToken) {
+        try {
+          // Use a timeout to prevent hanging
+          await Promise.race([
+            userApi.removePushToken(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Push token removal timeout')), 2000)
+            ),
+          ]);
+        } catch (error) {
+          // Expected to fail during logout - that's fine
+          logger.info('Push token removal skipped or failed during logout (expected)', error);
+        }
+      }
+
+      // STEP 4: Clear user-specific downloads before clearing auth data
+      // Get userId before clearing auth data
+      const currentUserId = get().user?.id;
+      if (currentUserId) {
+        try {
+          await downloadsService.clearDownloadsForUser(currentUserId);
+          logger.info('User downloads cleared during logout', { userId: currentUserId });
+        } catch (downloadsError) {
+          // Log but don't fail logout if downloads clearing fails
+          logger.warn('Failed to clear downloads during logout', downloadsError);
+        }
+      }
+
+      // STEP 5: Clear stored data (always execute)
       await secureStorage.clearAuthData();
 
+      // STEP 6: Update state (clear logout flag)
       set({
         user: null,
         token: null,
         pushToken: null,
         isAuthenticated: false,
         isLoading: false,
+        isLoggingOut: false,
         error: null,
       });
 
@@ -349,6 +461,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       logger.error('Logout error', error);
       
       // Even if logout fails, clear local state to ensure security
+      // Sign out from Firebase to prevent refreshAuth loops
+      try {
+        await firebaseSignOut(auth).catch(() => { });
+        await signOutFromGoogle().catch(() => { });
+      } catch {
+        // Ignore Firebase errors
+      }
+
+      // Clear user-specific downloads before clearing auth data
+      const currentUserId = get().user?.id;
+      if (currentUserId) {
+        try {
+          await downloadsService.clearDownloadsForUser(currentUserId);
+        } catch {
+          // Ignore downloads clearing errors
+        }
+      }
+
       await secureStorage.clearAuthData().catch(() => {
         // Ignore clear errors
       });
@@ -359,6 +489,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         pushToken: null,
         isAuthenticated: false,
         isLoading: false,
+        isLoggingOut: false,
         error: null,
       });
     }

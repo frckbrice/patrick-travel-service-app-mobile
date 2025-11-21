@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CachedTemplate } from '../types';
 import { logger } from '../utils/logger';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 class TemplateCache {
   private readonly CACHE_PREFIX = 'template_cache_';

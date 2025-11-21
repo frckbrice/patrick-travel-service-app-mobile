@@ -28,6 +28,7 @@ interface ToastOptions {
 
 /**
  * Translates a value if it's a translation key object, otherwise returns as-is
+ * Ensures return type is always string
  */
 const translate = (value: string | { key: string; params?: any }): string => {
     if (typeof value === 'string') {
@@ -35,11 +36,14 @@ const translate = (value: string | { key: string; params?: any }): string => {
         if (value.includes('.') && value.split('.').length >= 2) {
             // Try to translate it
             const translated = i18n.t(value, { defaultValue: value });
-            return translated !== value ? translated : value;
+            // Ensure it's a string
+            return typeof translated === 'string' ? translated : String(translated);
         }
         return value;
     }
-    return i18n.t(value.key, value.params || {});
+    // Ensure i18n.t result is always a string
+    const translated = i18n.t(value.key, value.params || {});
+    return typeof translated === 'string' ? translated : String(translated);
 };
 
 export const toast = {
@@ -57,7 +61,9 @@ export const toast = {
             text1: translate(config.title),
             text2: config.message ? translate(config.message) : undefined,
             visibilityTime: config.duration || 3000,
-            position: config.position || 'top',
+            position: config.position || 'bottom',
+            topOffset: 60,
+            bottomOffset: 100,
             autoHide: true,
         });
     },
@@ -76,7 +82,9 @@ export const toast = {
             text1: translate(config.title),
             text2: config.message ? translate(config.message) : undefined,
             visibilityTime: config.duration || 4000,
-            position: config.position || 'top',
+            position: config.position || 'bottom',
+            topOffset: 60,
+            bottomOffset: 100,
             autoHide: true,
         });
     },
@@ -95,7 +103,9 @@ export const toast = {
             text1: translate(config.title),
             text2: config.message ? translate(config.message) : undefined,
             visibilityTime: config.duration || 3000,
-            position: config.position || 'top',
+            position: config.position || 'bottom',
+            topOffset: 60,
+            bottomOffset: 100,
             autoHide: true,
         });
     },
@@ -114,7 +124,9 @@ export const toast = {
             text1: translate(config.title),
             text2: config.message ? translate(config.message) : undefined,
             visibilityTime: config.duration || 3500,
-            position: config.position || 'top',
+            position: config.position || 'bottom',
+            topOffset: 60,
+            bottomOffset: 100,
             autoHide: true,
         });
     },

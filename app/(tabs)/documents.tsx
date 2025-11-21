@@ -11,9 +11,10 @@ import {
   Platform,
   Text,
   Modal,
+  Linking,
 } from 'react-native';
 import { Text as PaperText, Chip, Menu, Button, Divider } from 'react-native-paper';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -88,10 +89,9 @@ export default function DocumentsScreen() {
   const [selectedServiceType, setSelectedServiceType] = useState<ServiceType | undefined>();
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | undefined>();
   const [isCasePickerVisible, setIsCasePickerVisible] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'templates' | 'upload' | null>(null);
+  const [pickerMode, setPickerMode] = useState<'upload' | null>(null);
   const [availableCases, setAvailableCases] = useState<Array<{ id: string; referenceNumber?: string; serviceType?: string }>>([]);
   const [isLoadingCases, setIsLoadingCases] = useState(false);
-  const [templatePendingCase, setTemplatePendingCase] = useState<DocumentTemplate | null>(null);
   const [showNoCaseModal, setShowNoCaseModal] = useState(false);
   // Quick upload modal state
   const [showQuickUploadModal, setShowQuickUploadModal] = useState(false);
@@ -168,6 +168,15 @@ export default function DocumentsScreen() {
     }
   }, [selectedServiceType, selectedCategory]);
 
+  // Refresh downloads when screen comes into focus and downloads tab is active
+  useFocusEffect(
+    useCallback(() => {
+      if (activeTab === 'downloads') {
+        fetchDownloads();
+      }
+    }, [activeTab])
+  );
+
   // Debounce search queries
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const debouncedTemplateSearchQuery = useDebounce(templateSearchQuery, 300);
@@ -210,10 +219,23 @@ export default function DocumentsScreen() {
       });
       if (!result.canceled && result.assets && result.assets[0]) {
         const a = result.assets[0];
+        // Normalize MIME type - ImagePicker might return just "image" instead of "image/jpeg"
+        let mimeType = a.mimeType || a.type || 'image/jpeg';
+        if (mimeType === 'image' || !mimeType.includes('/')) {
+          // Infer from file extension or default to jpeg
+          const extension = (a.fileName || '').split('.').pop()?.toLowerCase();
+          if (extension === 'png') {
+            mimeType = 'image/png';
+          } else if (extension === 'gif') {
+            mimeType = 'image/gif';
+          } else {
+            mimeType = 'image/jpeg'; // Default for jpg/jpeg
+          }
+        }
         setPickedFileUri(a.uri);
         setPickedFileName(a.fileName || `image_${Date.now()}.jpg`);
         setPickedFileSize(a.fileSize || 0);
-        setPickedMimeType(a.type || 'image/jpeg');
+        setPickedMimeType(mimeType);
         setPickedDocumentType(DocumentType.OTHER);
       }
     } catch (e) {
@@ -229,10 +251,23 @@ export default function DocumentsScreen() {
       });
       if (!result.canceled && result.assets && result.assets[0]) {
         const a = result.assets[0];
+        // Normalize MIME type - ImagePicker might return just "image" instead of "image/jpeg"
+        let mimeType = a.mimeType || a.type || 'image/jpeg';
+        if (mimeType === 'image' || !mimeType.includes('/')) {
+          // Infer from file extension or default to jpeg
+          const extension = (a.fileName || '').split('.').pop()?.toLowerCase();
+          if (extension === 'png') {
+            mimeType = 'image/png';
+          } else if (extension === 'gif') {
+            mimeType = 'image/gif';
+          } else {
+            mimeType = 'image/jpeg'; // Default for jpg/jpeg
+          }
+        }
         setPickedFileUri(a.uri);
         setPickedFileName(a.fileName || `photo_${Date.now()}.jpg`);
         setPickedFileSize(a.fileSize || 0);
-        setPickedMimeType(a.type || 'image/jpeg');
+        setPickedMimeType(mimeType);
         setPickedDocumentType(DocumentType.OTHER);
       }
     } catch (e) {
@@ -274,6 +309,18 @@ export default function DocumentsScreen() {
     if (!pickedFileUri || !pickedFileName) return;
     setIsQuickUploading(true);
     setQuickUploadProgress(0);
+
+    // Simulate progress updates (fetch API doesn't support real upload progress)
+    const progressInterval = setInterval(() => {
+      setQuickUploadProgress((prev) => {
+        // Gradually increase progress, but cap at 90% until upload completes
+        if (prev < 90) {
+          return Math.min(prev + Math.random() * 15, 90);
+        }
+        return prev;
+      });
+    }, 300);
+
     try {
       // Upload file to API
       const uploadResult = await uploadFileToAPI(
@@ -281,6 +328,9 @@ export default function DocumentsScreen() {
         pickedFileName,
         pickedMimeType
       );
+
+      clearInterval(progressInterval);
+      setQuickUploadProgress(95); // Show 95% when upload completes, then 100% after metadata save
 
       if (!uploadResult.success || !uploadResult.url) {
         throw new Error(uploadResult.error || 'Upload failed - no URL returned');
@@ -298,12 +348,19 @@ export default function DocumentsScreen() {
       const resp = await documentsApi.uploadDocument(payload);
 
       if (resp.success) {
+        setQuickUploadProgress(100);
+
+        // Small delay to show 100% completion
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         setShowQuickUploadModal(false);
         setPickedFileUri('');
         setPickedFileName('');
         setPickedFileSize(0);
         setPickedMimeType('');
         setQuickUploadProgress(0);
+        setIsQuickUploading(false);
+
         toast.success({
           title: t('documents.uploadSuccess') || 'Success',
           message: t('documents.uploadSuccessMessage') || 'Document uploaded successfully',
@@ -313,6 +370,7 @@ export default function DocumentsScreen() {
         throw new Error(resp.error || 'Create document failed');
       }
     } catch (e: any) {
+      clearInterval(progressInterval);
       console.error('Quick upload error', e);
       const message = typeof e?.message === 'string' ? e.message : 'Upload failed';
       toast.error({
@@ -372,52 +430,116 @@ export default function DocumentsScreen() {
     });
   }, [templates, debouncedTemplateSearchQuery]);
 
-  // Template handlers
+  // Template download handler - downloads directly without case selection
   const handleDownload = async (template: DocumentTemplate) => {
     try {
+      logger.info('Starting template download', {
+        templateId: template.id,
+        templateName: template.name,
+        fileUrl: template.fileUrl,
+        fileName: template.fileName,
+        mimeType: template.mimeType,
+      });
+
+      toast.info({
+        title: t('templates.downloading') || 'Downloading...',
+        message: t('templates.downloadingTemplate') || 'Downloading template...',
+      });
+
       const localUri = await templatesApi.downloadTemplate(template.id);
+      logger.info('Template download completed', {
+        templateId: template.id,
+        localUri,
+      });
+
+      // Verify file exists and get file info
+      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      const fileSize = (fileInfo.exists && 'size' in fileInfo) ? fileInfo.size : template.fileSize || 0;
+
+      logger.info('File info retrieved', {
+        templateId: template.id,
+        localUri,
+        exists: fileInfo.exists,
+        size: fileSize,
+      });
+
+      if (!fileInfo.exists) {
+        logger.error('Downloaded file not found', {
+          templateId: template.id,
+          localUri,
+        });
+        throw new Error('Downloaded file not found');
+      }
 
       // Track the download
       try {
-        const fileInfo = await FileSystem.getInfoAsync(localUri);
-        if (fileInfo.exists) {
-          await downloadsService.addDownloadedFile({
-            name: template.fileName || template.name,
-            localUri,
-            originalUrl: template.fileUrl || '',
-            mimeType: template.mimeType,
-            size: fileInfo.size || template.fileSize || 0,
-            source: 'template',
-            sourceId: template.id,
-          });
-        }
-      } catch (trackError) {
-        // Don't fail download if tracking fails
-        logger.warn('Failed to track template download', { error: trackError, templateId: template.id });
-      }
-
-      // Share the downloaded template
-      const { shareAsync, isAvailableAsync } = await import('expo-sharing');
-      const canShare = await isAvailableAsync();
-
-      if (canShare) {
-        await shareAsync(localUri, {
+        const originalUrl = template.fileUrl || '';
+        logger.info('Tracking download in downloads service', {
+          templateId: template.id,
+          name: template.fileName || template.name,
+          localUri,
+          originalUrl,
           mimeType: template.mimeType,
-          dialogTitle: 'Share Template',
+          size: fileSize,
+        });
+
+        const trackedFile = await downloadsService.addDownloadedFile({
+          name: template.fileName || template.name,
+          localUri,
+          originalUrl,
+          mimeType: template.mimeType,
+          size: fileSize,
+          source: 'template',
+          sourceId: template.id,
+        });
+
+        logger.info('Download tracked successfully', {
+          templateId: template.id,
+          downloadId: trackedFile.id,
+          originalUrl: trackedFile.originalUrl,
+        });
+
+        // Refresh downloads list if downloads tab is active
+        if (activeTab === 'downloads') {
+          await fetchDownloads();
+        }
+
+        toast.success({
+          title: t('common.success') || 'Success',
+          message: t('templates.downloadSuccess') || 'Template downloaded successfully',
+        });
+
+        // Optionally navigate to downloads tab to view the downloaded file
+        // User can view it from downloads segment
+      } catch (trackError) {
+        // Don't fail download if tracking fails, but log it
+        logger.warn('Failed to track template download', {
+          error: trackError,
+          templateId: template.id,
+          localUri,
+          originalUrl: template.fileUrl,
+        });
+        toast.success({
+          title: t('common.success') || 'Success',
+          message: t('templates.downloadSuccess') || 'Template downloaded successfully',
         });
       }
-    } catch (error) {
-      console.error('Error downloading template:', error);
+    } catch (error: any) {
+      logger.error('Error downloading template', {
+        error,
+        templateId: template.id,
+        templateName: template.name,
+        fileUrl: template.fileUrl,
+      });
+      toast.error({
+        title: t('common.error') || 'Error',
+        message: error.message || t('templates.downloadError') || 'Failed to download template',
+      });
     }
   };
 
-  const handleDownloadAndFill = (template: DocumentTemplate) => {
-    setTemplatePendingCase(template);
-    setPickerMode('templates');
-    openCasePicker(template);
-  };
-
-  const openCasePicker = async (template: DocumentTemplate) => {
+  const openCasePicker = async () => {
+  // Only used for quick upload, not for template downloads
     try {
       setIsLoadingCases(true);
       const response = await casesApi.getCases(undefined, 1, 50);
@@ -426,35 +548,22 @@ export default function DocumentsScreen() {
         referenceNumber: c.referenceNumber,
         serviceType: c.serviceType,
       }));
-      if (items.length === 0) {
-        // No cases - allow download without case or navigate to template detail
-        router.push(`/template/${template.id}`);
-        setTemplatePendingCase(null);
-        return;
-      }
       setAvailableCases(items);
       setIsCasePickerVisible(true);
     } catch (e) {
       console.error('Failed to load cases', e);
-      // On error, navigate to template detail page
-      router.push(`/template/${template.id}`);
-      setTemplatePendingCase(null);
     } finally {
       setIsLoadingCases(false);
     }
   };
 
   const handlePickCase = (caseId: string) => {
-    const template = templatePendingCase;
     setIsCasePickerVisible(false);
-    setTemplatePendingCase(null);
     if (pickerMode === 'upload') {
       // Perform quick inline upload with selected case
       quickPerformUpload(caseId);
       return;
     }
-    if (!template) return;
-    router.push(`/template/${template.id}?caseId=${caseId}`);
   };
 
   // Get file type color
@@ -480,28 +589,46 @@ export default function DocumentsScreen() {
   }, []);
 
   // Handle document preview
+  // Handle document open - opens document URL directly
+  const handleDocumentOpen = useCallback(async (document: Document) => {
+    if (!document.filePath) {
+      toast.info({
+        title: t('common.info') || 'Info',
+        message: t('documents.previewNotAvailable') || 'Document URL not available',
+      });
+      return;
+    }
+
+    try {
+      // Check if URL can be opened
+      const canOpen = await Linking.canOpenURL(document.filePath);
+      if (canOpen) {
+        await Linking.openURL(document.filePath);
+      } else {
+        toast.info({
+          title: t('common.info') || 'Info',
+          message: t('documents.previewNotAvailable') || 'Cannot open this document. Please try downloading it.',
+        });
+      }
+    } catch (error: any) {
+      logger.error('Failed to open document', error);
+      toast.error({
+        title: t('common.error') || 'Error',
+        message: error.message || t('documents.openError') || 'Failed to open document',
+      });
+    }
+  }, [t]);
+
   const handleDocumentPreview = useCallback((document: Document, event?: any) => {
     // Stop event propagation to prevent card navigation
     event?.stopPropagation?.();
-    
-    const isImage = document.mimeType.startsWith('image/');
-    const isPDF = document.mimeType === 'application/pdf';
-    
-    if (isImage || isPDF) {
-      setPreviewDocument(document);
-      if (isImage) {
-        setShowImageZoom(true);
-      } else if (isPDF) {
-        setShowPDFViewer(true);
-      }
-    } else {
-      // For unsupported types, navigate to details page
-      router.push(`/document/${document.id}`);
-    }
-  }, [router]);
+    // Use the same open handler
+    handleDocumentOpen(document);
+  }, [handleDocumentOpen]);
 
   // Handle template preview
-  const handleTemplatePreview = useCallback((template: DocumentTemplate, event?: any) => {
+  // Template preview (before download) - opens remote URL directly
+  const handleTemplatePreview = useCallback(async (template: DocumentTemplate, event?: any) => {
     event?.stopPropagation?.();
     
     if (!template.fileUrl) {
@@ -512,20 +639,23 @@ export default function DocumentsScreen() {
       return;
     }
     
-    const isImage = template.mimeType.startsWith('image/');
-    const isPDF = template.mimeType === 'application/pdf';
-    
-    if (isImage || isPDF) {
-      setPreviewTemplate(template);
-      if (isImage) {
-        setShowImageZoom(true);
-      } else if (isPDF) {
-        setShowPDFViewer(true);
+    try {
+      // Check if URL can be opened
+      const canOpen = await Linking.canOpenURL(template.fileUrl);
+      if (canOpen) {
+        await Linking.openURL(template.fileUrl);
+      } else {
+        // If can't open, suggest downloading instead
+        toast.info({
+          title: t('common.info') || 'Info',
+          message: t('templates.previewNotAvailable') || 'Preview not available. Please download the template to view it.',
+        });
       }
-    } else {
-      toast.info({
-        title: t('common.info') || 'Info',
-        message: t('templates.previewNotAvailable') || 'Preview not available for this template',
+    } catch (error: any) {
+      logger.error('Failed to open template preview', error);
+      toast.error({
+        title: t('common.error') || 'Error',
+        message: error.message || t('templates.previewError') || 'Failed to open template preview',
       });
     }
   }, [t]);
@@ -563,7 +693,7 @@ export default function DocumentsScreen() {
       return (
         <Animated.View entering={FadeInDown.delay(Math.min(index * 30, 200)).springify()}>
           <Card
-            onPress={() => router.push(`/document/${item.id}`)}
+            onPress={() => handleDocumentOpen(item)}
             style={{ ...styles.card, backgroundColor: colors.card }}
           >
             <View style={styles.cardContent}>
@@ -648,7 +778,7 @@ export default function DocumentsScreen() {
       </Animated.View>
     );
     },
-    [router, getFileTypeColor, getFileTypeIcon, colors, handleDocumentPreview]
+    [getFileTypeColor, getFileTypeIcon, colors, handleDocumentPreview, handleDocumentOpen]
   );
 
   // Render template item
@@ -740,20 +870,21 @@ export default function DocumentsScreen() {
             </View>
 
             <View style={styles.buttonContainer}>
-              <TouchableOpacity
+                {/* Share button removed - documents are shared only in downloads segment after download */}
+                {/* <TouchableOpacity
                 style={[styles.downloadButton, { backgroundColor: colors.secondary }]}
                 onPress={() => handleDownload(item)}
               >
                 <MaterialCommunityIcons name="share" size={20} color="white" />
                 <Text style={styles.downloadButtonText}>{t('templates.share')}</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
 
               <TouchableOpacity
                 style={[styles.downloadButton, { backgroundColor: '#0066CC' }]}
-                onPress={() => handleDownloadAndFill(item)}
+                  onPress={() => handleDownload(item)}
               >
-                <MaterialCommunityIcons name="file-edit" size={20} color="white" />
-                <Text style={styles.downloadButtonText}>{t('templates.downloadAndFill')}</Text>
+                  <MaterialCommunityIcons name="download" size={20} color="white" />
+                  <Text style={styles.downloadButtonText}>{t('templates.download') || 'Download'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -761,7 +892,7 @@ export default function DocumentsScreen() {
       </Animated.View>
     );
     },
-    [colors, getFileIcon, getCategoryIcon, t, handleDownload, handleDownloadAndFill, handleTemplatePreview]
+    [colors, getFileIcon, getCategoryIcon, t, handleDownload, handleTemplatePreview]
   );
 
   const keyExtractor = useCallback((item: Document | DocumentTemplate) => item.id, []);
@@ -789,7 +920,134 @@ export default function DocumentsScreen() {
     // Downloads tab doesn't have search yet
   };
 
-  // Handle download file share/open
+  // Handle download file view/preview - opens with device's default app
+  const handleDownloadView = async (file: DownloadedFile) => {
+    try {
+      logger.info('Opening downloaded file', {
+        fileId: file.id,
+        fileName: file.name,
+        originalUrl: file.originalUrl,
+        localUri: file.localUri,
+        mimeType: file.mimeType,
+      });
+
+      // Use remote URL if available - this is simpler and works better
+      if (file.originalUrl) {
+        try {
+          logger.info('Attempting to open remote URL', {
+            fileId: file.id,
+            originalUrl: file.originalUrl,
+            mimeType: file.mimeType,
+          });
+
+          // Determine URL to open
+          let urlToOpen = file.originalUrl; // Default: open remote URL directly for all file types
+
+          // For PDFs, use Google Docs viewer for better browser compatibility
+          if (file.mimeType === 'application/pdf' || file.mimeType?.includes('pdf')) {
+            urlToOpen = `https://docs.google.com/viewer?url=${encodeURIComponent(file.originalUrl)}&embedded=true`;
+            logger.info('Using Google Docs viewer for PDF', {
+              fileId: file.id,
+              viewerUrl: urlToOpen,
+            });
+          } else {
+            // For other file types (images, documents, etc.), open remote URL directly
+            logger.info('Opening remote URL directly for non-PDF file', {
+              fileId: file.id,
+              url: urlToOpen,
+              mimeType: file.mimeType,
+            });
+          }
+
+          const canOpen = await Linking.canOpenURL(urlToOpen);
+          if (canOpen) {
+            logger.info('Opening URL in browser', {
+              fileId: file.id,
+              url: urlToOpen,
+            });
+            await Linking.openURL(urlToOpen);
+            return;
+          } else {
+            logger.warn('Cannot open URL', {
+              fileId: file.id,
+              url: urlToOpen,
+            });
+          }
+        } catch (urlError: any) {
+          logger.warn('Failed to open remote URL', {
+            fileId: file.id,
+            originalUrl: file.originalUrl,
+            error: urlError,
+          });
+          // Fall through to local file fallback
+        }
+      }
+
+      // Fallback to local file if remote URL is not available or failed
+      logger.info('Falling back to local file', {
+        fileId: file.id,
+        localUri: file.localUri,
+      });
+
+      // Verify local file still exists
+      const fileInfo = await FileSystem.getInfoAsync(file.localUri);
+      if (!fileInfo.exists) {
+        logger.error('Local file not found', {
+          fileId: file.id,
+          localUri: file.localUri,
+        });
+
+        toast.error({
+          title: t('common.error') || 'Error',
+          message: t('downloads.fileNotFound') || 'File no longer exists',
+        });
+        // Remove from list
+        await downloadsService.deleteDownload(file.id);
+        fetchDownloads();
+        return;
+      }
+
+      // Open local file - use Sharing API which works reliably on both platforms
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        logger.info('Opening local file with Sharing API', {
+          fileId: file.id,
+          localUri: file.localUri,
+          mimeType: file.mimeType,
+        });
+
+        await Sharing.shareAsync(file.localUri, {
+          mimeType: file.mimeType,
+          dialogTitle: `Open ${file.name}`,
+          UTI: file.mimeType,
+        });
+      } else {
+        logger.error('Sharing not available', {
+          fileId: file.id,
+        });
+
+        toast.error({
+          title: t('common.error') || 'Error',
+          message: t('downloads.openingNotAvailable') || 'File opening is not available on this device',
+        });
+      }
+    } catch (error: any) {
+      logger.error('Failed to view download', {
+        error,
+        fileId: file.id,
+        fileName: file.name,
+        originalUrl: file.originalUrl,
+        localUri: file.localUri,
+      });
+
+      toast.error({
+        title: t('common.error') || 'Error',
+        message: error.message || t('downloads.viewFailed') || 'Failed to view file',
+      });
+    }
+  };
+
+  // Handle download file share - explicitly for sharing with other apps
   const handleDownloadShare = async (file: DownloadedFile) => {
     try {
       const isAvailable = await Sharing.isAvailableAsync();
@@ -814,6 +1072,7 @@ export default function DocumentsScreen() {
         return;
       }
 
+      // Share the file
       await Sharing.shareAsync(file.localUri, {
         mimeType: file.mimeType,
         dialogTitle: `Share ${file.name}`,
@@ -855,45 +1114,69 @@ export default function DocumentsScreen() {
     ({ item, index }: { item: DownloadedFile; index: number }) => {
       return (
         <Animated.View entering={FadeInDown.delay(Math.min(index * 30, 200)).springify()}>
-          <Card style={{ ...styles.card, backgroundColor: colors.card }}>
-            <View style={styles.cardContent}>
-              <View style={styles.cardHeader}>
-                <View style={styles.documentContainer}>
-                  <MaterialCommunityIcons
-                    name={getFileIconForMimeType(item.mimeType) as any}
-                    size={20}
-                    color={colors.primary}
-                    style={styles.icon}
-                  />
-                  <PaperText style={styles.documentName} numberOfLines={1}>
-                    {item.name}
-                  </PaperText>
-                </View>
-                <View style={styles.headerActions}>
-                  <TouchableOpacity
-                    onPress={() => handleDownloadShare(item)}
-                    style={styles.previewButton}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => handleDownloadView(item)}
+          >
+            <Card style={{ ...styles.card, backgroundColor: colors.card }}>
+              <View style={styles.cardContent}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.documentContainer}>
                     <MaterialCommunityIcons
-                      name="share-variant"
+                      name={getFileIconForMimeType(item.mimeType) as any}
                       size={20}
                       color={colors.primary}
+                      style={styles.icon}
                     />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => handleDownloadDelete(item)}
-                    style={styles.previewButton}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <MaterialCommunityIcons
-                      name="delete"
-                      size={20}
-                      color={colors.error}
-                    />
-                  </TouchableOpacity>
+                    <PaperText style={styles.documentName} numberOfLines={1}>
+                      {item.name}
+                    </PaperText>
+                  </View>
+                  <View style={styles.headerActions}>
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDownloadView(item);
+                      }}
+                      style={styles.previewButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <MaterialCommunityIcons
+                        name="eye"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDownloadShare(item);
+                      }}
+                      style={styles.previewButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <MaterialCommunityIcons
+                        name="share-variant"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDownloadDelete(item);
+                      }}
+                      style={styles.previewButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <MaterialCommunityIcons
+                        name="delete"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
 
               <View style={styles.metaRow}>
                 <View style={[styles.typeBadge, { backgroundColor: colors.secondary + '15' }]}>
@@ -943,10 +1226,11 @@ export default function DocumentsScreen() {
               </View>
             </View>
           </Card>
+          </TouchableOpacity>
         </Animated.View>
       );
     },
-    [colors, handleDownloadShare, handleDownloadDelete]
+    [colors, handleDownloadView, handleDownloadShare, handleDownloadDelete]
   );
 
   return (
@@ -1408,25 +1692,6 @@ export default function DocumentsScreen() {
                 style={{ maxHeight: 320 }}
               />
             )}
-            {pickerMode === 'templates' && (
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { borderColor: colors.border }]}
-                  onPress={() => {
-                    const template = templatePendingCase;
-                    setIsCasePickerVisible(false);
-                    setTemplatePendingCase(null);
-                    if (template) {
-                      router.push(`/template/${template.id}`);
-                    }
-                  }}
-                >
-                  <Text style={[styles.modalBtnText, { color: colors.text }]}>
-                    {t('templates.download') || 'Download without case'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
           </View>
         </View>
       </Modal>
@@ -1519,6 +1784,62 @@ export default function DocumentsScreen() {
           </View>
         </View>
       </Modal>
+      {/* Upload Progress Modal - More visible loader */}
+      <Modal
+        visible={isQuickUploading}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={[styles.uploadProgressModalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]}>
+          <Animated.View
+            entering={FadeInDown.duration(300)}
+            style={[styles.uploadProgressModalContent, { backgroundColor: colors.surface }]}
+          >
+            <View style={[styles.uploadProgressIconContainer, { backgroundColor: colors.primary + '15' }]}>
+              <MaterialCommunityIcons
+                name="cloud-upload"
+                size={48}
+                color={colors.primary}
+              />
+            </View>
+
+            <Text style={[styles.uploadProgressModalTitle, { color: colors.text }]}>
+              {t('documents.uploading') || 'Uploading Document'}
+            </Text>
+
+            {pickedFileName && (
+              <Text style={[styles.uploadProgressFileName, { color: colors.textSecondary }]} numberOfLines={1}>
+                {pickedFileName}
+              </Text>
+            )}
+
+            {/* Progress Bar */}
+            <View style={[styles.uploadProgressBarContainer, { backgroundColor: colors.border }]}>
+              <Animated.View
+                style={[
+                  styles.uploadProgressBarFill,
+                  {
+                    width: `${Math.max(0, Math.min(100, quickUploadProgress))}%`,
+                    backgroundColor: colors.primary,
+                  },
+                ]}
+              />
+            </View>
+
+            <Text style={[styles.uploadProgressText, { color: colors.textSecondary }]}>
+              {Math.round(quickUploadProgress)}%
+            </Text>
+
+            <ActivityIndicator
+              size="large"
+              color={colors.primary}
+              style={styles.uploadProgressActivityIndicator}
+            />
+          </Animated.View>
+        </View>
+      </Modal>
+
       {/* No Active Case Modal */}
       <Modal
         visible={showNoCaseModal}
@@ -1609,6 +1930,7 @@ export default function DocumentsScreen() {
           }}
         />
       )}
+
     </View>
   );
 }
@@ -2070,5 +2392,63 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: 'white',
+  },
+  // Upload Progress Modal Styles
+  uploadProgressModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  uploadProgressModalContent: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 20,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  uploadProgressIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  uploadProgressModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  uploadProgressFileName: {
+    fontSize: 14,
+    marginBottom: SPACING.lg,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.md,
+  },
+  uploadProgressBarContainer: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: SPACING.sm,
+  },
+  uploadProgressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  uploadProgressText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: SPACING.md,
+  },
+  uploadProgressActivityIndicator: {
+    marginTop: SPACING.sm,
   },
 });
